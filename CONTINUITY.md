@@ -40,6 +40,8 @@ Last updated: 2026-03-04
   - Añadidos recursos de skills (references y scripts de matrix).
   - Validación de skills con `quick_validate.py` (3/3 OK).
   - Smoke básico de scripts (`--help`) OK.
+  - Creada rama `codex/chore/agent-skills-bootstrap`.
+  - Commit realizado: `984d687` (`chore: add agent playbook and project skills`).
 - Now:
   - Presentar `AGENTS.md` y skills al usuario para revisión.
 - Next:
