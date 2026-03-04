@@ -19,6 +19,7 @@ type Options struct {
 	Resume    bool
 	StartFile string
 	StartPos  uint32
+	SourceDSN string
 }
 
 // Summary reports checkpoint update results.
@@ -27,6 +28,7 @@ type Summary struct {
 	ApplyDDL       string
 	SourceLogBin   bool
 	SourceFormat   string
+	SourceRowImage string
 	StartFile      string
 	StartPos       uint32
 	SourceEndFile  string
@@ -69,7 +71,7 @@ type txRunner interface {
 var (
 	checkSourcePreflightFn = checkSourcePreflight
 	queryBinlogPositionFn  = queryBinlogPosition
-	loadApplyBatchesFn     = loadApplyBatchesNoop
+	loadApplyBatchesFn     = loadApplyBatchesFromSource
 	beginDestinationTxFn   = beginDestinationTx
 	applyWindowFn          = applyWindowTransactional
 	timeNowFn              = time.Now
@@ -158,6 +160,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		ApplyDDL:       opts.ApplyDDL,
 		SourceLogBin:   preflight.LogBinEnabled,
 		SourceFormat:   preflight.BinlogFormat,
+		SourceRowImage: preflight.BinlogRowImage,
 		StartFile:      startFile,
 		StartPos:       startPos,
 		SourceEndFile:  sourceEndFile,
@@ -169,8 +172,9 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 }
 
 type preflightResult struct {
-	LogBinEnabled bool
-	BinlogFormat  string
+	LogBinEnabled  bool
+	BinlogFormat   string
+	BinlogRowImage string
 }
 
 func validateApplyDDL(value string) error {
@@ -201,7 +205,8 @@ func queryBinlogPosition(ctx context.Context, db *sql.DB) (string, uint32, error
 func checkSourcePreflight(ctx context.Context, db *sql.DB) (preflightResult, error) {
 	var logBinRaw any
 	var formatRaw any
-	if err := db.QueryRowContext(ctx, "SELECT @@GLOBAL.log_bin, @@GLOBAL.binlog_format").Scan(&logBinRaw, &formatRaw); err != nil {
+	var rowImageRaw any
+	if err := db.QueryRowContext(ctx, "SELECT @@GLOBAL.log_bin, @@GLOBAL.binlog_format, @@GLOBAL.binlog_row_image").Scan(&logBinRaw, &formatRaw, &rowImageRaw); err != nil {
 		return preflightResult{}, fmt.Errorf("read source binlog preflight variables: %w", err)
 	}
 
@@ -213,6 +218,10 @@ func checkSourcePreflight(ctx context.Context, db *sql.DB) (preflightResult, err
 	if binlogFormat == "" {
 		return preflightResult{}, errors.New("source binlog_format is empty")
 	}
+	binlogRowImage := normalizeBinlogFormat(rowImageRaw)
+	if binlogRowImage == "" {
+		return preflightResult{}, errors.New("source binlog_row_image is empty")
+	}
 
 	if !logBinEnabled {
 		return preflightResult{}, errors.New("source log_bin is disabled; enable binary logging before replicate")
@@ -220,10 +229,14 @@ func checkSourcePreflight(ctx context.Context, db *sql.DB) (preflightResult, err
 	if binlogFormat != "ROW" {
 		return preflightResult{}, fmt.Errorf("source binlog_format=%s is unsupported; required=ROW for safe replication", binlogFormat)
 	}
+	if binlogRowImage != "FULL" {
+		return preflightResult{}, fmt.Errorf("source binlog_row_image=%s is unsupported; required=FULL for deterministic row replay", binlogRowImage)
+	}
 
 	return preflightResult{
-		LogBinEnabled: logBinEnabled,
-		BinlogFormat:  binlogFormat,
+		LogBinEnabled:  logBinEnabled,
+		BinlogFormat:   binlogFormat,
+		BinlogRowImage: binlogRowImage,
 	}, nil
 }
 
@@ -424,8 +437,4 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 
 func beginDestinationTx(ctx context.Context, db *sql.DB) (txRunner, error) {
 	return db.BeginTx(ctx, nil)
-}
-
-func loadApplyBatchesNoop(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
-	return nil, nil
 }

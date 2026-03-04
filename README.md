@@ -59,12 +59,13 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false -
 Replication preflight requirements:
 - source `log_bin` must be enabled
 - source `binlog_format` must be `ROW`
+- source `binlog_row_image` must be `FULL`
 
 Replication checkpoint safety behavior:
 - The summary includes `start`, `source_end`, `applied_end`, and `applied_events`.
 - Checkpoint advances only to `applied_end` (never directly to `source_end`).
 - Apply path is transaction-batch based; checkpoint advances only after destination commit succeeds.
-- Current milestone keeps binlog event loading as no-op (`applied_events=0`) while binlog decode/apply is being implemented.
+- Binlog event loading/decoding now maps row events into destination SQL batches with fail-fast behavior on unsupported patterns.
 
 ## Verification modes
 

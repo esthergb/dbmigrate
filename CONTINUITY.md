@@ -16,9 +16,8 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-apply-phase14` from `main@794b754`.
-  - Phase 14 changes implemented locally; local tests passing.
-  - PR #16 opened: `feat: phase 14 transactional replication apply scaffold` (CI pending).
+  - Branch: `codex/feat/replicate-binlog-decode-phase15` from `main@c1e7491` (PR #16 merged by user).
+  - Phase 15 changes implemented locally; local tests passing.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -32,19 +31,26 @@ Last updated: 2026-03-04
     - no-op apply scaffold added with `applied_events=0` for safe event-replay groundwork.
     - replication run tests added for checkpoint safety and apply-window semantics.
     - docs updated in README/operators guide for new replication summary semantics.
-  - Phase 14 implemented on branch (pending PR merge):
+  - Phase 14 merged:
     - transactional apply-window execution added (batch-based destination transactions).
     - checkpoint progression remains commit-gated by `applied_end`.
     - apply hooks expanded for next phase binlog event loading.
     - new tests for apply transaction behavior (no batches, commit path, exec error rollback, commit error path).
     - docs refined for transaction-batch checkpoint semantics.
+  - Phase 15 implemented on branch (pending PR merge):
+    - real source binlog streaming and decoding path added via `go-mysql` syncer integration.
+    - row events are converted into transactional SQL apply batches (upsert/update/delete) with commit-boundary checkpointing.
+    - fail-fast handling added for unsupported query events and DDL policy (`warn|apply|ignore`).
+    - source preflight hardened with `binlog_row_image=FULL` requirement.
+    - replication output now includes source row image.
+    - unit tests added for binlog decode-to-batch mapping, DDL policy paths, and binlog position helpers.
 - Now:
-  - Wait for PR #16 checks and merge.
+  - Commit, push, and open PR for Phase 15.
 - Next:
-  - Start Phase 15 for real binlog event loading/decoding and SQL mapping.
-  - Continue with real binlog decoding/application flow in following phase.
+  - Merge Phase 15 PR.
+  - Continue with conflict policies, schema drift handling, and richer DDL safety classification.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/commands/replicate.go`, `README.md`, `docs/operators-guide.md`, `docs/development-plan.md`.
-  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/run_test.go`, `internal/replicate/binlog/load_test.go`, `internal/commands/replicate.go`, `README.md`, `docs/operators-guide.md`, `go.mod`.
+  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go mod tidy`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.

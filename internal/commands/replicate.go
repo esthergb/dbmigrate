@@ -63,6 +63,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		Resume:    opts.Resume,
 		StartFile: opts.StartFile,
 		StartPos:  uint32(opts.StartPos),
+		SourceDSN: cfg.Source,
 	})
 	if err != nil {
 		return fmt.Errorf("replicate run failed: %w", err)
@@ -73,9 +74,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		cfg,
 		"replicate",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d apply_ddl=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d apply_ddl=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
+			summary.SourceRowImage,
 			summary.StartFile,
 			summary.StartPos,
 			summary.SourceEndFile,
