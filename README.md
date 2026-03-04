@@ -54,6 +54,9 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level sche
 
 # Data verification by deterministic row-count comparison
 dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode count
+
+# Data verification by deterministic table content hash
+dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode hash
 ```
 
 ## Configuration file support (phase 2)

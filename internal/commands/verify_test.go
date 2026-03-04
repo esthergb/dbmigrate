@@ -125,6 +125,9 @@ func TestWriteDataVerifyResultText(t *testing.T) {
 	if !strings.Contains(text, "table=users") {
 		t.Fatalf("expected table identifier in output, got %q", text)
 	}
+	if !strings.Contains(text, "hash_mismatches=0") {
+		t.Fatalf("expected hash mismatch counter in output, got %q", text)
+	}
 }
 
 func TestWriteDataVerifyResultJSON(t *testing.T) {
@@ -140,5 +143,36 @@ func TestWriteDataVerifyResultJSON(t *testing.T) {
 	}
 	if !strings.Contains(text, "\"data_mode\": \"count\"") {
 		t.Fatalf("expected data_mode in json output, got %q", text)
+	}
+}
+
+func TestWriteDataVerifyResultTextHashDiff(t *testing.T) {
+	var out bytes.Buffer
+	summary := dataVerify.Summary{
+		Databases:            1,
+		TablesCompared:       1,
+		MissingInDestination: 0,
+		MissingInSource:      0,
+		HashMismatches:       1,
+		Diffs: []dataVerify.Diff{
+			{
+				Kind:       "table_hash_mismatch",
+				Database:   "app",
+				Table:      "users",
+				SourceHash: "abc",
+				DestHash:   "def",
+			},
+		},
+	}
+
+	if err := writeDataVerifyResult(&out, config.RuntimeConfig{}, "data", "hash", summary); err != nil {
+		t.Fatalf("write data verify hash result text: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "data_mode=hash") {
+		t.Fatalf("expected hash mode in output, got %q", text)
+	}
+	if !strings.Contains(text, "source_hash=abc") {
+		t.Fatalf("expected source hash in output, got %q", text)
 	}
 }

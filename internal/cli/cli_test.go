@@ -202,7 +202,7 @@ func TestRunVerifyInvalidDataMode(t *testing.T) {
 	}
 }
 
-func TestRunVerifyDataModeHashNotImplemented(t *testing.T) {
+func TestRunVerifyDryRunDataHash(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"verify",
@@ -210,9 +210,10 @@ func TestRunVerifyDataModeHashNotImplemented(t *testing.T) {
 		"--dest", "mysql://dst",
 		"--verify-level", "data",
 		"--data-mode", "hash",
+		"--dry-run",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }
