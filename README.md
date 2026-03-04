@@ -63,7 +63,8 @@ Replication preflight requirements:
 Replication checkpoint safety behavior:
 - The summary includes `start`, `source_end`, `applied_end`, and `applied_events`.
 - Checkpoint advances only to `applied_end` (never directly to `source_end`).
-- Current milestone keeps apply path as no-op (`applied_events=0`) while event replay is being implemented.
+- Apply path is transaction-batch based; checkpoint advances only after destination commit succeeds.
+- Current milestone keeps binlog event loading as no-op (`applied_events=0`) while binlog decode/apply is being implemented.
 
 ## Verification modes
 

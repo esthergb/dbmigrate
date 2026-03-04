@@ -16,9 +16,8 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-safety-phase13` (from `main` at `4dc59a8`).
-  - Phase 13 code changes implemented locally; tests pass.
-  - PR #15 opened: `feat: phase 13 replication checkpoint safety hardening` (CI pending).
+  - Branch: `codex/feat/replicate-apply-phase14` from `main@794b754`.
+  - Phase 14 changes implemented locally; local tests passing.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -26,18 +25,25 @@ Last updated: 2026-03-04
   - Phase 10 merged (replication checkpoint baseline + `--apply-ddl` validation).
   - Phase 11 merged (engine/version compatibility auto-detection and fail-fast reports in `plan`).
   - Phase 12 merged (replication source preflight for `log_bin` and `binlog_format=ROW`).
-  - Phase 13 implemented on branch (pending PR merge):
+  - Phase 13 merged:
     - replication summary now distinguishes `source_end` vs `applied_end`.
     - checkpoint persists only `applied_end` position.
     - no-op apply scaffold added with `applied_events=0` for safe event-replay groundwork.
     - replication run tests added for checkpoint safety and apply-window semantics.
     - docs updated in README/operators guide for new replication summary semantics.
+  - Phase 14 implemented on branch (pending PR merge):
+    - transactional apply-window execution added (batch-based destination transactions).
+    - checkpoint progression remains commit-gated by `applied_end`.
+    - apply hooks expanded for next phase binlog event loading.
+    - new tests for apply transaction behavior (no batches, commit path, exec error rollback, commit error path).
+    - docs refined for transaction-batch checkpoint semantics.
 - Now:
-  - Wait for PR #15 checks and merge.
+  - Commit, push, and open PR for Phase 14.
 - Next:
-  - Start next phase for real event apply ordering and idempotent replay semantics.
+  - Merge Phase 14 PR.
+  - Continue with real binlog decoding/application flow in following phase.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/commands/replicate.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/commands/replicate.go`, `README.md`, `docs/operators-guide.md`, `docs/development-plan.md`.
   - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.

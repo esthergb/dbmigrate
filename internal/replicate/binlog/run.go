@@ -49,10 +49,29 @@ type applyResult struct {
 	AppliedEvents uint64
 }
 
+type applyEvent struct {
+	Query string
+	Args  []any
+}
+
+type applyBatch struct {
+	EndFile string
+	EndPos  uint32
+	Events  []applyEvent
+}
+
+type txRunner interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	Commit() error
+	Rollback() error
+}
+
 var (
 	checkSourcePreflightFn = checkSourcePreflight
 	queryBinlogPositionFn  = queryBinlogPosition
-	applyWindowFn          = applyWindowNoop
+	loadApplyBatchesFn     = loadApplyBatchesNoop
+	beginDestinationTxFn   = beginDestinationTx
+	applyWindowFn          = applyWindowTransactional
 	timeNowFn              = time.Now
 )
 
@@ -349,10 +368,64 @@ func normalizeBinlogFormat(value any) string {
 	}
 }
 
-func applyWindowNoop(_ context.Context, _ *sql.DB, _ *sql.DB, window applyWindow, _ Options) (applyResult, error) {
+func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB, window applyWindow, opts Options) (applyResult, error) {
+	batches, err := loadApplyBatchesFn(ctx, source, window, opts)
+	if err != nil {
+		return applyResult{}, fmt.Errorf("load apply batches: %w", err)
+	}
+
+	lastFile := window.StartFile
+	lastPos := window.StartPos
+	var appliedEvents uint64
+
+	for _, batch := range batches {
+		if len(batch.Events) == 0 {
+			continue
+		}
+		if batch.EndFile == "" {
+			return applyResult{}, errors.New("apply batch missing end file")
+		}
+		if batch.EndPos == 0 {
+			return applyResult{}, errors.New("apply batch missing end position")
+		}
+
+		tx, err := beginDestinationTxFn(ctx, dest)
+		if err != nil {
+			return applyResult{}, fmt.Errorf("begin destination transaction: %w", err)
+		}
+
+		for _, event := range batch.Events {
+			if strings.TrimSpace(event.Query) == "" {
+				_ = tx.Rollback()
+				return applyResult{}, errors.New("apply event query is empty")
+			}
+			if _, err := tx.ExecContext(ctx, event.Query, event.Args...); err != nil {
+				_ = tx.Rollback()
+				return applyResult{}, fmt.Errorf("apply event at %s:%d: %w", batch.EndFile, batch.EndPos, err)
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			_ = tx.Rollback()
+			return applyResult{}, fmt.Errorf("commit destination transaction at %s:%d: %w", batch.EndFile, batch.EndPos, err)
+		}
+
+		lastFile = batch.EndFile
+		lastPos = batch.EndPos
+		appliedEvents += uint64(len(batch.Events))
+	}
+
 	return applyResult{
-		File:          window.StartFile,
-		Pos:           window.StartPos,
-		AppliedEvents: 0,
+		File:          lastFile,
+		Pos:           lastPos,
+		AppliedEvents: appliedEvents,
 	}, nil
+}
+
+func beginDestinationTx(ctx context.Context, db *sql.DB) (txRunner, error) {
+	return db.BeginTx(ctx, nil)
+}
+
+func loadApplyBatchesNoop(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+	return nil, nil
 }
