@@ -16,21 +16,23 @@ Last updated: 2026-03-04
   - CI runs minimal checks; full matrix/local-heavy tests remain local.
 - State:
   - PR #6 open: `codex/feat/data-baseline-checkpoint-phase4` -> `main` (baseline data copy + checkpoint/resume).
-  - Current branch: `codex/feat/schema-verify-phase5` (next phase in progress).
+  - PR #7 open: `codex/feat/schema-verify-phase5` -> `main` (schema verification with actionable diffs).
+  - Both PRs currently blocked pending required review/check completion on protected `main`.
 - Done:
   - Phases merged: 0 (research docs), 1 (foundation/CI), 2 (config+connections), 3 (schema baseline).
   - Phase 4 implemented, pushed, and opened as PR #6.
-  - Phase 5 implementation started:
+  - Phase 5 implementation completed and published:
     - added `internal/verify/schema` package for schema diffing (tables/views).
     - added `verify --verify-level` parsing with schema mode execution.
     - added JSON/text verify result emission with diff details.
     - added unit tests for normalization/diff logic and verify command option/output paths.
+  - Phase 5 commit/push completed: `fa88ed4` on `codex/feat/schema-verify-phase5`.
   - Local verification on current branch: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
-  - Finalize and commit Phase 5 changes.
+  - Wait for CI/review on PR #6 and PR #7.
 - Next:
-  - Push Phase 5 branch and open PR to `main`.
-  - Keep Phase 5 branch synced with `main` after PR #6 merge to resolve overlap cleanly.
+  - Merge PR #6 first, then sync/rebase PR #7 with updated `main` if required by branch protection.
+  - Continue with next milestone after PR #7 merge.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade version policy matrix per engine family (upgrade/downgrade required, precise range not locked).
 - Working set (files/ids/commands):
