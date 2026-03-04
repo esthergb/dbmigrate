@@ -345,6 +345,7 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 	case streamEventWriteRows:
 		out := make([]applyEvent, 0, len(event.Rows))
 		keyColumns := extractKeyColumns(metadata)
+		rowColumns := copyStringSlice(metadata.Columns)
 		for _, row := range event.Rows {
 			query, args, keyArgs, err := buildInsertStatement(event.Schema, event.Table, metadata, row, conflictPolicy)
 			if err != nil {
@@ -353,6 +354,8 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 			out = append(out, applyEvent{
 				Query:      query,
 				Args:       args,
+				RowColumns: rowColumns,
+				NewRowArgs: copyAnySlice(row),
 				KeyColumns: keyColumns,
 				KeyArgs:    keyArgs,
 				Operation:  "insert",
@@ -363,6 +366,7 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 	case streamEventDeleteRows:
 		out := make([]applyEvent, 0, len(event.Rows))
 		keyColumns := extractKeyColumns(metadata)
+		rowColumns := copyStringSlice(metadata.Columns)
 		for _, row := range event.Rows {
 			query, args, keyArgs, err := buildDeleteStatement(event.Schema, event.Table, metadata, row)
 			if err != nil {
@@ -371,6 +375,8 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 			out = append(out, applyEvent{
 				Query:               query,
 				Args:                args,
+				RowColumns:          rowColumns,
+				OldRowArgs:          copyAnySlice(row),
 				KeyColumns:          keyColumns,
 				KeyArgs:             keyArgs,
 				Operation:           "delete",
@@ -385,6 +391,7 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 		}
 		out := make([]applyEvent, 0, len(event.Rows)/2)
 		keyColumns := extractKeyColumns(metadata)
+		rowColumns := copyStringSlice(metadata.Columns)
 		for i := 0; i < len(event.Rows); i += 2 {
 			oldRow := event.Rows[i]
 			newRow := event.Rows[i+1]
@@ -395,6 +402,9 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 			out = append(out, applyEvent{
 				Query:               query,
 				Args:                args,
+				RowColumns:          rowColumns,
+				OldRowArgs:          copyAnySlice(oldRow),
+				NewRowArgs:          copyAnySlice(newRow),
 				KeyColumns:          keyColumns,
 				KeyArgs:             keyArgs,
 				Operation:           "update",
@@ -548,6 +558,18 @@ func extractKeyColumns(metadata tableMetadata) []string {
 		columns = append(columns, metadata.Columns[idx])
 	}
 	return columns
+}
+
+func copyAnySlice(values []any) []any {
+	out := make([]any, len(values))
+	copy(out, values)
+	return out
+}
+
+func copyStringSlice(values []string) []string {
+	out := make([]string, len(values))
+	copy(out, values)
+	return out
 }
 
 func tableKey(schema string, table string) string {

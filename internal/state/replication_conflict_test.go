@@ -26,6 +26,8 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	report.TableName = "app.items"
 	report.Query = "UPDATE `app`.`items` SET `name`=? WHERE `id` <=> ?"
 	report.ValueSample = []string{"id=42", "name=legacy-name"}
+	report.OldRowSample = []string{"id=42", "name=legacy-name"}
+	report.NewRowSample = []string{"id=42", "name=current-name"}
 	report.Message = "conflict-policy=fail detected non-applied update"
 	report.Remediation = "rerun with source-wins after review"
 
@@ -54,6 +56,12 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	}
 	if loaded.ValueSample[0] != report.ValueSample[0] {
 		t.Fatalf("unexpected first value sample: got=%q want=%q", loaded.ValueSample[0], report.ValueSample[0])
+	}
+	if len(loaded.OldRowSample) != len(report.OldRowSample) {
+		t.Fatalf("unexpected old row sample length: got=%d want=%d", len(loaded.OldRowSample), len(report.OldRowSample))
+	}
+	if loaded.NewRowSample[1] != report.NewRowSample[1] {
+		t.Fatalf("unexpected new row sample entry: got=%q want=%q", loaded.NewRowSample[1], report.NewRowSample[1])
 	}
 }
 

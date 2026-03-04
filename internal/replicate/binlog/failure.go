@@ -17,6 +17,8 @@ type applyFailure struct {
 	TableName    string
 	Query        string
 	ValueSample  []string
+	OldRowSample []string
+	NewRowSample []string
 	Remediation  string
 	Message      string
 	Cause        error
@@ -47,6 +49,14 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 		TableName:   event.TableName,
 		Query:       event.Query,
 		ValueSample: buildValueSample(event.KeyColumns, event.KeyArgs),
+		OldRowSample: buildValueSample(
+			event.RowColumns,
+			event.OldRowArgs,
+		),
+		NewRowSample: buildValueSample(
+			event.RowColumns,
+			event.NewRowArgs,
+		),
 		Message:     fmt.Sprintf("apply event at %s:%d failed", file, pos),
 		Cause:       cause,
 		Remediation: "review table schema and conflicting destination rows, then rerun replicate from checkpoint",
