@@ -78,3 +78,50 @@ func TestRunPlanFlagOverridesConfig(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }
+
+func TestRunMigrateDryRunSchemaOnly(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"migrate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--schema-only",
+		"--dry-run",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunMigrateDataOnlyNotImplemented(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"migrate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--data-only",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected run failure exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestSplitGlobalAndCommandArgs(t *testing.T) {
+	raw := []string{
+		"--source", "mysql://src",
+		"--dest=mysql://dst",
+		"--schema-only",
+		"--force",
+		"--json",
+	}
+	global, command := splitGlobalAndCommandArgs(raw)
+
+	if len(global) == 0 || len(command) == 0 {
+		t.Fatalf("expected both global and command args, got global=%v command=%v", global, command)
+	}
+	if command[0] != "--schema-only" {
+		t.Fatalf("expected schema-only in command args, got %v", command)
+	}
+}

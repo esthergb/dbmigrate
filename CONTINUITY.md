@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - PR #4 (Fase 2) abierto contra `main` con checks en PASS; merge bloqueado solo por review requerido.
+  - PR #5 (Fase 3) abierto contra `main`; CI en ejecución y review requerida por política.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -88,14 +88,28 @@ Last updated: 2026-03-04
     - fix parse DSN en formato driver vs URI
     - fix `errcheck` en cierre de conexión
   - Estado actual de PR #4 checks: `validate` en PASS.
+  - Sincronización local ejecutada: `git pull --ff-only` en `codex/feat/config-connection-phase2-v2` (fast-forward a `edb75fb`).
+  - PR #4 fusionado por usuario (`2026-03-04T19:08:49Z`) y `main` avanza a `f03e6dd`.
+  - Nueva rama de trabajo creada desde `main`: `codex/feat/schema-baseline-phase3`.
+  - Implementación Fase 3 añadida:
+    - paquete `internal/schema` para extracción/aplicación de tablas y vistas
+    - `migrate` con flags `--schema-only`, `--data-only`, `--dest-empty-required`, `--force`
+    - validación de destino no vacío y selección include/exclude de bases
+    - tests de unidad para CLI migrate, parse de flags y utilidades de esquema
+  - Verificación local ejecutada con toolchain temporal:
+    - `gofmt` en archivos modificados
+    - `go test ./... -count=1` (PASS)
+  - Commit/push Fase 3: `346c2c7` en `codex/feat/schema-baseline-phase3`.
+  - PR #5 abierto: `codex/feat/schema-baseline-phase3` -> `main`.
 - Now:
-  - Esperar aprobación/merge de PR #4 o bypass según política del repo.
+  - Esperar resultado final de CI y review de PR #5.
 - Next:
-  - Tras merge de PR #4, iniciar siguiente fase funcional (extractor/schema baseline).
+  - Resolver feedback/review de PR #5.
+  - Iniciar siguiente fase funcional (baseline data migrator con checkpoint/resume).
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
   - Ninguna bloqueante inmediata.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`, scaffold de fase 1
-  - Commands: `git push`, `git checkout -b`, `gh pr create` (blocked: gh auth), `go test` (blocked: go missing), `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
+  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `internal/schema/*`, `internal/commands/migrate*`, `internal/cli/cli*`
+  - Commands: `git push`, `git checkout -b`, `gh pr create`, `/tmp/go-toolchain/go/bin/go test`, `/tmp/go-toolchain/go/bin/gofmt`, `rg`, `cat`
