@@ -19,6 +19,7 @@ Last updated: 2026-03-04
   - Branch: `codex/feat/replicate-column-samples-phase20` from `main@1112ba0` (PR #21 merged by user).
   - PR #22 is open: https://github.com/esthergb/dbmigrate/pull/22
   - Phase 20 code/test updates are pushed; local full test suite passes.
+  - PR #22 required CI checks (`validate` push/pull_request) are pending.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
