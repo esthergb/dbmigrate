@@ -125,3 +125,32 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 		t.Fatalf("expected schema-only in command args, got %v", command)
 	}
 }
+
+func TestRunVerifyDryRunSchema(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--verify-level", "schema",
+		"--dry-run",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunVerifyInvalidLevel(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--verify-level", "invalid",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
