@@ -1,0 +1,12 @@
+# Build outputs
+bin/
+dist/
+*.out
+*.test
+
+# Local state
+state/
+*.log
+
+# Editor/system
+.DS_Store
