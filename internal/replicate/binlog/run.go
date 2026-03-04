@@ -498,19 +498,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 			result, err := tx.ExecContext(ctx, event.Query, event.Args...)
 			if err != nil {
 				_ = tx.Rollback()
-				return applyResult{}, &applyFailure{
-					FailureType: "apply_sql_error",
-					File:        batch.EndFile,
-					Pos:         batch.EndPos,
-					Operation:   event.Operation,
-					TableName:   event.TableName,
-					Query:       event.Query,
-					Message:     fmt.Sprintf("apply event at %s:%d failed", batch.EndFile, batch.EndPos),
-					Cause:       err,
-					Remediation: "review table schema and conflicting destination rows, then rerun replicate from checkpoint",
-					AppliedFile: lastFile,
-					AppliedPos:  lastPos,
-				}
+				return applyResult{}, classifyApplySQLError(err, event, batch.EndFile, batch.EndPos, lastFile, lastPos)
 			}
 			if event.RequireRowsAffected && result != nil {
 				rowsAffected, rowsErr := result.RowsAffected()
@@ -588,6 +576,7 @@ func buildConflictReport(opts Options, startFile string, startPos uint32, source
 		if failure.FailureType != "" {
 			report.FailureType = failure.FailureType
 		}
+		report.SQLErrorCode = failure.SQLErrorCode
 		report.Message = failure.Error()
 		report.Operation = failure.Operation
 		report.TableName = failure.TableName

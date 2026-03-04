@@ -21,6 +21,7 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	report.AppliedEndFile = "mysql-bin.000001"
 	report.AppliedEndPos = 320
 	report.FailureType = "conflict"
+	report.SQLErrorCode = 1062
 	report.Operation = "update"
 	report.TableName = "app.items"
 	report.Query = "UPDATE `app`.`items` SET `name`=? WHERE `id` <=> ?"
@@ -43,6 +44,9 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	}
 	if loaded.AppliedEndPos != report.AppliedEndPos {
 		t.Fatalf("unexpected applied end pos: got=%d want=%d", loaded.AppliedEndPos, report.AppliedEndPos)
+	}
+	if loaded.SQLErrorCode != report.SQLErrorCode {
+		t.Fatalf("unexpected sql error code: got=%d want=%d", loaded.SQLErrorCode, report.SQLErrorCode)
 	}
 }
 

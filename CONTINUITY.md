@@ -16,9 +16,9 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-conflict-report-phase17` from `main@5a1546c` (PR #18 merged by user).
-  - Phase 17 changes implemented locally; local tests passing.
-  - PR #19 opened: `feat: phase 17 detailed replication conflict reports` (CI pending).
+  - Branch: `codex/feat/replicate-error-categorization-phase18` from `main@87590f2` (PR #19 merged by user).
+  - Phase 18 changes implemented locally; local tests passing.
+  - PR #20 opened: `feat: phase 18 replication error categorization hardening` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -52,18 +52,23 @@ Last updated: 2026-03-04
     - DDL apply mode now includes safety classification; risky DDL is blocked even under `--apply-ddl=apply` with explicit remediation message.
     - replicate output includes selected `conflict_policy`.
     - CLI/command/binlog tests expanded for conflict policy and DDL safety classification.
-  - Phase 17 implemented on branch (pending PR merge):
+  - Phase 17 merged:
     - replicate now writes detailed failure reports to `--state-dir/replication-conflict-report.json`.
     - failure reports include apply policy, checkpoint window (`start`, `source_end`, `applied_end`), failure type, operation, table, query, root message, and remediation.
     - binlog apply/load paths now emit typed failures (`apply_sql_error`, `conflict_zero_rows`, `ddl_blocked`, `ddl_risky_blocked`, `incomplete_transaction`, etc.) to improve operator diagnostics.
     - new state persistence module added for conflict reports with round-trip tests.
     - replication run tests now validate conflict report generation on apply failures.
+  - Phase 18 implemented on branch (pending PR merge):
+    - SQL execution failures are categorized into explicit failure types (`schema_drift`, `conflict_duplicate_key`, `conflict_foreign_key`, `permission_denied`, `data_conversion_error`, `retryable_transaction_error`, fallback `apply_sql_error`).
+    - conflict report schema now includes `sql_error_code` when available.
+    - execution error classification now derives targeted remediation guidance per failure class.
+    - tests added for SQL error classification and conflict report SQL-code persistence.
 - Now:
-  - Wait for PR #19 checks and merge.
+  - Wait for PR #20 checks and merge.
 - Next:
-  - Continue with schema drift handling/reporting and richer conflict detail categorization.
+  - Continue with table-level conflict samples in reports.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
   - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go mod tidy`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
