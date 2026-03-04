@@ -54,3 +54,42 @@ func TestExtractBinlogPositionMissingColumns(t *testing.T) {
 		t.Fatal("expected missing columns to fail")
 	}
 }
+
+func TestParseLogBinEnabled(t *testing.T) {
+	cases := []struct {
+		in   any
+		want bool
+	}{
+		{in: int64(1), want: true},
+		{in: int64(0), want: false},
+		{in: "ON", want: true},
+		{in: "off", want: false},
+		{in: []byte("TRUE"), want: true},
+		{in: []byte("FALSE"), want: false},
+	}
+
+	for _, tc := range cases {
+		got, err := parseLogBinEnabled(tc.in)
+		if err != nil {
+			t.Fatalf("parseLogBinEnabled(%v): %v", tc.in, err)
+		}
+		if got != tc.want {
+			t.Fatalf("parseLogBinEnabled(%v)=%v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestParseLogBinEnabledInvalid(t *testing.T) {
+	if _, err := parseLogBinEnabled("MAYBE"); err == nil {
+		t.Fatal("expected invalid log_bin value to fail")
+	}
+}
+
+func TestNormalizeBinlogFormat(t *testing.T) {
+	if got := normalizeBinlogFormat("row"); got != "ROW" {
+		t.Fatalf("unexpected normalized format: %q", got)
+	}
+	if got := normalizeBinlogFormat([]byte("mixed")); got != "MIXED" {
+		t.Fatalf("unexpected normalized format: %q", got)
+	}
+}

@@ -56,6 +56,10 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume --apply
 dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false --start-file mysql-bin.000001 --start-pos 4
 ```
 
+Replication preflight requirements:
+- source `log_bin` must be enabled
+- source `binlog_format` must be `ROW`
+
 ## Verification modes
 
 ```bash
