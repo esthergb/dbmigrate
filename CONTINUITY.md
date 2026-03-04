@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-error-categorization-phase18` from `main@87590f2` (PR #19 merged by user).
   - Phase 18 changes implemented locally; local tests passing.
+  - PR #20 opened: `feat: phase 18 replication error categorization hardening` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -63,9 +64,8 @@ Last updated: 2026-03-04
     - execution error classification now derives targeted remediation guidance per failure class.
     - tests added for SQL error classification and conflict report SQL-code persistence.
 - Now:
-  - Commit, push, and open PR for Phase 18.
+  - Wait for PR #20 checks and merge.
 - Next:
-  - Merge Phase 18 PR.
   - Continue with table-level conflict samples in reports.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
