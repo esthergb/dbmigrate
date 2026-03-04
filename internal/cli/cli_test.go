@@ -101,10 +101,11 @@ func TestRunMigrateDataOnlyNotImplemented(t *testing.T) {
 		"--source", "mysql://src",
 		"--dest", "mysql://dst",
 		"--data-only",
+		"--dry-run",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected run failure exit code 3, got %d output=%s", code, out.String())
+	if code != 0 {
+		t.Fatalf("expected exit code 0 for dry-run data-only mode, got %d output=%s", code, out.String())
 	}
 }
 
@@ -123,5 +124,21 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	}
 	if command[0] != "--schema-only" {
 		t.Fatalf("expected schema-only in command args, got %v", command)
+	}
+}
+
+func TestRunMigrateDryRunFullModeWithResume(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"migrate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--dry-run",
+		"--chunk-size", "500",
+		"--resume",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }

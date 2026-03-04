@@ -4,8 +4,8 @@ dist/
 *.out
 *.test
 
-# Local state
-state/
+# Local runtime state directory (repo root)
+/state/
 *.log
 
 # Editor/system

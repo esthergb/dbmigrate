@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - PR #5 (Fase 3) abierto contra `main`; CI en ejecución y review requerida por política.
+  - PR #5 fusionado en `main`; fase actual en progreso: baseline data migrator + checkpoint/resume (PR pendiente de abrir).
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -101,15 +101,30 @@ Last updated: 2026-03-04
     - `go test ./... -count=1` (PASS)
   - Commit/push Fase 3: `346c2c7` en `codex/feat/schema-baseline-phase3`.
   - PR #5 abierto: `codex/feat/schema-baseline-phase3` -> `main`.
+  - PR #5 fusionado por usuario (`2026-03-04T19:44:09Z`) y `main` avanza a `a394462`.
+  - Rama nueva de Fase 4 creada desde `main`: `codex/feat/data-baseline-checkpoint-phase4`.
+  - Implementación Fase 4 añadida:
+    - paquete `internal/state` con checkpoint JSON atómico (`LoadDataCheckpoint`, `SaveDataCheckpoint`).
+    - paquete `internal/data` para copia baseline en lotes con estado y reanudación (`CopyBaselineData`).
+    - integración en `migrate` para modos schema/data/full con flags `--chunk-size` y `--resume`.
+    - tests de unidad para checkpoint, SQL builders y parseo/CLI migrate actualizado.
+  - Ajuste de `.gitignore`: `state/` anclado a raíz como `/state/` para no excluir `internal/state`.
+  - Documentación actualizada para Fase 4:
+    - `README.md` con estado de fases 0-4 y modos de baseline migration.
+    - `docs/operators-guide.md` con ejecución schema/data/full, checkpoint y `--resume`.
+  - Verificación local ejecutada:
+    - `gofmt -w` sobre archivos de Fase 4.
+    - `/tmp/go-toolchain/go/bin/go test ./... -count=1` (PASS).
+    - `golangci-lint run ./...` no disponible localmente (`command not found`).
 - Now:
-  - Esperar resultado final de CI y review de PR #5.
+  - Preparar commit/push de Fase 4 y abrir PR a `main`.
 - Next:
-  - Resolver feedback/review de PR #5.
-  - Iniciar siguiente fase funcional (baseline data migrator con checkpoint/resume).
+  - Completar revisión de PR de fase de datos y merge.
+  - Continuar con mejoras de verificación y robustez de migración incremental.
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
   - Ninguna bloqueante inmediata.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `internal/schema/*`, `internal/commands/migrate*`, `internal/cli/cli*`
-  - Commands: `git push`, `git checkout -b`, `gh pr create`, `/tmp/go-toolchain/go/bin/go test`, `/tmp/go-toolchain/go/bin/gofmt`, `rg`, `cat`
+  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `internal/state/*`, `internal/data/*`, `internal/commands/migrate*`, `internal/cli/cli*`
+  - Commands: `git push`, `gh pr create`, `/tmp/go-toolchain/go/bin/go test`, `/tmp/go-toolchain/go/bin/gofmt`, `rg`, `cat`
