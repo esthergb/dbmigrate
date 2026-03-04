@@ -18,6 +18,20 @@ const (
 	EngineUnknown Engine = "unknown"
 )
 
+type strictLTSMatrixEntry struct {
+	Engine Engine
+	Major  int
+	Minor  int
+	Label  string
+}
+
+var strictLTSMatrix = []strictLTSMatrixEntry{
+	{Engine: EngineMySQL, Major: 8, Minor: 0, Label: "MySQL 8.0.x"},
+	{Engine: EngineMySQL, Major: 8, Minor: 4, Label: "MySQL 8.4.x"},
+	{Engine: EngineMariaDB, Major: 10, Minor: 11, Label: "MariaDB 10.11.x"},
+	{Engine: EngineMariaDB, Major: 11, Minor: 4, Label: "MariaDB 11.4.x"},
+}
+
 // DowngradeProfile controls strictness for downgrade compatibility checks.
 type DowngradeProfile string
 
@@ -240,52 +254,37 @@ func normalizeDowngradeProfile(value string) DowngradeProfile {
 func applyStrictLTSSameEngineChecks(report *Report) {
 	source := report.Source
 	dest := report.Dest
-	switch source.Engine {
-	case EngineMySQL:
-		sourceLine, sourceKnown := mysqlLTSLine(source)
-		destLine, destKnown := mysqlLTSLine(dest)
-		if !sourceKnown || !destKnown {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "strict_lts_line_unknown",
-				Severity: "error",
-				Message:  fmt.Sprintf("strict-lts profile requires known LTS lines, got MySQL %s -> %s.", source.Version, dest.Version),
-				Proposal: "Use same-major/adjacent-minor/max-compat profile if this downgrade path is intentionally outside known LTS lines.",
-			})
-			return
-		}
-		if sourceLine != destLine {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "strict_lts_line_mismatch",
-				Severity: "error",
-				Message:  fmt.Sprintf("strict-lts profile blocks downgrade across LTS lines: MySQL %s -> %s.", sourceLine, destLine),
-				Proposal: "Use a staged path that stays inside one LTS line or select a less strict profile after risk review.",
-			})
-		}
-	case EngineMariaDB:
-		sourceLine, sourceKnown := mariaDBLTSLine(source)
-		destLine, destKnown := mariaDBLTSLine(dest)
-		if !sourceKnown || !destKnown {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "strict_lts_line_unknown",
-				Severity: "error",
-				Message:  fmt.Sprintf("strict-lts profile requires known LTS lines, got MariaDB %s -> %s.", source.Version, dest.Version),
-				Proposal: "Use same-major/adjacent-minor/max-compat profile if this downgrade path is intentionally outside known LTS lines.",
-			})
-			return
-		}
-		if sourceLine != destLine {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "strict_lts_line_mismatch",
-				Severity: "error",
-				Message:  fmt.Sprintf("strict-lts profile blocks downgrade across LTS lines: MariaDB %s -> %s.", sourceLine, destLine),
-				Proposal: "Use a staged path that stays inside one LTS line or select a less strict profile after risk review.",
-			})
-		}
+	sourceLine, sourceKnown := strictLTSLine(source)
+	destLine, destKnown := strictLTSLine(dest)
+	matrixSummary := strictLTSMatrixSummary()
+	if !sourceKnown || !destKnown {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "strict_lts_matrix_out_of_range",
+			Severity: "error",
+			Message:  fmt.Sprintf("strict-lts profile requires source/destination versions inside the explicit matrix, got %s %s -> %s %s.", source.Engine, source.Version, dest.Engine, dest.Version),
+			Proposal: fmt.Sprintf("Allowed strict-lts same-engine ranges: %s. Use same-major/adjacent-minor/max-compat for broader compatibility.", matrixSummary),
+		})
+		return
 	}
+
+	if sourceLine != destLine {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "strict_lts_matrix_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("strict-lts profile blocks downgrade across matrix lines: %s -> %s.", sourceLine, destLine),
+			Proposal: fmt.Sprintf("Use a staged path that stays in one strict-lts line (%s) or switch profile after risk review.", matrixSummary),
+		})
+		return
+	}
+
+	report.Findings = append(report.Findings, Finding{
+		Code:     "strict_lts_matrix_match",
+		Severity: "info",
+		Message:  fmt.Sprintf("strict-lts matrix line matched: %s.", sourceLine),
+		Proposal: "Proceed with standard migration/verification gates under strict-lts policy.",
+	})
 }
 
 func applyCrossEngineStrictChecks(report *Report) {
@@ -338,24 +337,21 @@ func applyCrossEngineRiskWarnings(report *Report) {
 	}
 }
 
-func mysqlLTSLine(instance Instance) (string, bool) {
-	if instance.Major != 8 {
-		return "", false
-	}
-	if instance.Minor == 0 || instance.Minor == 4 {
-		return fmt.Sprintf("%d.%d", instance.Major, instance.Minor), true
+func strictLTSLine(instance Instance) (string, bool) {
+	for _, entry := range strictLTSMatrix {
+		if instance.Engine == entry.Engine && instance.Major == entry.Major && instance.Minor == entry.Minor {
+			return entry.Label, true
+		}
 	}
 	return "", false
 }
 
-func mariaDBLTSLine(instance Instance) (string, bool) {
-	if instance.Major == 10 && instance.Minor == 11 {
-		return "10.11", true
+func strictLTSMatrixSummary() string {
+	labels := make([]string, 0, len(strictLTSMatrix))
+	for _, entry := range strictLTSMatrix {
+		labels = append(labels, fmt.Sprintf("%s->%s", entry.Label, entry.Label))
 	}
-	if instance.Major == 11 && instance.Minor == 4 {
-		return "11.4", true
-	}
-	return "", false
+	return strings.Join(labels, ", ")
 }
 
 func detectEngine(rawVersion string) Engine {
