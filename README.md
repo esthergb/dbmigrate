@@ -46,6 +46,16 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --data-only --chun
 dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 ```
 
+## Incremental replication baseline
+
+```bash
+# Update replication checkpoint from source binlog status
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume --apply-ddl warn
+
+# Start from explicit binlog file/position when no checkpoint exists
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false --start-file mysql-bin.000001 --start-pos 4
+```
+
 ## Verification modes
 
 ```bash

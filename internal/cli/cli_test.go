@@ -264,3 +264,33 @@ func TestRunVerifyInvalidSampleSize(t *testing.T) {
 		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
 	}
 }
+
+func TestRunReplicateDryRun(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--dry-run",
+		"--apply-ddl", "warn",
+		"--resume",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunReplicateInvalidApplyDDL(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--apply-ddl", "deny",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
