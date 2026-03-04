@@ -17,8 +17,9 @@ Last updated: 2026-03-05
   - Allow partial-database scope via `--databases`.
 - State:
   - Branch: `codex/feat/readme-process-phase24` from `main@308d4fd` (PR #25 merged by user on 2026-03-04).
+  - PR #26 is open: https://github.com/esthergb/dbmigrate/pull/26
   - Current phase focuses on repository/process docs refresh and introducing `Instructions.md` into tracked docs.
-  - `Instructions.md` currently exists locally and is pending commit in this phase.
+  - `Instructions.md` is now committed as tracked documentation in this phase branch.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -98,7 +99,7 @@ Last updated: 2026-03-05
     - tests expanded for strict-lts out-of-range, cross-line mismatch, and same-line success.
     - README/operators guide now document the explicit strict-lts same-engine matrix.
 - Now:
-  - Finalize Phase 24 docs updates (`README` current/pending process, add `Instructions.md` as tracked file), then open PR.
+  - Wait for PR #26 CI/review and merge.
 - Next:
   - Merge Phase 24 PR.
   - Continue with next implementation branch after docs phase.
