@@ -52,9 +52,6 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 	if cfg.DryRun {
 		return writeResult(out, cfg, "verify", fmt.Sprintf("dry-run: verify plan ready (verify_level=%s data_mode=%s)", opts.VerifyLevel, opts.DataMode))
 	}
-	if opts.VerifyLevel == "data" && opts.DataMode != "count" {
-		return fmt.Errorf("data-mode %q is not implemented yet; supported: count", opts.DataMode)
-	}
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
 	if err != nil {
@@ -108,25 +105,50 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			return errors.New("data verification requires tables in --include-objects")
 		}
 
-		summary, err := dataVerify.VerifyCount(ctx, sourceDB, destDB, dataVerify.Options{
-			IncludeDatabases: cfg.Databases,
-			ExcludeDatabases: cfg.ExcludeDatabases,
-		})
-		if err != nil {
-			return fmt.Errorf("data verification failed: %w", err)
+		switch opts.DataMode {
+		case "count":
+			summary, err := dataVerify.VerifyCount(ctx, sourceDB, destDB, dataVerify.Options{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+			})
+			if err != nil {
+				return fmt.Errorf("data verification failed: %w", err)
+			}
+			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+				return err
+			}
+			if len(summary.Diffs) > 0 {
+				return fmt.Errorf(
+					"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
+					summary.MissingInDestination,
+					summary.MissingInSource,
+					summary.CountMismatches,
+				)
+			}
+			return nil
+		case "hash":
+			summary, err := dataVerify.VerifyHash(ctx, sourceDB, destDB, dataVerify.Options{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+			})
+			if err != nil {
+				return fmt.Errorf("data verification failed: %w", err)
+			}
+			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+				return err
+			}
+			if len(summary.Diffs) > 0 {
+				return fmt.Errorf(
+					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+					summary.MissingInDestination,
+					summary.MissingInSource,
+					summary.HashMismatches,
+				)
+			}
+			return nil
+		default:
+			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash", opts.DataMode)
 		}
-		if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-			return err
-		}
-		if len(summary.Diffs) > 0 {
-			return fmt.Errorf(
-				"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
-				summary.MissingInDestination,
-				summary.MissingInSource,
-				summary.CountMismatches,
-			)
-		}
-		return nil
 	default:
 		return fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel)
 	}
@@ -224,7 +246,7 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 
 	if _, err := fmt.Fprintf(
 		out,
-		"[verify] level=%s data_mode=%s status=%s databases=%d compared=%d missing_in_destination=%d missing_in_source=%d count_mismatches=%d\n",
+		"[verify] level=%s data_mode=%s status=%s databases=%d compared=%d missing_in_destination=%d missing_in_source=%d count_mismatches=%d hash_mismatches=%d\n",
 		level,
 		dataMode,
 		status,
@@ -233,6 +255,7 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 		summary.MissingInDestination,
 		summary.MissingInSource,
 		summary.CountMismatches,
+		summary.HashMismatches,
 	); err != nil {
 		return err
 	}
@@ -240,12 +263,14 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 	for _, diff := range summary.Diffs {
 		if _, err := fmt.Fprintf(
 			out,
-			"[verify] diff kind=%s database=%s table=%s source_count=%d dest_count=%d\n",
+			"[verify] diff kind=%s database=%s table=%s source_count=%d dest_count=%d source_hash=%s dest_hash=%s\n",
 			diff.Kind,
 			diff.Database,
 			diff.Table,
 			diff.SourceCount,
 			diff.DestCount,
+			diff.SourceHash,
+			diff.DestHash,
 		); err != nil {
 			return err
 		}
