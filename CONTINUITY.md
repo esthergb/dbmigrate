@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-binlog-decode-phase15` from `main@c1e7491` (PR #16 merged by user).
   - Phase 15 changes implemented locally; local tests passing.
+  - PR #17 opened: `feat: phase 15 binlog decode and row-apply mapping` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -45,9 +46,8 @@ Last updated: 2026-03-04
     - replication output now includes source row image.
     - unit tests added for binlog decode-to-batch mapping, DDL policy paths, and binlog position helpers.
 - Now:
-  - Commit, push, and open PR for Phase 15.
+  - Wait for PR #17 checks and merge.
 - Next:
-  - Merge Phase 15 PR.
   - Continue with conflict policies, schema drift handling, and richer DDL safety classification.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
