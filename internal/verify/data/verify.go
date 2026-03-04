@@ -28,6 +28,7 @@ const (
 type Options struct {
 	IncludeDatabases []string
 	ExcludeDatabases []string
+	SampleSize       int
 }
 
 // Diff describes one data-level mismatch.
@@ -134,6 +135,50 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 	return summary, nil
 }
 
+// VerifySample compares deterministic per-table sample hashes between source and destination.
+func VerifySample(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Summary, error) {
+	if source == nil || dest == nil {
+		return Summary{}, errors.New("source and destination connections are required")
+	}
+	if opts.SampleSize < 1 {
+		opts.SampleSize = 1000
+	}
+
+	sourceDatabases, err := listDatabases(ctx, source)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list source databases: %w", err)
+	}
+	destDatabases, err := listDatabases(ctx, dest)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list destination databases: %w", err)
+	}
+
+	unionDatabases := unionAndSort(sourceDatabases, destDatabases)
+	selectedDatabases := baseSchema.SelectDatabases(unionDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
+
+	summary := Summary{Databases: len(selectedDatabases)}
+	for _, databaseName := range selectedDatabases {
+		sourceHashes, err := tableSampleHashesForDatabase(ctx, source, databaseName, opts.SampleSize)
+		if err != nil {
+			return summary, fmt.Errorf("read source table sample hashes for %s: %w", databaseName, err)
+		}
+		destHashes, err := tableSampleHashesForDatabase(ctx, dest, databaseName, opts.SampleSize)
+		if err != nil {
+			return summary, fmt.Errorf("read destination table sample hashes for %s: %w", databaseName, err)
+		}
+
+		diffs, compared, missingDest, missingSource, mismatches := diffTableHashes(databaseName, sourceHashes, destHashes)
+		summary.Diffs = append(summary.Diffs, diffs...)
+		summary.TablesCompared += compared
+		summary.MissingInDestination += missingDest
+		summary.MissingInSource += missingSource
+		summary.HashMismatches += mismatches
+	}
+
+	sortDiffs(summary.Diffs)
+	return summary, nil
+}
+
 func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	rows, err := db.QueryContext(ctx, "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME")
 	if err != nil {
@@ -181,6 +226,22 @@ func tableHashesForDatabase(ctx context.Context, db *sql.DB, databaseName string
 	out := map[string]string{}
 	for _, tableName := range tableNames {
 		tableHash, err := hashTable(ctx, db, databaseName, tableName)
+		if err != nil {
+			return nil, err
+		}
+		out[tableName] = tableHash
+	}
+	return out, nil
+}
+
+func tableSampleHashesForDatabase(ctx context.Context, db *sql.DB, databaseName string, sampleSize int) (map[string]string, error) {
+	tableNames, err := listBaseTables(ctx, db, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, tableName := range tableNames {
+		tableHash, err := hashTableSample(ctx, db, databaseName, tableName, sampleSize)
 		if err != nil {
 			return nil, err
 		}
@@ -255,6 +316,17 @@ func countRows(ctx context.Context, db *sql.DB, databaseName string, tableName s
 }
 
 func hashTable(ctx context.Context, db *sql.DB, databaseName string, tableName string) (string, error) {
+	return hashTableWithLimit(ctx, db, databaseName, tableName, 0)
+}
+
+func hashTableSample(ctx context.Context, db *sql.DB, databaseName string, tableName string, sampleSize int) (string, error) {
+	if sampleSize < 1 {
+		return hashTableWithLimit(ctx, db, databaseName, tableName, 0)
+	}
+	return hashTableWithLimit(ctx, db, databaseName, tableName, sampleSize)
+}
+
+func hashTableWithLimit(ctx context.Context, db *sql.DB, databaseName string, tableName string, limit int) (string, error) {
 	columns, err := listTableColumns(ctx, db, databaseName, tableName)
 	if err != nil {
 		return "", err
@@ -264,8 +336,13 @@ func hashTable(ctx context.Context, db *sql.DB, databaseName string, tableName s
 		return hex.EncodeToString(empty[:]), nil
 	}
 
-	query := buildOrderedSelectSQL(databaseName, tableName, columns)
-	rows, err := db.QueryContext(ctx, query)
+	query := buildOrderedSelectSQL(databaseName, tableName, columns, limit)
+	var rows *sql.Rows
+	if limit > 0 {
+		rows, err = db.QueryContext(ctx, query, limit)
+	} else {
+		rows, err = db.QueryContext(ctx, query)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -305,19 +382,23 @@ func hashTable(ctx context.Context, db *sql.DB, databaseName string, tableName s
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func buildOrderedSelectSQL(databaseName string, tableName string, columns []string) string {
+func buildOrderedSelectSQL(databaseName string, tableName string, columns []string, limit int) string {
 	quotedColumns := make([]string, 0, len(columns))
 	for _, columnName := range columns {
 		quotedColumns = append(quotedColumns, quoteIdentifier(columnName))
 	}
 	columnList := strings.Join(quotedColumns, ", ")
-	return fmt.Sprintf(
+	base := fmt.Sprintf(
 		"SELECT %s FROM %s.%s ORDER BY %s",
 		columnList,
 		quoteIdentifier(databaseName),
 		quoteIdentifier(tableName),
 		columnList,
 	)
+	if limit > 0 {
+		return base + " LIMIT ?"
+	}
+	return base
 }
 
 func normalizeHashValue(value any) string {
