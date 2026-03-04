@@ -20,6 +20,7 @@ Last updated: 2026-03-04
   - PR #24 is open: https://github.com/esthergb/dbmigrate/pull/24
   - User selected supported downgrade profiles and requested user-selectable profile list.
   - Phase 22 profile implementation is committed/pushed; local full tests pass.
+  - PR #24 required CI checks (`validate` push/pull_request) are pending.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
