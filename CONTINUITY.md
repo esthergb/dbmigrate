@@ -1,4 +1,4 @@
-Last updated: 2026-03-04
+Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
   - Deliver `dbmigrate` through phased PRs with safe baseline migration, verification, compatibility planning, and incremental replication that does not lose events.
@@ -9,19 +9,16 @@ Last updated: 2026-03-04
   - Output priority: JSON first, HTML later.
   - `--apply-ddl` surface is fixed to `ignore|apply|warn`.
   - Default behavior is fail-fast on incompatibilities; auto-fix is future work.
-  - `Instructions.md` must stay untracked.
+  - `Instructions.md` is now requested as tracked project documentation.
 - Key decisions:
   - Deliver in small PRs from `codex/*` branches.
   - Keep CI minimal and local testing comprehensive.
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/strict-lts-matrix-phase23` from `main@de5396e` (PR #24 merged by user on 2026-03-04).
-  - PR #25 is open: https://github.com/esthergb/dbmigrate/pull/25
-  - User selected supported downgrade profiles and requested selectable profile behavior.
-  - Phase 23 strict-lts matrix hardening is committed/pushed; full test suite passed locally.
-  - PR #25 required CI checks (`validate` push/pull_request) are pending.
-  - `Instructions.md` remains untracked.
+  - Branch: `codex/feat/readme-process-phase24` from `main@308d4fd` (PR #25 merged by user on 2026-03-04).
+  - Current phase focuses on repository/process docs refresh and introducing `Instructions.md` into tracked docs.
+  - `Instructions.md` currently exists locally and is pending commit in this phase.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -91,7 +88,7 @@ Last updated: 2026-03-04
     - config-file support added for `downgrade-profile` (YAML) / `downgrade_profile` (JSON).
     - docs updated in README/operators guide.
     - tests expanded across `compat`, `config`, and `cli` for profile selection and validation.
-  - Phase 23 implemented and pushed (PR #25 open):
+  - Phase 23 merged (PR #25):
     - strict-lts now uses explicit same-engine matrix entries in code instead of implicit line checks.
     - strict-lts failures now return matrix-specific findings:
       - `strict_lts_matrix_out_of_range`
@@ -101,12 +98,12 @@ Last updated: 2026-03-04
     - tests expanded for strict-lts out-of-range, cross-line mismatch, and same-line success.
     - README/operators guide now document the explicit strict-lts same-engine matrix.
 - Now:
-  - Wait for PR #25 CI/review and merge.
+  - Finalize Phase 24 docs updates (`README` current/pending process, add `Instructions.md` as tracked file), then open PR.
 - Next:
-  - Merge Phase 23 PR.
-  - Continue with report ergonomics (structured diff hints) after matrix hardening.
+  - Merge Phase 24 PR.
+  - Continue with next implementation branch after docs phase.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `README.md`, `Instructions.md`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.

@@ -6,16 +6,27 @@
 
 This repository is in phased development.
 
-Completed:
-- Phase 0 research docs (`docs/known-problems.md`, `docs/risk-checklist.md`)
-- Phase 1 foundation scaffold (CLI skeleton, project structure, CI baseline)
-- Phase 2 config and connection layer (`--config`, DSN validation/redaction)
-- Phase 3 baseline schema migration (tables/views)
-- Phase 4 baseline data migration with checkpoint/resume (`--chunk-size`, `--resume`)
-- Phase 5 schema verification (`verify --verify-level=schema`)
+Completed milestones (merged through Phase 23):
+- Phase 0: research and operator risk docs
+- Phase 1: foundation scaffold + CI baseline
+- Phase 2: runtime config, DSN validation, config file support
+- Phase 3: baseline schema migration (tables/views)
+- Phase 4: baseline data migration with checkpoint/resume
+- Phase 5-9: verification pipeline (schema + count/hash/sample/full-hash data modes)
+- Phase 10-15: replication baseline, checkpoint safety, transactional apply, binlog decode/apply pipeline
+- Phase 16-18: conflict policy + DDL safety + SQL error categorization
+- Phase 19-21: conflict report enrichment (`value_sample`, `old_row_sample`, `new_row_sample`)
+- Phase 22: selectable downgrade profiles (`strict-lts`, `same-major`, `adjacent-minor`, `max-compat`)
+- Phase 23: explicit strict-lts downgrade matrix hardening
 
-In progress next:
-- Schema/data verification and incremental replication hardening
+Current process:
+- Delivery is phase-based via small PRs from `codex/*` branches.
+- Each phase runs local full tests and required CI checks before merge.
+
+Pending next milestones:
+- Continue replication/report ergonomics hardening and operator-facing diagnostics.
+- Expand strict compatibility matrices where needed with explicit version/range policies.
+- Keep documentation and runbooks synchronized with merged phases.
 
 ## Supported migration priorities
 
@@ -148,3 +159,4 @@ make vulncheck
 - [Operator risk checklist](docs/risk-checklist.md)
 - [Operators guide](docs/operators-guide.md)
 - [Security notes](docs/security.md)
+- [Project implementation instructions](Instructions.md)
