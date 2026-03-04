@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Preparación previa aprobada por el usuario. En progreso: push de rama y arranque de Fase 0 (research docs).
+  - Usuario instaló `gh`. En progreso: apertura de PRs + scaffold inicial de Fase 1.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -43,14 +43,20 @@ Last updated: 2026-03-04
   - Creada rama `codex/chore/agent-skills-bootstrap`.
   - Commit realizado: `984d687` (`chore: add agent playbook and project skills`).
   - Aprobación explícita del usuario para commit/push y comienzo de Fase 0.
+  - Push de rama bootstrap completado: `origin/codex/chore/agent-skills-bootstrap`.
+  - Creada rama de fase 0: `codex/feat/docs-phase0-research`.
+  - Creados `docs/known-problems.md` y `docs/risk-checklist.md`.
+  - Commit Fase 0: `56c7e79` (`docs: add phase-0 migration risks and operator checklist`).
+  - Push Fase 0: `origin/codex/feat/docs-phase0-research`.
 - Now:
-  - Hacer push de la rama actual y crear documentos de investigación obligatorios de Fase 0.
+  - Abrir PRs de ramas ya subidas y arrancar Fase 1 en nueva rama de trabajo.
 - Next:
-  - Completar `docs/known-problems.md` con fuentes y mitigaciones.
-  - Completar `docs/risk-checklist.md` para operadores.
+  - Completar scaffold del proyecto Go (`cmd/`, `internal/`, `tests/`, CI mínima).
+  - Crear `docs/development-plan.md` alineado a hitos/PRs.
+  - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Ninguna bloqueante para iniciar Fase 0.
+  - Ninguna bloqueante para iniciar Fase 1.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md`, `CONTINUITY.md`, `AGENTS.md`, `skills/*`
-  - Commands: `rg --files`, `ls -la`, `cat Instructions.md`, `cat CONTINUITY.md`, `cat skill-creator/SKILL.md`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
+  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`
+  - Commands: `git push`, `git checkout -b`, `gh pr create`, `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
