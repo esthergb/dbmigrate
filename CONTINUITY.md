@@ -16,11 +16,9 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-row-payload-phase21` from `main@785d587` (PR #22 merged by user on 2026-03-04).
-  - PR #23 is open: https://github.com/esthergb/dbmigrate/pull/23
-  - Phase 21 changes are committed/pushed for detailed conflict payload (`old_row_sample` / `new_row_sample`).
-  - Local full test suite passed before PR creation.
-  - PR #23 required CI checks (`validate` push/pull_request) are pending.
+  - Branch: `codex/feat/replicate-row-diff-phase22` from `main@3e9ee7d` (PR #23 merged by user on 2026-03-04).
+  - User selected supported downgrade profiles and requested user-selectable profile list.
+  - Phase 22 profile implementation is complete locally and full tests pass.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -75,18 +73,30 @@ Last updated: 2026-03-04
     - `value_sample` generation is column-aware (`id=42`) with fallback to ordinal labels (`v1=42`) when names are unavailable.
     - row-event mapping now propagates key columns for insert/update/delete conflict reporting.
     - tests updated for key-column propagation and column-aware sample formatting.
-  - Phase 21 implemented and pushed (PR #23 open):
+  - Phase 21 merged (PR #23):
     - conflict reports include `old_row_sample` and `new_row_sample` JSON fields.
     - binlog apply events now carry per-row payload snapshots (old/new rows) for insert/update/delete operations.
     - SQL and zero-row conflict failures now include key sample + old/new row samples for faster triage.
     - tests expanded for row payload propagation and conflict report round-trip persistence.
+  - Phase 22 implemented locally (pending commit/PR):
+    - new global option `--downgrade-profile` added with selectable values:
+      - `strict-lts` (default)
+      - `same-major`
+      - `adjacent-minor`
+      - `max-compat`
+    - compatibility evaluator now receives the selected profile and emits it in plan report payload (`report.downgrade_profile`).
+    - same-engine downgrade decisions are profile-driven; strict-lts adds LTS-line checks, max-compat relaxes guardrails.
+    - config-file support added for `downgrade-profile` (YAML) / `downgrade_profile` (JSON).
+    - docs updated in README/operators guide.
+    - tests expanded across `compat`, `config`, and `cli` for profile selection and validation.
 - Now:
-  - Wait for PR #23 CI/review and merge.
+  - Commit/push and open PR for Phase 22.
 - Next:
-  - Create next phase branch from updated `main` after PR #23 merge.
-  - Continue with report ergonomics (structured diff hints) after Phase 21 merge.
+  - Merge Phase 22 PR.
+  - Refine strict-lts matrix ranges with explicit version allowlist if needed.
+  - Continue with report ergonomics after row-diff hints merge.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/load_test.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`.
+  - Files: `CONTINUITY.md`, `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `internal/config/runtime.go`, `internal/config/runtime_test.go`, `internal/config/file.go`, `internal/config/file_test.go`, `internal/cli/cli.go`, `internal/cli/cli_test.go`, `internal/commands/plan.go`, `README.md`, `docs/operators-guide.md`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.

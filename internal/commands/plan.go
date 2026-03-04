@@ -70,6 +70,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		compat.ParseInstance(sourceVersion),
 		compat.ParseInstance(destVersion),
 		cfg.Databases,
+		cfg.DowngradeProfile,
 	)
 	if err := writePlanReport(out, cfg, report); err != nil {
 		return err
@@ -112,8 +113,9 @@ func writePlanReport(out io.Writer, cfg config.RuntimeConfig, report compat.Repo
 
 	if _, err := fmt.Fprintf(
 		out,
-		"[plan] status=%s source=%s/%s dest=%s/%s downgrade=%v findings=%d\n",
+		"[plan] status=%s profile=%s source=%s/%s dest=%s/%s downgrade=%v findings=%d\n",
 		status,
+		report.DowngradeProfile,
 		report.Source.Engine,
 		report.Source.Version,
 		report.Dest.Engine,

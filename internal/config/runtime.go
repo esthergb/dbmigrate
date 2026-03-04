@@ -13,6 +13,13 @@ var validTLSModes = map[string]struct{}{
 	"required":  {},
 }
 
+var validDowngradeProfiles = map[string]struct{}{
+	"strict-lts":     {},
+	"same-major":     {},
+	"adjacent-minor": {},
+	"max-compat":     {},
+}
+
 // RuntimeConfig holds global options shared by all subcommands.
 type RuntimeConfig struct {
 	Source           string
@@ -30,6 +37,7 @@ type RuntimeConfig struct {
 	CertFile         string
 	KeyFile          string
 	StateDir         string
+	DowngradeProfile string
 
 	databasesRaw        string
 	excludeDatabasesRaw string
@@ -53,6 +61,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.CertFile, "cert-file", "", "TLS client cert file")
 	fs.StringVar(&cfg.KeyFile, "key-file", "", "TLS client key file")
 	fs.StringVar(&cfg.StateDir, "state-dir", "./state", "checkpoint and metadata directory")
+	fs.StringVar(&cfg.DowngradeProfile, "downgrade-profile", "strict-lts", "downgrade compatibility profile: strict-lts, same-major, adjacent-minor, max-compat")
 }
 
 // Finalize normalizes derived fields after flag parsing.
@@ -85,6 +94,9 @@ func (c RuntimeConfig) ValidateBasic() error {
 	}
 	if _, ok := validTLSModes[c.TLSMode]; !ok {
 		return fmt.Errorf("invalid tls-mode %q", c.TLSMode)
+	}
+	if _, ok := validDowngradeProfiles[c.DowngradeProfile]; !ok {
+		return fmt.Errorf("invalid downgrade-profile %q", c.DowngradeProfile)
 	}
 	if c.Source != "" && !strings.Contains(c.Source, "://") {
 		return errors.New("source must be a DSN URI")

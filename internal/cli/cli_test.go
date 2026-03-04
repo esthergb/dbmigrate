@@ -39,6 +39,15 @@ func TestRunPlanJSON(t *testing.T) {
 	}
 }
 
+func TestRunPlanInvalidDowngradeProfile(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{"plan", "--source", "mysql://src", "--dest", "mysql://dst", "--downgrade-profile", "unsupported", "--dry-run"}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunPlanWithConfigFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "dbmigrate.yaml")
@@ -114,6 +123,7 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	raw := []string{
 		"--source", "mysql://src",
 		"--dest=mysql://dst",
+		"--downgrade-profile", "max-compat",
 		"--schema-only",
 		"--force",
 		"--json",
@@ -125,6 +135,16 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	}
 	if command[0] != "--schema-only" {
 		t.Fatalf("expected schema-only in command args, got %v", command)
+	}
+	foundProfile := false
+	for i := 0; i < len(global)-1; i++ {
+		if global[i] == "--downgrade-profile" && global[i+1] == "max-compat" {
+			foundProfile = true
+			break
+		}
+	}
+	if !foundProfile {
+		t.Fatalf("expected downgrade-profile in global args, got %v", global)
 	}
 }
 

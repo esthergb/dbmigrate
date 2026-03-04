@@ -27,6 +27,7 @@ type FileConfig struct {
 	CertFile         *string  `json:"cert_file" yaml:"cert-file"`
 	KeyFile          *string  `json:"key_file" yaml:"key-file"`
 	StateDir         *string  `json:"state_dir" yaml:"state-dir"`
+	DowngradeProfile *string  `json:"downgrade_profile" yaml:"downgrade-profile"`
 }
 
 // LoadFileConfig reads YAML/JSON runtime configuration from disk.
@@ -107,6 +108,9 @@ func MergeFileConfig(target *RuntimeConfig, fileCfg FileConfig, explicit map[str
 	}
 	if _, ok := explicit["state-dir"]; !ok && fileCfg.StateDir != nil {
 		target.StateDir = *fileCfg.StateDir
+	}
+	if _, ok := explicit["downgrade-profile"]; !ok && fileCfg.DowngradeProfile != nil {
+		target.DowngradeProfile = *fileCfg.DowngradeProfile
 	}
 }
 

@@ -27,11 +27,29 @@ func TestLoadFileConfigYAML(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfigDowngradeProfile(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.yaml")
+	content := []byte("downgrade-profile: max-compat\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("expected load success: %v", err)
+	}
+	if cfg.DowngradeProfile == nil || *cfg.DowngradeProfile != "max-compat" {
+		t.Fatalf("unexpected downgrade-profile: %#v", cfg.DowngradeProfile)
+	}
+}
+
 func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	source := "mysql://from-file"
 	concurrency := 9
-	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency}
-	target := RuntimeConfig{Source: "mysql://from-flag", Concurrency: 2}
+	profile := "max-compat"
+	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency, DowngradeProfile: &profile}
+	target := RuntimeConfig{Source: "mysql://from-flag", Concurrency: 2, DowngradeProfile: "strict-lts"}
 	explicit := map[string]struct{}{"source": {}}
 
 	MergeFileConfig(&target, fileCfg, explicit)
@@ -41,6 +59,9 @@ func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	}
 	if target.Concurrency != 9 {
 		t.Fatalf("file config should apply to non-explicit field, got %d", target.Concurrency)
+	}
+	if target.DowngradeProfile != "max-compat" {
+		t.Fatalf("file config should apply downgrade profile, got %q", target.DowngradeProfile)
 	}
 }
 
