@@ -295,3 +295,17 @@ func TestRunReplicateInvalidApplyDDL(t *testing.T) {
 		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
 	}
 }
+
+func TestRunReplicateInvalidConflictPolicy(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--conflict-policy", "merge",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}

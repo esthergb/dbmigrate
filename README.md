@@ -50,10 +50,10 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 
 ```bash
 # Replication run with preflight + checkpoint safety tracking
-dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume --apply-ddl warn
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume --apply-ddl warn --conflict-policy fail
 
 # Start from explicit binlog file/position when no checkpoint exists
-dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false --start-file mysql-bin.000001 --start-pos 4
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false --start-file mysql-bin.000001 --start-pos 4 --conflict-policy fail
 ```
 
 Replication preflight requirements:
@@ -66,6 +66,8 @@ Replication checkpoint safety behavior:
 - Checkpoint advances only to `applied_end` (never directly to `source_end`).
 - Apply path is transaction-batch based; checkpoint advances only after destination commit succeeds.
 - Binlog event loading/decoding now maps row events into destination SQL batches with fail-fast behavior on unsupported patterns.
+- Conflict policy is explicit via `--conflict-policy={fail,source-wins,dest-wins}` (default: `fail`).
+- DDL safety in `--apply-ddl=apply` mode allows only low-risk DDL; risky DDL fails with remediation guidance.
 
 ## Verification modes
 

@@ -24,6 +24,18 @@ func TestValidateApplyDDL(t *testing.T) {
 	}
 }
 
+func TestValidateConflictPolicy(t *testing.T) {
+	valid := []string{"fail", "source-wins", "dest-wins"}
+	for _, value := range valid {
+		if err := validateConflictPolicy(value); err != nil {
+			t.Fatalf("expected %q to be valid: %v", value, err)
+		}
+	}
+	if err := validateConflictPolicy("merge"); err == nil {
+		t.Fatal("expected invalid conflict-policy value to fail")
+	}
+}
+
 func TestExtractBinlogPositionMySQLColumns(t *testing.T) {
 	columns := []string{"File", "Position", "Binlog_Do_DB"}
 	values := []any{[]byte("mysql-bin.000123"), int64(456), nil}
@@ -371,6 +383,50 @@ func TestApplyWindowTransactionalCommitErrorRollsBack(t *testing.T) {
 	}
 }
 
+func TestApplyWindowTransactionalFailPolicyRequiresAffectedRows(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000050",
+				EndPos:  340,
+				Events: []applyEvent{
+					{
+						Query:               "UPDATE `app`.`t` SET `c`=? WHERE `id` <=> ?",
+						Args:                []any{3, 1},
+						Operation:           "update",
+						TableName:           "app.t",
+						RequireRowsAffected: true,
+					},
+				},
+			},
+		}, nil
+	}
+
+	tx := &fakeTx{rowsAffected: 0, rowsSet: true}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		return tx, nil
+	}
+
+	_, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000050",
+		StartPos:  300,
+		EndFile:   "mysql-bin.000050",
+		EndPos:    340,
+	}, Options{ApplyDDL: "warn", ConflictPolicy: "fail"})
+	if err == nil {
+		t.Fatal("expected applyWindowTransactional to fail when rows affected is zero")
+	}
+	if !strings.Contains(err.Error(), "conflict-policy=fail detected non-applied update") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tx.committed || !tx.rolledBack {
+		t.Fatalf("unexpected tx state: %+v", tx)
+	}
+}
+
 func stubRunHooks(t *testing.T) func() {
 	t.Helper()
 
@@ -392,12 +448,14 @@ func stubRunHooks(t *testing.T) func() {
 }
 
 type fakeTx struct {
-	execErr     error
-	commitErr   error
-	execCalls   int
-	committed   bool
-	rolledBack  bool
-	lastQueries []string
+	execErr      error
+	commitErr    error
+	rowsAffected int64
+	rowsSet      bool
+	execCalls    int
+	committed    bool
+	rolledBack   bool
+	lastQueries  []string
 }
 
 func (f *fakeTx) ExecContext(_ context.Context, query string, _ ...any) (sql.Result, error) {
@@ -406,7 +464,11 @@ func (f *fakeTx) ExecContext(_ context.Context, query string, _ ...any) (sql.Res
 	if f.execErr != nil {
 		return nil, f.execErr
 	}
-	return nil, nil
+	affected := f.rowsAffected
+	if !f.rowsSet {
+		affected = 1
+	}
+	return fakeSQLResult{rows: affected}, nil
 }
 
 func (f *fakeTx) Commit() error {
@@ -420,4 +482,16 @@ func (f *fakeTx) Commit() error {
 func (f *fakeTx) Rollback() error {
 	f.rolledBack = true
 	return nil
+}
+
+type fakeSQLResult struct {
+	rows int64
+}
+
+func (f fakeSQLResult) LastInsertId() (int64, error) {
+	return 0, nil
+}
+
+func (f fakeSQLResult) RowsAffected() (int64, error) {
+	return f.rows, nil
 }

@@ -10,6 +10,9 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 	if opts.ApplyDDL != "warn" {
 		t.Fatalf("expected default apply-ddl warn, got %q", opts.ApplyDDL)
 	}
+	if opts.ConflictPolicy != "fail" {
+		t.Fatalf("expected default conflict-policy fail, got %q", opts.ConflictPolicy)
+	}
 	if !opts.Resume {
 		t.Fatal("expected default resume=true")
 	}
@@ -21,6 +24,7 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 func TestParseReplicateOptionsExplicit(t *testing.T) {
 	opts, err := parseReplicateOptions([]string{
 		"--apply-ddl=ignore",
+		"--conflict-policy=source-wins",
 		"--resume=false",
 		"--start-file=mysql-bin.000010",
 		"--start-pos=987",
@@ -30,6 +34,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	}
 	if opts.ApplyDDL != "ignore" {
 		t.Fatalf("expected apply-ddl ignore, got %q", opts.ApplyDDL)
+	}
+	if opts.ConflictPolicy != "source-wins" {
+		t.Fatalf("expected conflict-policy source-wins, got %q", opts.ConflictPolicy)
 	}
 	if opts.Resume {
 		t.Fatal("expected resume=false")
@@ -53,5 +60,12 @@ func TestParseReplicateOptionsInvalidStartPos(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--start-pos=3"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid start-pos")
+	}
+}
+
+func TestParseReplicateOptionsInvalidConflictPolicy(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--conflict-policy=merge"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid conflict-policy")
 	}
 }

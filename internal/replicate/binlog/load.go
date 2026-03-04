@@ -194,6 +194,11 @@ func convertRowsEvent(kind streamEventKind, event *replication.BinlogEvent, file
 }
 
 func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent, opts Options) ([]applyBatch, error) {
+	conflictPolicy := normalizeConflictPolicy(opts.ConflictPolicy)
+	if err := validateConflictPolicy(conflictPolicy); err != nil {
+		return nil, err
+	}
+
 	cache := map[string]tableMetadata{}
 	pending := make([]applyEvent, 0, 32)
 	pendingFile := ""
@@ -227,7 +232,8 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 				continue
 			}
 
-			if !isDDLQuery(event.Query) {
+			ddlClass, isDDL := classifyDDL(event.Query)
+			if !isDDL {
 				return nil, fmt.Errorf("unsupported query event %q at %s:%d under ROW replication", event.Query, event.File, event.Pos)
 			}
 			switch opts.ApplyDDL {
@@ -236,11 +242,24 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 			case "warn":
 				return nil, fmt.Errorf("ddl encountered at %s:%d while --apply-ddl=warn: %s", event.File, event.Pos, event.Query)
 			case "apply":
+				if ddlClass != ddlClassSafe {
+					return nil, fmt.Errorf(
+						"risky ddl blocked at %s:%d under --apply-ddl=apply (%s): %s; remediation: rerun with --apply-ddl=ignore and execute schema changes via migrate --schema-only after review",
+						event.File,
+						event.Pos,
+						ddlClass,
+						event.Query,
+					)
+				}
 				batches = append(batches, applyBatch{
 					EndFile: event.File,
 					EndPos:  event.Pos,
 					Events: []applyEvent{
-						{Query: event.Query},
+						{
+							Query:     event.Query,
+							Operation: "ddl",
+							TableName: event.Schema,
+						},
 					},
 				})
 			default:
@@ -270,7 +289,7 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 				metadata = loaded
 			}
 
-			sqlEvents, err := sqlEventsForRows(event, metadata)
+			sqlEvents, err := sqlEventsForRows(event, metadata, conflictPolicy)
 			if err != nil {
 				return nil, err
 			}
@@ -286,16 +305,23 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 	return batches, nil
 }
 
-func sqlEventsForRows(event streamEvent, metadata tableMetadata) ([]applyEvent, error) {
+func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy string) ([]applyEvent, error) {
+	targetName := event.Schema + "." + event.Table
+
 	switch event.Kind {
 	case streamEventWriteRows:
 		out := make([]applyEvent, 0, len(event.Rows))
 		for _, row := range event.Rows {
-			query, args, err := buildUpsertStatement(event.Schema, event.Table, metadata, row)
+			query, args, err := buildInsertStatement(event.Schema, event.Table, metadata, row, conflictPolicy)
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, applyEvent{Query: query, Args: args})
+			out = append(out, applyEvent{
+				Query:     query,
+				Args:      args,
+				Operation: "insert",
+				TableName: targetName,
+			})
 		}
 		return out, nil
 	case streamEventDeleteRows:
@@ -305,7 +331,13 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata) ([]applyEvent, 
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, applyEvent{Query: query, Args: args})
+			out = append(out, applyEvent{
+				Query:               query,
+				Args:                args,
+				Operation:           "delete",
+				TableName:           targetName,
+				RequireRowsAffected: conflictPolicy == "fail",
+			})
 		}
 		return out, nil
 	case streamEventUpdateRows:
@@ -320,7 +352,13 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata) ([]applyEvent, 
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, applyEvent{Query: query, Args: args})
+			out = append(out, applyEvent{
+				Query:               query,
+				Args:                args,
+				Operation:           "update",
+				TableName:           targetName,
+				RequireRowsAffected: conflictPolicy == "fail",
+			})
 		}
 		return out, nil
 	default:
@@ -328,26 +366,51 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata) ([]applyEvent, 
 	}
 }
 
-func buildUpsertStatement(schema string, table string, metadata tableMetadata, row []any) (string, []any, error) {
+func buildInsertStatement(schema string, table string, metadata tableMetadata, row []any, conflictPolicy string) (string, []any, error) {
 	if len(row) != len(metadata.Columns) {
 		return "", nil, fmt.Errorf("row column count mismatch for %s.%s: got=%d expected=%d (require binlog_row_image=FULL)", schema, table, len(row), len(metadata.Columns))
 	}
 	columnList := make([]string, 0, len(metadata.Columns))
 	placeholders := make([]string, 0, len(metadata.Columns))
-	updates := make([]string, 0, len(metadata.Columns))
 	for _, column := range metadata.Columns {
 		quoted := quoteIdentifier(column)
 		columnList = append(columnList, quoted)
 		placeholders = append(placeholders, "?")
-		updates = append(updates, fmt.Sprintf("%s=VALUES(%s)", quoted, quoted))
 	}
-	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
-		qualifiedTable(schema, table),
-		strings.Join(columnList, ","),
-		strings.Join(placeholders, ","),
-		strings.Join(updates, ","),
-	)
+
+	query := ""
+	switch conflictPolicy {
+	case "fail":
+		query = fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s)",
+			qualifiedTable(schema, table),
+			strings.Join(columnList, ","),
+			strings.Join(placeholders, ","),
+		)
+	case "dest-wins":
+		query = fmt.Sprintf(
+			"INSERT IGNORE INTO %s (%s) VALUES (%s)",
+			qualifiedTable(schema, table),
+			strings.Join(columnList, ","),
+			strings.Join(placeholders, ","),
+		)
+	case "source-wins":
+		updates := make([]string, 0, len(metadata.Columns))
+		for _, column := range metadata.Columns {
+			quoted := quoteIdentifier(column)
+			updates = append(updates, fmt.Sprintf("%s=VALUES(%s)", quoted, quoted))
+		}
+		query = fmt.Sprintf(
+			"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
+			qualifiedTable(schema, table),
+			strings.Join(columnList, ","),
+			strings.Join(placeholders, ","),
+			strings.Join(updates, ","),
+		)
+	default:
+		return "", nil, fmt.Errorf("unsupported conflict policy %q", conflictPolicy)
+	}
+
 	args := make([]any, len(row))
 	copy(args, row)
 	return query, args, nil
@@ -503,20 +566,52 @@ func qualifiedTable(schema string, table string) string {
 	return quoteIdentifier(schema) + "." + quoteIdentifier(table)
 }
 
-func isDDLQuery(query string) bool {
+type ddlClassification string
+
+const (
+	ddlClassSafe  ddlClassification = "safe"
+	ddlClassRisky ddlClassification = "risky"
+)
+
+func classifyDDL(query string) (ddlClassification, bool) {
 	trimmed := strings.TrimSpace(query)
 	if trimmed == "" {
-		return false
+		return "", false
 	}
 	parts := strings.Fields(trimmed)
 	if len(parts) == 0 {
-		return false
+		return "", false
 	}
-	switch strings.ToUpper(parts[0]) {
+	first := strings.ToUpper(parts[0])
+	switch first {
 	case "CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME":
-		return true
+		// continue
 	default:
-		return false
+		return "", false
+	}
+
+	normalized := " " + strings.ToUpper(trimmed) + " "
+	switch first {
+	case "DROP", "TRUNCATE", "RENAME":
+		return ddlClassRisky, true
+	case "CREATE":
+		if strings.Contains(normalized, " OR REPLACE ") {
+			return ddlClassRisky, true
+		}
+		return ddlClassSafe, true
+	case "ALTER":
+		if strings.Contains(normalized, " DROP ") ||
+			strings.Contains(normalized, " MODIFY ") ||
+			strings.Contains(normalized, " CHANGE ") ||
+			strings.Contains(normalized, " RENAME ") {
+			return ddlClassRisky, true
+		}
+		if strings.Contains(normalized, " ADD ") {
+			return ddlClassSafe, true
+		}
+		return ddlClassRisky, true
+	default:
+		return ddlClassRisky, true
 	}
 }
 
