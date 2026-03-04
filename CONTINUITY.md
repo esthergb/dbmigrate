@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Fase 3 (schema baseline) implementada en rama `codex/feat/schema-baseline-phase3`; pendiente publicar PR.
+  - PR #5 (Fase 3) abierto contra `main`; CI en ejecución y review requerida por política.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -99,10 +99,12 @@ Last updated: 2026-03-04
   - Verificación local ejecutada con toolchain temporal:
     - `gofmt` en archivos modificados
     - `go test ./... -count=1` (PASS)
+  - Commit/push Fase 3: `346c2c7` en `codex/feat/schema-baseline-phase3`.
+  - PR #5 abierto: `codex/feat/schema-baseline-phase3` -> `main`.
 - Now:
-  - Publicar Fase 3 (commit + push + PR).
+  - Esperar resultado final de CI y review de PR #5.
 - Next:
-  - Resolver feedback/review de PR de Fase 3.
+  - Resolver feedback/review de PR #5.
   - Iniciar siguiente fase funcional (baseline data migrator con checkpoint/resume).
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
