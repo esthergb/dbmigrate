@@ -158,6 +158,22 @@ func TestRunVerifyDryRunSchema(t *testing.T) {
 	}
 }
 
+func TestRunVerifyDryRunDataCount(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--verify-level", "data",
+		"--data-mode", "count",
+		"--dry-run",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunVerifyInvalidLevel(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
@@ -165,6 +181,35 @@ func TestRunVerifyInvalidLevel(t *testing.T) {
 		"--source", "mysql://src",
 		"--dest", "mysql://dst",
 		"--verify-level", "invalid",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunVerifyInvalidDataMode(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--data-mode", "approx",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunVerifyDataModeHashNotImplemented(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--verify-level", "data",
+		"--data-mode", "hash",
 	}
 	code := Run(context.Background(), args, &out, &out)
 	if code != 3 {

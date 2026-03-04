@@ -22,6 +22,18 @@ Checkpoint and resume:
 - Use `--resume` to continue from checkpoint state after interruption.
 - Current resume strategy restarts incomplete tables safely (truncate/delete fallback) to avoid duplication.
 
+## Verification execution
+
+- Schema verification (tables/views):
+  - `dbmigrate verify --source "<dsn>" --dest "<dsn>" --verify-level schema`
+- Data verification (current baseline mode):
+  - `dbmigrate verify --source "<dsn>" --dest "<dsn>" --verify-level data --data-mode count`
+
+Verification behavior:
+- Any diff returns non-zero exit code.
+- `--json` emits structured diff details for automation pipelines.
+- Data modes `hash`, `sample`, and `full-hash` are reserved for follow-up phases.
+
 ## Safety defaults
 
 - Fail fast on known incompatible features.

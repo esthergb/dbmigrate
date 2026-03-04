@@ -12,6 +12,7 @@ Completed:
 - Phase 2 config and connection layer (`--config`, DSN validation/redaction)
 - Phase 3 baseline schema migration (tables/views)
 - Phase 4 baseline data migration with checkpoint/resume (`--chunk-size`, `--resume`)
+- Phase 5 schema verification (`verify --verify-level=schema`)
 
 In progress next:
 - Schema/data verification and incremental replication hardening
@@ -43,6 +44,16 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --data-only --chun
 
 # Full baseline (schema + data)
 dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
+```
+
+## Verification modes
+
+```bash
+# Schema diff verification (tables/views)
+dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level schema
+
+# Data verification by deterministic row-count comparison
+dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode count
 ```
 
 ## Configuration file support (phase 2)

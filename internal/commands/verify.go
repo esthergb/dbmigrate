@@ -11,21 +11,33 @@ import (
 
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/db"
+	dataVerify "github.com/esthergb/dbmigrate/internal/verify/data"
 	schemaVerify "github.com/esthergb/dbmigrate/internal/verify/schema"
 	"github.com/esthergb/dbmigrate/internal/version"
 )
 
 type verifyOptions struct {
 	VerifyLevel string
+	DataMode    string
 }
 
-type verifyResult struct {
+type verifySchemaResult struct {
 	Command     string               `json:"command"`
 	Status      string               `json:"status"`
 	VerifyLevel string               `json:"verify_level"`
 	Summary     schemaVerify.Summary `json:"summary"`
 	Timestamp   time.Time            `json:"timestamp"`
 	Version     string               `json:"version"`
+}
+
+type verifyDataResult struct {
+	Command     string             `json:"command"`
+	Status      string             `json:"status"`
+	VerifyLevel string             `json:"verify_level"`
+	DataMode    string             `json:"data_mode"`
+	Summary     dataVerify.Summary `json:"summary"`
+	Timestamp   time.Time          `json:"timestamp"`
+	Version     string             `json:"version"`
 }
 
 func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -38,10 +50,10 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 		return errors.New("verify requires both --source and --dest (or config file equivalents)")
 	}
 	if cfg.DryRun {
-		return writeResult(out, cfg, "verify", fmt.Sprintf("dry-run: verify plan ready (verify_level=%s)", opts.VerifyLevel))
+		return writeResult(out, cfg, "verify", fmt.Sprintf("dry-run: verify plan ready (verify_level=%s data_mode=%s)", opts.VerifyLevel, opts.DataMode))
 	}
-	if opts.VerifyLevel != "schema" {
-		return fmt.Errorf("verify-level %q is not implemented yet; supported: schema", opts.VerifyLevel)
+	if opts.VerifyLevel == "data" && opts.DataMode != "count" {
+		return fmt.Errorf("data-mode %q is not implemented yet; supported: count", opts.DataMode)
 	}
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
@@ -62,61 +74,99 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 
 	includeTables := hasObject(cfg.IncludeObjects, "tables")
 	includeViews := hasObject(cfg.IncludeObjects, "views")
-	if !includeTables && !includeViews {
-		return errors.New("schema verification requires tables/views in --include-objects")
-	}
 
-	summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
-		IncludeDatabases: cfg.Databases,
-		ExcludeDatabases: cfg.ExcludeDatabases,
-		IncludeTables:    includeTables,
-		IncludeViews:     includeViews,
-	})
-	if err != nil {
-		return fmt.Errorf("schema verification failed: %w", err)
-	}
+	switch opts.VerifyLevel {
+	case "schema":
+		if !includeTables && !includeViews {
+			return errors.New("schema verification requires tables/views in --include-objects")
+		}
 
-	if err := writeVerifyResult(out, cfg, opts.VerifyLevel, summary); err != nil {
-		return err
+		summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
+			IncludeDatabases: cfg.Databases,
+			ExcludeDatabases: cfg.ExcludeDatabases,
+			IncludeTables:    includeTables,
+			IncludeViews:     includeViews,
+		})
+		if err != nil {
+			return fmt.Errorf("schema verification failed: %w", err)
+		}
+
+		if err := writeSchemaVerifyResult(out, cfg, opts.VerifyLevel, summary); err != nil {
+			return err
+		}
+		if len(summary.Diffs) > 0 {
+			return fmt.Errorf(
+				"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
+				summary.MissingInDestination,
+				summary.MissingInSource,
+				summary.DefinitionMismatches,
+			)
+		}
+		return nil
+	case "data":
+		if !includeTables {
+			return errors.New("data verification requires tables in --include-objects")
+		}
+
+		summary, err := dataVerify.VerifyCount(ctx, sourceDB, destDB, dataVerify.Options{
+			IncludeDatabases: cfg.Databases,
+			ExcludeDatabases: cfg.ExcludeDatabases,
+		})
+		if err != nil {
+			return fmt.Errorf("data verification failed: %w", err)
+		}
+		if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+			return err
+		}
+		if len(summary.Diffs) > 0 {
+			return fmt.Errorf(
+				"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
+				summary.MissingInDestination,
+				summary.MissingInSource,
+				summary.CountMismatches,
+			)
+		}
+		return nil
+	default:
+		return fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel)
 	}
-	if len(summary.Diffs) > 0 {
-		return fmt.Errorf(
-			"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
-			summary.MissingInDestination,
-			summary.MissingInSource,
-			summary.DefinitionMismatches,
-		)
-	}
-	return nil
 }
 
 func parseVerifyOptions(args []string) (verifyOptions, error) {
 	opts := verifyOptions{
 		VerifyLevel: "schema",
+		DataMode:    "count",
 	}
 
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.VerifyLevel, "verify-level", "schema", "verification level (schema|data)")
+	fs.StringVar(&opts.DataMode, "data-mode", "count", "data verification mode (count|hash|sample|full-hash)")
 	if err := fs.Parse(args); err != nil {
 		return verifyOptions{}, err
 	}
 	switch opts.VerifyLevel {
 	case "schema", "data":
-		return opts, nil
+		// valid
 	default:
 		return verifyOptions{}, fmt.Errorf("invalid verify-level %q", opts.VerifyLevel)
 	}
+	switch opts.DataMode {
+	case "count", "hash", "sample", "full-hash":
+		return opts, nil
+	default:
+		return verifyOptions{}, fmt.Errorf("invalid data-mode %q", opts.DataMode)
+	}
 }
 
-func writeVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string, summary schemaVerify.Summary) error {
+func writeSchemaVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string, summary schemaVerify.Summary) error {
 	status := "ok"
 	if len(summary.Diffs) > 0 {
 		status = "diff"
 	}
 
 	if cfg.JSON {
-		payload := verifyResult{
+		payload := verifySchemaResult{
 			Command:     "verify",
 			Status:      status,
 			VerifyLevel: level,
@@ -145,6 +195,58 @@ func writeVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string, su
 
 	for _, diff := range summary.Diffs {
 		if _, err := fmt.Fprintf(out, "[verify] diff kind=%s database=%s object=%s:%s\n", diff.Kind, diff.Database, diff.ObjectType, diff.ObjectName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string, dataMode string, summary dataVerify.Summary) error {
+	status := "ok"
+	if len(summary.Diffs) > 0 {
+		status = "diff"
+	}
+
+	if cfg.JSON {
+		payload := verifyDataResult{
+			Command:     "verify",
+			Status:      status,
+			VerifyLevel: level,
+			DataMode:    dataMode,
+			Summary:     summary,
+			Timestamp:   time.Now().UTC(),
+			Version:     version.Version,
+		}
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if _, err := fmt.Fprintf(
+		out,
+		"[verify] level=%s data_mode=%s status=%s databases=%d compared=%d missing_in_destination=%d missing_in_source=%d count_mismatches=%d\n",
+		level,
+		dataMode,
+		status,
+		summary.Databases,
+		summary.TablesCompared,
+		summary.MissingInDestination,
+		summary.MissingInSource,
+		summary.CountMismatches,
+	); err != nil {
+		return err
+	}
+
+	for _, diff := range summary.Diffs {
+		if _, err := fmt.Fprintf(
+			out,
+			"[verify] diff kind=%s database=%s table=%s source_count=%d dest_count=%d\n",
+			diff.Kind,
+			diff.Database,
+			diff.Table,
+			diff.SourceCount,
+			diff.DestCount,
+		); err != nil {
 			return err
 		}
 	}

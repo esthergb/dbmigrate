@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/esthergb/dbmigrate/internal/config"
+	dataVerify "github.com/esthergb/dbmigrate/internal/verify/data"
 	schemaVerify "github.com/esthergb/dbmigrate/internal/verify/schema"
 )
 
@@ -17,26 +18,39 @@ func TestParseVerifyOptionsDefaults(t *testing.T) {
 	if opts.VerifyLevel != "schema" {
 		t.Fatalf("expected default verify-level schema, got %q", opts.VerifyLevel)
 	}
+	if opts.DataMode != "count" {
+		t.Fatalf("expected default data-mode count, got %q", opts.DataMode)
+	}
 }
 
 func TestParseVerifyOptionsExplicit(t *testing.T) {
-	opts, err := parseVerifyOptions([]string{"--verify-level=data"})
+	opts, err := parseVerifyOptions([]string{"--verify-level=data", "--data-mode=hash"})
 	if err != nil {
 		t.Fatalf("expected parse success: %v", err)
 	}
 	if opts.VerifyLevel != "data" {
 		t.Fatalf("expected verify-level data, got %q", opts.VerifyLevel)
 	}
+	if opts.DataMode != "hash" {
+		t.Fatalf("expected data-mode hash, got %q", opts.DataMode)
+	}
 }
 
-func TestParseVerifyOptionsInvalid(t *testing.T) {
+func TestParseVerifyOptionsInvalidLevel(t *testing.T) {
 	_, err := parseVerifyOptions([]string{"--verify-level=full"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid verify-level")
 	}
 }
 
-func TestWriteVerifyResultText(t *testing.T) {
+func TestParseVerifyOptionsInvalidDataMode(t *testing.T) {
+	_, err := parseVerifyOptions([]string{"--data-mode=approx"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid data-mode")
+	}
+}
+
+func TestWriteSchemaVerifyResultText(t *testing.T) {
 	var out bytes.Buffer
 	summary := schemaVerify.Summary{
 		Databases:            1,
@@ -54,8 +68,8 @@ func TestWriteVerifyResultText(t *testing.T) {
 		},
 	}
 
-	if err := writeVerifyResult(&out, config.RuntimeConfig{}, "schema", summary); err != nil {
-		t.Fatalf("write verify result text: %v", err)
+	if err := writeSchemaVerifyResult(&out, config.RuntimeConfig{}, "schema", summary); err != nil {
+		t.Fatalf("write schema verify result text: %v", err)
 	}
 	text := out.String()
 	if !strings.Contains(text, "status=diff") {
@@ -66,12 +80,12 @@ func TestWriteVerifyResultText(t *testing.T) {
 	}
 }
 
-func TestWriteVerifyResultJSON(t *testing.T) {
+func TestWriteSchemaVerifyResultJSON(t *testing.T) {
 	var out bytes.Buffer
 	cfg := config.RuntimeConfig{JSON: true}
 
-	if err := writeVerifyResult(&out, cfg, "schema", schemaVerify.Summary{}); err != nil {
-		t.Fatalf("write verify result json: %v", err)
+	if err := writeSchemaVerifyResult(&out, cfg, "schema", schemaVerify.Summary{}); err != nil {
+		t.Fatalf("write schema verify result json: %v", err)
 	}
 	text := out.String()
 	if !strings.Contains(text, "\"verify_level\": \"schema\"") {
@@ -79,5 +93,52 @@ func TestWriteVerifyResultJSON(t *testing.T) {
 	}
 	if !strings.Contains(text, "\"status\": \"ok\"") {
 		t.Fatalf("expected ok status in json output, got %q", text)
+	}
+}
+
+func TestWriteDataVerifyResultText(t *testing.T) {
+	var out bytes.Buffer
+	summary := dataVerify.Summary{
+		Databases:            1,
+		TablesCompared:       2,
+		MissingInDestination: 1,
+		MissingInSource:      1,
+		CountMismatches:      1,
+		Diffs: []dataVerify.Diff{
+			{
+				Kind:        "row_count_mismatch",
+				Database:    "app",
+				Table:       "users",
+				SourceCount: 10,
+				DestCount:   9,
+			},
+		},
+	}
+
+	if err := writeDataVerifyResult(&out, config.RuntimeConfig{}, "data", "count", summary); err != nil {
+		t.Fatalf("write data verify result text: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "data_mode=count") {
+		t.Fatalf("expected data mode in output, got %q", text)
+	}
+	if !strings.Contains(text, "table=users") {
+		t.Fatalf("expected table identifier in output, got %q", text)
+	}
+}
+
+func TestWriteDataVerifyResultJSON(t *testing.T) {
+	var out bytes.Buffer
+	cfg := config.RuntimeConfig{JSON: true}
+
+	if err := writeDataVerifyResult(&out, cfg, "data", "count", dataVerify.Summary{}); err != nil {
+		t.Fatalf("write data verify result json: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "\"verify_level\": \"data\"") {
+		t.Fatalf("expected verify_level in json output, got %q", text)
+	}
+	if !strings.Contains(text, "\"data_mode\": \"count\"") {
+		t.Fatalf("expected data_mode in json output, got %q", text)
 	}
 }
