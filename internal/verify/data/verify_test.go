@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -111,7 +112,7 @@ func TestNormalizeHashValue(t *testing.T) {
 }
 
 func TestVerifySampleDefaultsSampleSize(t *testing.T) {
-	summary, err := VerifySample(nil, nil, nil, Options{})
+	summary, err := VerifySample(context.TODO(), nil, nil, Options{})
 	if err == nil {
 		t.Fatalf("expected error for nil connections, got summary=%+v", summary)
 	}

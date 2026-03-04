@@ -19,7 +19,7 @@ Last updated: 2026-03-04
   - PR #7 merged by user on 2026-03-04; branch `codex/feat/schema-verify-phase5` deleted.
   - PR #8 merged by user on 2026-03-04; branch `codex/feat/data-verify-phase6` deleted.
   - PR #9 merged by user on 2026-03-04; branch `codex/feat/data-verify-hash-phase7` deleted.
-  - Current branch: `codex/feat/data-verify-sample-phase8`.
+  - Current branch: `codex/feat/data-verify-sample-phase8`; PR #10 open with CI rerun after lint fix.
 - Done:
   - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
   - Phase 5 implemented and merged:
@@ -41,6 +41,7 @@ Last updated: 2026-03-04
     - `verify --verify-level=data --data-mode=sample --sample-size` added.
     - deterministic sample hashing per table with explicit sample-size control.
     - command/CLI/docs updates for sample mode.
+    - CI fix applied: staticcheck SA1012 in `internal/verify/data/verify_test.go` (replaced nil context with `context.TODO()`).
   - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
   - Commit, push, and open PR for Phase 8 sample mode.
