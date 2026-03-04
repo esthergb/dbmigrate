@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Research Risk"
+  short_description: "Research migration risks and define safeguards"
+  default_prompt: "Collect high-quality migration incompatibility evidence and map each issue to concrete safeguards."

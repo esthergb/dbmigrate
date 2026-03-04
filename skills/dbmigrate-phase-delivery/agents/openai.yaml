@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Phase Delivery"
+  short_description: "Plan phased dbmigrate delivery and PR execution"
+  default_prompt: "Plan the next dbmigrate phase with branch scope, tests, and completion gates."

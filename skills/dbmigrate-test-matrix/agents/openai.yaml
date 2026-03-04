@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Test Matrix"
+  short_description: "Run smoke/full matrix validation on Apple Silicon"
+  default_prompt: "Run smoke checks first, then full local matrix, and summarize failing source/destination pairs."

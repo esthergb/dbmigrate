@@ -1,0 +1,53 @@
+Last updated: 2026-03-04
+
+- Goal (incl. success criteria):
+  - Implementar `dbmigrate` en Go según `Instructions.md` con ejecución faseada por hitos/PRs, incluyendo migración inicial, replicación incremental, verificación, documentación completa, CI y flujo Git/PR.
+  - Éxito: cumplir criterios de aceptación definidos en `Instructions.md`.
+- Constraints/Assumptions:
+  - Seguir instrucciones del repo y evitar dependencias pesadas.
+  - Usar dependencias ampliamente adoptadas y estables.
+  - Documentación en inglés.
+  - Reportes: JSON obligatorio ahora; HTML diferido a fase futura.
+  - Licencia MIT.
+  - Correr pruebas completas en Mac Mini Apple Silicon considerando arquitectura Docker.
+  - `git@github.com:esthergb/dbmigrate.git` es el remoto objetivo (UNCONFIRMED: acceso SSH efectivo desde este entorno).
+- Key decisions:
+  - Usar `CONTINUITY.md` por tratarse de trabajo multi-sesión.
+  - Entrega faseada por hitos/PRs.
+  - Orden de compatibilidad priorizado:
+    - Fase de motores homogéneos MariaDB->MariaDB (upgrade/downgrade).
+    - Luego MySQL->MySQL (upgrade/downgrade).
+    - Luego cruces MariaDB<->MySQL.
+  - Conflictos por defecto en replicación: `fail`.
+  - DDL: usar solo `--apply-ddl={ignore,apply,warn}`.
+  - Incompatibilidades al inicio: fail-fast; auto-fix se documenta como futura fase.
+  - Migración de usuarios/grants: soportar dos modos (incluir sistema o excluir sistema) y generar reporte detallado de plugins/auth incompatibles.
+  - Reportes de conflicto/diffs con dos opciones: valores reales o redactados.
+  - CI: pruebas mínimas en CI; matriz completa en local.
+  - Crear ramas y commits desde el inicio.
+  - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
+- State:
+  - Preparación previa de implementación completada (AGENTS + skills). En espera de revisión/aprobación del usuario para comenzar implementación.
+- Done:
+  - Leído `Instructions.md` completo.
+  - Verificado estado inicial del repo (solo `Instructions.md`).
+  - Recibidas 12 respuestas de alcance/orden/prioridades del usuario.
+  - Creado `AGENTS.md` con decisiones confirmadas y política de ejecución por fases.
+  - Creados skills:
+    - `skills/dbmigrate-phase-delivery`
+    - `skills/dbmigrate-research-risk`
+    - `skills/dbmigrate-test-matrix`
+  - Añadidos recursos de skills (references y scripts de matrix).
+  - Validación de skills con `quick_validate.py` (3/3 OK).
+  - Smoke básico de scripts (`--help`) OK.
+- Now:
+  - Presentar `AGENTS.md` y skills al usuario para revisión.
+- Next:
+  - Aplicar feedback del usuario sobre `AGENTS.md` + skills.
+  - Tras aprobación, iniciar fase 0: investigación y documentación de riesgos.
+- Open questions (UNCONFIRMED if needed):
+  - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
+  - Push real y apertura de PR: pedir confirmación explícita antes de ejecutar.
+- Working set (files/ids/commands):
+  - Files: `Instructions.md`, `CONTINUITY.md`, `AGENTS.md`, `skills/*`
+  - Commands: `rg --files`, `ls -la`, `cat Instructions.md`, `cat CONTINUITY.md`, `cat skill-creator/SKILL.md`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
