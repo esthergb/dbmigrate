@@ -30,6 +30,11 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..."
 dbmigrate report --source "mysql://..." --dest "mysql://..." --json
 ```
 
+## Configuration file support (phase 2)
+
+Use `--config <path>` to load YAML/JSON runtime options.
+When both are present, explicit CLI flags override config-file values.
+
 ## Build
 
 ```bash

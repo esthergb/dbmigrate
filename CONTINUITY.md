@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Fase 1 scaffold completada y subida. Apertura de PRs sigue bloqueada por `gh` sin autenticación.
+  - PR #3 fusionado en `main` y rama `codex/feat/foundation-phase1` eliminada en remoto. Fase 2 continúa en rama dedicada.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -53,15 +53,40 @@ Last updated: 2026-03-04
   - Commit Fase 1: `27b270d` (`feat: scaffold phase-1 cli foundation and ci baseline`).
   - Push Fase 1: `origin/codex/feat/foundation-phase1`.
   - Creada rama remota `main` apuntando a baseline `b30a93d`.
+  - PR abierto #1: `codex/feat/docs-phase0-research` -> `main`.
+  - PR abierto #2: `codex/feat/foundation-phase1` -> `codex/feat/docs-phase0-research`.
+  - Rama por defecto de GitHub actualizada a `main`.
+  - PR #1 fusionado por usuario y rama `codex/feat/docs-phase0-research` eliminada.
+  - Protección aplicada a `main`:
+    - required status check: `validate` (strict)
+    - required approving reviews: 1
+    - dismiss stale reviews: true
+    - force pushes: disabled
+    - deletions: disabled
+    - required conversation resolution: enabled
+  - Error de CI identificado en PR #2: `golangci-lint` falla por configuración inválida de `.golangci.yml` (versión no especificada).
+  - Correcciones aplicadas a PR #2 (`codex/feat/foundation-phase1`):
+    - `fix: declare golangci-lint v2 config schema` (`d9f218e`)
+    - `fix: remove deprecated gosimple linter from config` (`2487986`)
+    - `fix: satisfy errcheck for cli and version output` (`924abd6`)
+  - Estado actual de PR #2 checks: `validate` en PASS.
+  - PR #2 cerrado por solicitud del usuario.
+  - PR #3 abierto: `codex/feat/foundation-phase1` -> `main`.
+  - Rama de PR #3 actualizada con `main` usando `gh pr update-branch`.
+  - Checks relanzados y en PASS tras el update.
+  - PR #3 fusionado por usuario (`2026-03-04T19:04:09Z`).
+  - Rama remota `codex/feat/foundation-phase1` eliminada por usuario tras merge.
+  - Rama nueva de Fase 2 creada/push: `codex/feat/config-connection-phase2-v2` (base `codex/feat/foundation-phase1`).
+  - WIP de Fase 2 transferido localmente a `codex/feat/config-connection-phase2-v2`.
 - Now:
-  - Abrir PRs en cascada cuando `gh` esté autenticado.
+  - Completar Fase 2: archivo de config con precedencia de flags, normalización/redacción DSN y tests.
 - Next:
-  - Abrir PRs de `codex/chore/agent-skills-bootstrap` y `codex/feat/docs-phase0-research` cuando `gh` esté autenticado.
-  - Abrir PR de `codex/feat/foundation-phase1` con base `codex/feat/docs-phase0-research`.
+  - Consolidar cambios en `codex/feat/config-connection-phase2-v2`.
+  - Abrir PR de Fase 2 con base `main`.
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Requiere `gh auth login` para apertura automática de PRs.
+  - Ninguna bloqueante inmediata.
 - Working set (files/ids/commands):
   - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`, scaffold de fase 1
   - Commands: `git push`, `git checkout -b`, `gh pr create` (blocked: gh auth), `go test` (blocked: go missing), `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`

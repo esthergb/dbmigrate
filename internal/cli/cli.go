@@ -55,6 +55,16 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return exitUsage
 	}
 
+	explicit := config.CollectSetFlags(fs)
+	if cfg.ConfigFile != "" {
+		fileCfg, err := config.LoadFileConfig(cfg.ConfigFile)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "invalid config file: %v\n", err)
+			return exitUsage
+		}
+		config.MergeFileConfig(&cfg, fileCfg, explicit)
+	}
+
 	cfg.Finalize()
 	if err := cfg.ValidateBasic(); err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid configuration: %v\n", err)
