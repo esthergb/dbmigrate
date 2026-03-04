@@ -2,39 +2,36 @@ Last updated: 2026-03-04
 
 - Goal (incl. success criteria):
   - Deliver `dbmigrate` in phased PRs with stable core workflows: baseline migration, verification, replication, reporting, and operator-safe defaults from `Instructions.md`.
-  - Success: each phase merged with tests/CI green and operator docs kept in sync.
+  - Success: each phase is merged to `main` with passing CI/tests and updated operator docs.
 - Constraints/Assumptions:
   - License: MIT.
-  - Documentation language: English.
-  - JSON-first outputs; HTML optional future phase.
-  - Fail-fast default on incompatibilities; no silent auto-fix yet.
+  - Documentation in English.
+  - JSON-first outputs; HTML optional in a future phase.
+  - Fail-fast defaults for incompatible features; auto-fix deferred.
   - DDL policy surface restricted to `--apply-ddl={ignore,apply,warn}`.
-  - Keep `Instructions.md` untracked.
+  - `Instructions.md` must remain untracked.
 - Key decisions:
-  - Delivery is milestone/PR based with branch prefix `codex/`.
-  - Protected `main` requires checks + approval; avoid stacked PR complexity when possible.
-  - CI runs minimal checks; full matrix/local-heavy tests remain local.
+  - Milestone delivery through small PRs from `codex/*` branches.
+  - Protected `main` requires CI + approving review.
+  - Keep local full tests; CI remains minimum validation.
 - State:
-  - PR #6 open: `codex/feat/data-baseline-checkpoint-phase4` -> `main` (baseline data copy + checkpoint/resume).
-  - PR #7 open: `codex/feat/schema-verify-phase5` -> `main` (schema verification with actionable diffs).
-  - Both PRs currently blocked pending required review/check completion on protected `main`.
+  - PR #6 merged by user on 2026-03-04; branch `codex/feat/data-baseline-checkpoint-phase4` deleted.
+  - PR #7 (`codex/feat/schema-verify-phase5` -> `main`) had merge conflicts after PR #6 merge.
+  - Conflicts currently being resolved on this branch.
 - Done:
-  - Phases merged: 0 (research docs), 1 (foundation/CI), 2 (config+connections), 3 (schema baseline).
-  - Phase 4 implemented, pushed, and opened as PR #6.
-  - Phase 5 implementation completed and published:
-    - added `internal/verify/schema` package for schema diffing (tables/views).
-    - added `verify --verify-level` parsing with schema mode execution.
-    - added JSON/text verify result emission with diff details.
-    - added unit tests for normalization/diff logic and verify command option/output paths.
-  - Phase 5 commit/push completed: `fa88ed4` on `codex/feat/schema-verify-phase5`.
-  - Local verification on current branch: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
+  - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
+  - Phase 5 implemented on branch:
+    - `verify --verify-level=schema` with fail-on-diff behavior.
+    - schema diff engine (`internal/verify/schema`) with deterministic outputs.
+    - JSON/text verify reporting and unit tests.
 - Now:
-  - Wait for CI/review on PR #6 and PR #7.
+  - Resolve PR #7 merge conflicts (`CONTINUITY.md`, `internal/cli/cli_test.go`).
+  - Re-run test suite and push updated branch.
 - Next:
-  - Merge PR #6 first, then sync/rebase PR #7 with updated `main` if required by branch protection.
-  - Continue with next milestone after PR #7 merge.
+  - Confirm PR #7 checks are green and merge PR #7.
+  - Start next phase branch.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: exact downgrade version policy matrix per engine family (upgrade/downgrade required, precise range not locked).
+  - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/schema/*`, `internal/cli/cli_test.go`, `Instructions.md` (untracked)
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`
+  - Files: `CONTINUITY.md`, `internal/cli/cli_test.go`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/schema/*`, `Instructions.md` (untracked)
+  - Commands: `git merge origin/main`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`
