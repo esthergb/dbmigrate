@@ -49,6 +49,7 @@ Verification behavior:
 
 Replication checkpoint behavior:
 - Checkpoint file path: `--state-dir/replication-checkpoint.json`.
+- Conflict report path on failure: `--state-dir/replication-conflict-report.json`.
 - Supported DDL policy values are restricted to `--apply-ddl={ignore,apply,warn}`.
 - Supported conflict policies are `--conflict-policy={fail,source-wins,dest-wins}`.
 - Run summary reports `start`, `source_end`, `applied_end`, and `applied_events`.

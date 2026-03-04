@@ -80,6 +80,7 @@ var (
 	beginDestinationTxFn   = beginDestinationTx
 	applyWindowFn          = applyWindowTransactional
 	timeNowFn              = time.Now
+	saveConflictReportFn   = state.SaveReplicationConflictReport
 )
 
 // Run updates replication checkpoint based on current source binlog position.
@@ -139,6 +140,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		sourceEndPos = startPos
 	}
 
+	applyFailureReportPath := filepath.Join(stateDir, "replication-conflict-report.json")
 	applied, err := applyWindowFn(ctx, source, dest, applyWindow{
 		StartFile: startFile,
 		StartPos:  startPos,
@@ -146,7 +148,11 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		EndPos:    sourceEndPos,
 	}, opts)
 	if err != nil {
-		return Summary{}, err
+		report := buildConflictReport(opts, startFile, startPos, sourceEndFile, sourceEndPos, err)
+		if saveErr := saveConflictReportFn(applyFailureReportPath, report); saveErr != nil {
+			return Summary{}, fmt.Errorf("replication apply failed: %v (additionally failed to write conflict report: %v)", err, saveErr)
+		}
+		return Summary{}, fmt.Errorf("replication apply failed: %v (conflict report: %s)", err, applyFailureReportPath)
 	}
 
 	if applied.File == "" {
@@ -410,7 +416,23 @@ func normalizeBinlogFormat(value any) string {
 func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB, window applyWindow, opts Options) (applyResult, error) {
 	batches, err := loadApplyBatchesFn(ctx, source, window, opts)
 	if err != nil {
-		return applyResult{}, fmt.Errorf("load apply batches: %w", err)
+		var failure *applyFailure
+		if errors.As(err, &failure) && failure != nil {
+			failure.AppliedFile = window.StartFile
+			failure.AppliedPos = window.StartPos
+			return applyResult{}, failure
+		}
+		return applyResult{}, &applyFailure{
+			FailureType: "load_apply_batches",
+			File:        window.EndFile,
+			Pos:         window.EndPos,
+			Operation:   "load_batches",
+			Message:     "failed to load apply batches from source binlog window",
+			Cause:       err,
+			Remediation: "verify source binlog permissions and connectivity, then rerun replicate",
+			AppliedFile: window.StartFile,
+			AppliedPos:  window.StartPos,
+		}
 	}
 
 	lastFile := window.StartFile
@@ -422,45 +444,113 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 			continue
 		}
 		if batch.EndFile == "" {
-			return applyResult{}, errors.New("apply batch missing end file")
+			return applyResult{}, &applyFailure{
+				FailureType: "invalid_batch",
+				Operation:   "apply_batch",
+				Message:     "apply batch missing end file",
+				Remediation: "inspect source binlog events and rerun replicate",
+				AppliedFile: lastFile,
+				AppliedPos:  lastPos,
+			}
 		}
 		if batch.EndPos == 0 {
-			return applyResult{}, errors.New("apply batch missing end position")
+			return applyResult{}, &applyFailure{
+				FailureType: "invalid_batch",
+				File:        batch.EndFile,
+				Operation:   "apply_batch",
+				Message:     "apply batch missing end position",
+				Remediation: "inspect source binlog events and rerun replicate",
+				AppliedFile: lastFile,
+				AppliedPos:  lastPos,
+			}
 		}
 
 		tx, err := beginDestinationTxFn(ctx, dest)
 		if err != nil {
-			return applyResult{}, fmt.Errorf("begin destination transaction: %w", err)
+			return applyResult{}, &applyFailure{
+				FailureType: "destination_transaction_begin",
+				File:        batch.EndFile,
+				Pos:         batch.EndPos,
+				Operation:   "begin_tx",
+				Message:     "begin destination transaction",
+				Cause:       err,
+				Remediation: "verify destination connectivity and transaction permissions, then rerun replicate",
+				AppliedFile: lastFile,
+				AppliedPos:  lastPos,
+			}
 		}
 
 		for _, event := range batch.Events {
 			if strings.TrimSpace(event.Query) == "" {
 				_ = tx.Rollback()
-				return applyResult{}, errors.New("apply event query is empty")
+				return applyResult{}, &applyFailure{
+					FailureType: "invalid_apply_event",
+					File:        batch.EndFile,
+					Pos:         batch.EndPos,
+					Operation:   event.Operation,
+					TableName:   event.TableName,
+					Message:     "apply event query is empty",
+					Remediation: "inspect generated replication apply statements and rerun replicate",
+					AppliedFile: lastFile,
+					AppliedPos:  lastPos,
+				}
 			}
 			result, err := tx.ExecContext(ctx, event.Query, event.Args...)
 			if err != nil {
 				_ = tx.Rollback()
-				return applyResult{}, fmt.Errorf("apply event at %s:%d: %w", batch.EndFile, batch.EndPos, err)
+				return applyResult{}, &applyFailure{
+					FailureType: "apply_sql_error",
+					File:        batch.EndFile,
+					Pos:         batch.EndPos,
+					Operation:   event.Operation,
+					TableName:   event.TableName,
+					Query:       event.Query,
+					Message:     fmt.Sprintf("apply event at %s:%d failed", batch.EndFile, batch.EndPos),
+					Cause:       err,
+					Remediation: "review table schema and conflicting destination rows, then rerun replicate from checkpoint",
+					AppliedFile: lastFile,
+					AppliedPos:  lastPos,
+				}
 			}
 			if event.RequireRowsAffected && result != nil {
 				rowsAffected, rowsErr := result.RowsAffected()
 				if rowsErr == nil && rowsAffected == 0 {
 					_ = tx.Rollback()
-					return applyResult{}, fmt.Errorf(
-						"conflict-policy=fail detected non-applied %s on %s at %s:%d; review drift and rerun with --conflict-policy=source-wins or --conflict-policy=dest-wins if acceptable",
-						event.Operation,
-						event.TableName,
-						batch.EndFile,
-						batch.EndPos,
-					)
+					return applyResult{}, &applyFailure{
+						FailureType: "conflict_zero_rows",
+						File:        batch.EndFile,
+						Pos:         batch.EndPos,
+						Operation:   event.Operation,
+						TableName:   event.TableName,
+						Query:       event.Query,
+						Message: fmt.Sprintf(
+							"conflict-policy=fail detected non-applied %s on %s at %s:%d",
+							event.Operation,
+							event.TableName,
+							batch.EndFile,
+							batch.EndPos,
+						),
+						Remediation: "review drift and rerun with --conflict-policy=source-wins or --conflict-policy=dest-wins if acceptable",
+						AppliedFile: lastFile,
+						AppliedPos:  lastPos,
+					}
 				}
 			}
 		}
 
 		if err := tx.Commit(); err != nil {
 			_ = tx.Rollback()
-			return applyResult{}, fmt.Errorf("commit destination transaction at %s:%d: %w", batch.EndFile, batch.EndPos, err)
+			return applyResult{}, &applyFailure{
+				FailureType: "destination_transaction_commit",
+				File:        batch.EndFile,
+				Pos:         batch.EndPos,
+				Operation:   "commit_tx",
+				Message:     fmt.Sprintf("commit destination transaction at %s:%d", batch.EndFile, batch.EndPos),
+				Cause:       err,
+				Remediation: "verify destination transaction durability settings and rerun replicate",
+				AppliedFile: lastFile,
+				AppliedPos:  lastPos,
+			}
 		}
 
 		lastFile = batch.EndFile
@@ -477,4 +567,45 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 
 func beginDestinationTx(ctx context.Context, db *sql.DB) (txRunner, error) {
 	return db.BeginTx(ctx, nil)
+}
+
+func buildConflictReport(opts Options, startFile string, startPos uint32, sourceEndFile string, sourceEndPos uint32, err error) state.ReplicationConflictReport {
+	report := state.NewReplicationConflictReport()
+	report.GeneratedAt = timeNowFn().UTC()
+	report.ApplyDDL = opts.ApplyDDL
+	report.ConflictPolicy = normalizeConflictPolicy(opts.ConflictPolicy)
+	report.StartFile = startFile
+	report.StartPos = startPos
+	report.SourceEndFile = sourceEndFile
+	report.SourceEndPos = sourceEndPos
+	report.AppliedEndFile = startFile
+	report.AppliedEndPos = startPos
+	report.FailureType = "replication_error"
+	report.Message = err.Error()
+
+	var failure *applyFailure
+	if errors.As(err, &failure) && failure != nil {
+		if failure.FailureType != "" {
+			report.FailureType = failure.FailureType
+		}
+		report.Message = failure.Error()
+		report.Operation = failure.Operation
+		report.TableName = failure.TableName
+		report.Query = failure.Query
+		report.Remediation = failure.Remediation
+		if failure.File != "" {
+			report.SourceEndFile = failure.File
+		}
+		if failure.Pos > 0 {
+			report.SourceEndPos = failure.Pos
+		}
+		if failure.AppliedFile != "" {
+			report.AppliedEndFile = failure.AppliedFile
+		}
+		if failure.AppliedPos > 0 {
+			report.AppliedEndPos = failure.AppliedPos
+		}
+	}
+
+	return report
 }

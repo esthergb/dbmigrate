@@ -68,6 +68,7 @@ Replication checkpoint safety behavior:
 - Binlog event loading/decoding now maps row events into destination SQL batches with fail-fast behavior on unsupported patterns.
 - Conflict policy is explicit via `--conflict-policy={fail,source-wins,dest-wins}` (default: `fail`).
 - DDL safety in `--apply-ddl=apply` mode allows only low-risk DDL; risky DDL fails with remediation guidance.
+- On replication failure, a detailed JSON report is written to `--state-dir/replication-conflict-report.json`.
 
 ## Verification modes
 

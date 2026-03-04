@@ -234,22 +234,48 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 
 			ddlClass, isDDL := classifyDDL(event.Query)
 			if !isDDL {
-				return nil, fmt.Errorf("unsupported query event %q at %s:%d under ROW replication", event.Query, event.File, event.Pos)
+				return nil, &applyFailure{
+					FailureType: "unsupported_query_event",
+					File:        event.File,
+					Pos:         event.Pos,
+					Operation:   "query",
+					Query:       event.Query,
+					Message:     fmt.Sprintf("unsupported query event %q at %s:%d under ROW replication", event.Query, event.File, event.Pos),
+					Remediation: "run migrate --schema-only to align schema changes, then rerun replicate",
+				}
 			}
 			switch opts.ApplyDDL {
 			case "ignore":
 				continue
 			case "warn":
-				return nil, fmt.Errorf("ddl encountered at %s:%d while --apply-ddl=warn: %s", event.File, event.Pos, event.Query)
+				return nil, &applyFailure{
+					FailureType: "ddl_blocked",
+					File:        event.File,
+					Pos:         event.Pos,
+					Operation:   "ddl",
+					TableName:   event.Schema,
+					Query:       event.Query,
+					Message:     fmt.Sprintf("ddl encountered at %s:%d while --apply-ddl=warn: %s", event.File, event.Pos, event.Query),
+					Remediation: "rerun with --apply-ddl=ignore and apply vetted DDL separately with migrate --schema-only",
+				}
 			case "apply":
 				if ddlClass != ddlClassSafe {
-					return nil, fmt.Errorf(
-						"risky ddl blocked at %s:%d under --apply-ddl=apply (%s): %s; remediation: rerun with --apply-ddl=ignore and execute schema changes via migrate --schema-only after review",
-						event.File,
-						event.Pos,
-						ddlClass,
-						event.Query,
-					)
+					return nil, &applyFailure{
+						FailureType: "ddl_risky_blocked",
+						File:        event.File,
+						Pos:         event.Pos,
+						Operation:   "ddl",
+						TableName:   event.Schema,
+						Query:       event.Query,
+						Message: fmt.Sprintf(
+							"risky ddl blocked at %s:%d under --apply-ddl=apply (%s): %s",
+							event.File,
+							event.Pos,
+							ddlClass,
+							event.Query,
+						),
+						Remediation: "rerun with --apply-ddl=ignore and execute schema changes via migrate --schema-only after review",
+					}
 				}
 				batches = append(batches, applyBatch{
 					EndFile: event.File,
@@ -300,7 +326,14 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 	}
 
 	if len(pending) > 0 {
-		return nil, fmt.Errorf("incomplete transaction at %s:%d; commit not observed before window end", pendingFile, pendingPos)
+		return nil, &applyFailure{
+			FailureType: "incomplete_transaction",
+			File:        pendingFile,
+			Pos:         pendingPos,
+			Operation:   "transaction",
+			Message:     fmt.Sprintf("incomplete transaction at %s:%d; commit not observed before window end", pendingFile, pendingPos),
+			Remediation: "increase replication window or rerun replicate from previous checkpoint so full transaction can be consumed",
+		}
 	}
 	return batches, nil
 }
