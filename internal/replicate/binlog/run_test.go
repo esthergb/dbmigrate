@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	mysqlDriver "github.com/go-sql-driver/mysql"
+
 	"github.com/esthergb/dbmigrate/internal/state"
 )
 
@@ -33,6 +35,53 @@ func TestValidateConflictPolicy(t *testing.T) {
 	}
 	if err := validateConflictPolicy("merge"); err == nil {
 		t.Fatal("expected invalid conflict-policy value to fail")
+	}
+}
+
+func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
+	failure := classifyApplySQLError(
+		&mysqlDriver.MySQLError{Number: 1062, Message: "Duplicate entry"},
+		applyEvent{
+			Operation: "insert",
+			TableName: "app.items",
+			Query:     "INSERT INTO `app`.`items` (`id`) VALUES (?)",
+		},
+		"mysql-bin.000001",
+		220,
+		"mysql-bin.000001",
+		200,
+	)
+
+	if failure.FailureType != "conflict_duplicate_key" {
+		t.Fatalf("unexpected failure type: %s", failure.FailureType)
+	}
+	if failure.SQLErrorCode != 1062 {
+		t.Fatalf("unexpected sql error code: %d", failure.SQLErrorCode)
+	}
+	if !strings.Contains(failure.Remediation, "--conflict-policy=source-wins") {
+		t.Fatalf("unexpected remediation: %s", failure.Remediation)
+	}
+}
+
+func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
+	failure := classifyApplySQLError(
+		&mysqlDriver.MySQLError{Number: 1054, Message: "Unknown column"},
+		applyEvent{
+			Operation: "update",
+			TableName: "app.items",
+			Query:     "UPDATE `app`.`items` SET `x`=? WHERE `id` <=> ?",
+		},
+		"mysql-bin.000001",
+		320,
+		"mysql-bin.000001",
+		300,
+	)
+
+	if failure.FailureType != "schema_drift" {
+		t.Fatalf("unexpected failure type: %s", failure.FailureType)
+	}
+	if !strings.Contains(failure.Remediation, "migrate --schema-only") {
+		t.Fatalf("unexpected remediation: %s", failure.Remediation)
 	}
 }
 
@@ -280,11 +329,65 @@ func TestRunWritesConflictReportOnApplyFailure(t *testing.T) {
 	if report.Operation != "ddl" {
 		t.Fatalf("unexpected operation: %q", report.Operation)
 	}
+	if report.SQLErrorCode != 0 {
+		t.Fatalf("unexpected sql error code: %d", report.SQLErrorCode)
+	}
 	if report.AppliedEndPos != 420 {
 		t.Fatalf("unexpected applied end pos: %d", report.AppliedEndPos)
 	}
 	if report.SourceEndPos != 460 {
 		t.Fatalf("unexpected source end pos: %d", report.SourceEndPos)
+	}
+}
+
+func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	checkSourcePreflightFn = func(_ context.Context, _ *sql.DB) (preflightResult, error) {
+		return preflightResult{
+			LogBinEnabled:  true,
+			BinlogFormat:   "ROW",
+			BinlogRowImage: "FULL",
+		}, nil
+	}
+	queryBinlogPositionFn = func(_ context.Context, _ *sql.DB) (string, uint32, error) {
+		return "mysql-bin.000200", 600, nil
+	}
+	applyWindowFn = func(_ context.Context, _ *sql.DB, _ *sql.DB, _ applyWindow, _ Options) (applyResult, error) {
+		return applyResult{}, &applyFailure{
+			FailureType:  "schema_drift",
+			File:         "mysql-bin.000200",
+			Pos:          600,
+			SQLErrorCode: 1054,
+			Operation:    "update",
+			TableName:    "app.items",
+			Query:        "UPDATE `app`.`items` SET `missing`=? WHERE `id` <=> ?",
+			Message:      "apply event at mysql-bin.000200:600 failed",
+			Remediation:  "run migrate --schema-only",
+			AppliedFile:  "mysql-bin.000200",
+			AppliedPos:   560,
+		}
+	}
+
+	tmp := t.TempDir()
+	_, err := Run(context.Background(), &sql.DB{}, &sql.DB{}, tmp, Options{
+		ApplyDDL:       "warn",
+		ConflictPolicy: "fail",
+	})
+	if err == nil {
+		t.Fatal("expected run to fail")
+	}
+
+	report, err := state.LoadReplicationConflictReport(filepath.Join(tmp, "replication-conflict-report.json"))
+	if err != nil {
+		t.Fatalf("load conflict report: %v", err)
+	}
+	if report.SQLErrorCode != 1054 {
+		t.Fatalf("unexpected sql error code: %d", report.SQLErrorCode)
+	}
+	if report.FailureType != "schema_drift" {
+		t.Fatalf("unexpected failure type: %s", report.FailureType)
 	}
 }
 
