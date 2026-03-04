@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Fase 0 completada y subida a remoto en rama dedicada. Pendiente iniciar Fase 1 (scaffolding del repositorio y CI mínima).
+  - Usuario instaló `gh`. En progreso: apertura de PRs + scaffold inicial de Fase 1.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -49,13 +49,14 @@ Last updated: 2026-03-04
   - Commit Fase 0: `56c7e79` (`docs: add phase-0 migration risks and operator checklist`).
   - Push Fase 0: `origin/codex/feat/docs-phase0-research`.
 - Now:
-  - Esperar instrucciones del usuario para arrancar Fase 1.
+  - Abrir PRs de ramas ya subidas y arrancar Fase 1 en nueva rama de trabajo.
 - Next:
-  - Iniciar scaffold del proyecto Go (`cmd/`, `internal/`, `tests/`, CI mínima).
+  - Completar scaffold del proyecto Go (`cmd/`, `internal/`, `tests/`, CI mínima).
   - Crear `docs/development-plan.md` alineado a hitos/PRs.
+  - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Ninguna bloqueante para iniciar Fase 0.
+  - Ninguna bloqueante para iniciar Fase 1.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md`, `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`
-  - Commands: `git push`, `git checkout -b`, `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
+  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`
+  - Commands: `git push`, `git checkout -b`, `gh pr create`, `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
