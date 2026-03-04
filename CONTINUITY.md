@@ -20,6 +20,7 @@ Last updated: 2026-03-04
   - PR #23 is open: https://github.com/esthergb/dbmigrate/pull/23
   - Phase 21 changes are committed/pushed for detailed conflict payload (`old_row_sample` / `new_row_sample`).
   - Local full test suite passed before PR creation.
+  - PR #23 required CI checks (`validate` push/pull_request) are pending.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
