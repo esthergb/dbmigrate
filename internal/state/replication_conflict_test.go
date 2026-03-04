@@ -25,6 +25,7 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	report.Operation = "update"
 	report.TableName = "app.items"
 	report.Query = "UPDATE `app`.`items` SET `name`=? WHERE `id` <=> ?"
+	report.ValueSample = []string{"v1=42", "v2=legacy-name"}
 	report.Message = "conflict-policy=fail detected non-applied update"
 	report.Remediation = "rerun with source-wins after review"
 
@@ -47,6 +48,12 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	}
 	if loaded.SQLErrorCode != report.SQLErrorCode {
 		t.Fatalf("unexpected sql error code: got=%d want=%d", loaded.SQLErrorCode, report.SQLErrorCode)
+	}
+	if len(loaded.ValueSample) != len(report.ValueSample) {
+		t.Fatalf("unexpected value sample length: got=%d want=%d", len(loaded.ValueSample), len(report.ValueSample))
+	}
+	if loaded.ValueSample[0] != report.ValueSample[0] {
+		t.Fatalf("unexpected first value sample: got=%q want=%q", loaded.ValueSample[0], report.ValueSample[0])
 	}
 }
 

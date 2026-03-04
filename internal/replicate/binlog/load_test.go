@@ -43,6 +43,9 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	if !strings.Contains(batches[0].Events[0].Query, "INSERT INTO `app`.`items`") {
 		t.Fatalf("unexpected upsert query: %s", batches[0].Events[0].Query)
 	}
+	if len(batches[0].Events[0].KeyArgs) != 1 {
+		t.Fatalf("expected insert key args sample")
+	}
 	if batches[1].EndPos != 140 || len(batches[1].Events) != 1 {
 		t.Fatalf("unexpected second batch: %+v", batches[1])
 	}
@@ -168,15 +171,18 @@ func TestBuildInsertStatementConflictPolicies(t *testing.T) {
 		KeyOrdinals: []int{0},
 	}
 
-	failQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "fail")
+	failQuery, _, failKeyArgs, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "fail")
 	if err != nil {
 		t.Fatalf("buildInsertStatement fail: %v", err)
+	}
+	if len(failKeyArgs) != 1 {
+		t.Fatalf("expected fail key args length 1, got %d", len(failKeyArgs))
 	}
 	if strings.Contains(failQuery, "ON DUPLICATE KEY UPDATE") || strings.Contains(failQuery, "INSERT IGNORE") {
 		t.Fatalf("unexpected fail policy query: %s", failQuery)
 	}
 
-	sourceWinsQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "source-wins")
+	sourceWinsQuery, _, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "source-wins")
 	if err != nil {
 		t.Fatalf("buildInsertStatement source-wins: %v", err)
 	}
@@ -184,12 +190,28 @@ func TestBuildInsertStatementConflictPolicies(t *testing.T) {
 		t.Fatalf("unexpected source-wins query: %s", sourceWinsQuery)
 	}
 
-	destWinsQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "dest-wins")
+	destWinsQuery, _, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "dest-wins")
 	if err != nil {
 		t.Fatalf("buildInsertStatement dest-wins: %v", err)
 	}
 	if !strings.Contains(destWinsQuery, "INSERT IGNORE") {
 		t.Fatalf("unexpected dest-wins query: %s", destWinsQuery)
+	}
+}
+
+func TestExtractKeyArgsUsesPrimaryKeyWhenAvailable(t *testing.T) {
+	args, err := extractKeyArgs(tableMetadata{
+		Columns:     []string{"id", "name", "tenant"},
+		KeyOrdinals: []int{2, 0},
+	}, []any{int64(7), "alpha", "t1"})
+	if err != nil {
+		t.Fatalf("extractKeyArgs: %v", err)
+	}
+	if len(args) != 2 {
+		t.Fatalf("unexpected key args length: %d", len(args))
+	}
+	if args[0] != "t1" || args[1] != int64(7) {
+		t.Fatalf("unexpected key args values: %#v", args)
 	}
 }
 
