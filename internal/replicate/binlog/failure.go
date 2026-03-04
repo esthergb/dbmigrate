@@ -9,21 +9,22 @@ import (
 )
 
 type applyFailure struct {
-	FailureType  string
-	File         string
-	Pos          uint32
-	SQLErrorCode uint16
-	Operation    string
-	TableName    string
-	Query        string
-	ValueSample  []string
-	OldRowSample []string
-	NewRowSample []string
-	Remediation  string
-	Message      string
-	Cause        error
-	AppliedFile  string
-	AppliedPos   uint32
+	FailureType   string
+	File          string
+	Pos           uint32
+	SQLErrorCode  uint16
+	Operation     string
+	TableName     string
+	Query         string
+	ValueSample   []string
+	OldRowSample  []string
+	NewRowSample  []string
+	RowDiffSample []string
+	Remediation   string
+	Message       string
+	Cause         error
+	AppliedFile   string
+	AppliedPos    uint32
 }
 
 func (f *applyFailure) Error() string {
@@ -55,6 +56,11 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 		),
 		NewRowSample: buildValueSample(
 			event.RowColumns,
+			event.NewRowArgs,
+		),
+		RowDiffSample: buildRowDiffSample(
+			event.RowColumns,
+			event.OldRowArgs,
 			event.NewRowArgs,
 		),
 		Message:     fmt.Sprintf("apply event at %s:%d failed", file, pos),
@@ -119,6 +125,48 @@ func buildValueSample(columns []string, values []any) []string {
 	}
 	if len(values) > limit {
 		sample = append(sample, fmt.Sprintf("... +%d more", len(values)-limit))
+	}
+	return sample
+}
+
+func buildRowDiffSample(columns []string, oldValues []any, newValues []any) []string {
+	if len(oldValues) == 0 || len(newValues) == 0 {
+		return nil
+	}
+
+	limit := len(oldValues)
+	if len(newValues) < limit {
+		limit = len(newValues)
+	}
+	if limit == 0 {
+		return nil
+	}
+
+	const maxChanges = 6
+	sample := make([]string, 0, maxChanges+1)
+	diffCount := 0
+	for i := 0; i < limit; i++ {
+		oldText := sampleValue(oldValues[i])
+		newText := sampleValue(newValues[i])
+		if oldText == newText {
+			continue
+		}
+		diffCount++
+		if len(sample) >= maxChanges {
+			continue
+		}
+		label := fmt.Sprintf("v%d", i+1)
+		if i < len(columns) && strings.TrimSpace(columns[i]) != "" {
+			label = strings.TrimSpace(columns[i])
+		}
+		sample = append(sample, fmt.Sprintf("%s:%s->%s", label, oldText, newText))
+	}
+
+	if diffCount == 0 {
+		return nil
+	}
+	if diffCount > maxChanges {
+		sample = append(sample, fmt.Sprintf("... +%d more changes", diffCount-maxChanges))
 	}
 	return sample
 }

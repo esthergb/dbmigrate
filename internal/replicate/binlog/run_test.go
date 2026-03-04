@@ -73,6 +73,9 @@ func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
 	if len(failure.NewRowSample) != 1 || failure.NewRowSample[0] != "id=42" {
 		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
 	}
+	if len(failure.RowDiffSample) != 0 {
+		t.Fatalf("unexpected row diff sample for insert: %#v", failure.RowDiffSample)
+	}
 }
 
 func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
@@ -108,6 +111,9 @@ func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 	if len(failure.NewRowSample) != 2 || failure.NewRowSample[1] != "name=new" {
 		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
 	}
+	if len(failure.RowDiffSample) != 1 || failure.RowDiffSample[0] != "name:old->new" {
+		t.Fatalf("unexpected row diff sample: %#v", failure.RowDiffSample)
+	}
 }
 
 func TestBuildValueSampleTruncatesAndLimits(t *testing.T) {
@@ -131,6 +137,23 @@ func TestBuildValueSampleFallsBackToOrdinalLabels(t *testing.T) {
 	sample := buildValueSample(nil, []any{int64(9)})
 	if len(sample) != 1 || sample[0] != "v1=9" {
 		t.Fatalf("unexpected sample: %#v", sample)
+	}
+}
+
+func TestBuildRowDiffSampleTruncatesAndLimits(t *testing.T) {
+	diff := buildRowDiffSample(
+		[]string{"id", "c1", "c2", "c3", "c4", "c5", "c6", "c7"},
+		[]any{int64(1), "a", "b", "c", "d", "e", "f", "g"},
+		[]any{int64(1), "A", "B", "C", "D", "E", "F", "G"},
+	)
+	if len(diff) != 7 {
+		t.Fatalf("unexpected diff sample length: %d", len(diff))
+	}
+	if diff[0] != "c1:a->A" {
+		t.Fatalf("unexpected first diff sample: %q", diff[0])
+	}
+	if !strings.Contains(diff[len(diff)-1], "... +1 more changes") {
+		t.Fatalf("expected overflow marker, got: %s", diff[len(diff)-1])
 	}
 }
 
@@ -415,10 +438,13 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 			ValueSample:  []string{"id=42"},
 			OldRowSample: []string{"id=42", "name=legacy"},
 			NewRowSample: []string{"id=42", "name=current"},
-			Message:      "apply event at mysql-bin.000200:600 failed",
-			Remediation:  "run migrate --schema-only",
-			AppliedFile:  "mysql-bin.000200",
-			AppliedPos:   560,
+			RowDiffSample: []string{
+				"name:legacy->current",
+			},
+			Message:     "apply event at mysql-bin.000200:600 failed",
+			Remediation: "run migrate --schema-only",
+			AppliedFile: "mysql-bin.000200",
+			AppliedPos:  560,
 		}
 	}
 
@@ -449,6 +475,9 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 	}
 	if len(report.NewRowSample) != 2 || report.NewRowSample[1] != "name=current" {
 		t.Fatalf("unexpected new row sample: %#v", report.NewRowSample)
+	}
+	if len(report.RowDiffSample) != 1 || report.RowDiffSample[0] != "name:legacy->current" {
+		t.Fatalf("unexpected row diff sample: %#v", report.RowDiffSample)
 	}
 }
 
@@ -670,6 +699,9 @@ func TestApplyWindowTransactionalFailPolicyRequiresAffectedRows(t *testing.T) {
 	}
 	if len(failure.NewRowSample) != 2 || failure.NewRowSample[1] != "c=3" {
 		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
+	}
+	if len(failure.RowDiffSample) != 1 || failure.RowDiffSample[0] != "c:2->3" {
+		t.Fatalf("unexpected row diff sample: %#v", failure.RowDiffSample)
 	}
 	if tx.committed || !tx.rolledBack {
 		t.Fatalf("unexpected tx state: %+v", tx)
