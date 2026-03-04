@@ -60,6 +60,9 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data
 
 # Data verification by deterministic sampled rows hash
 dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode sample --sample-size 1000
+
+# Data verification by deterministic full-table hash mode
+dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode full-hash
 ```
 
 ## Configuration file support (phase 2)

@@ -117,3 +117,10 @@ func TestVerifySampleDefaultsSampleSize(t *testing.T) {
 		t.Fatalf("expected error for nil connections, got summary=%+v", summary)
 	}
 }
+
+func TestVerifyFullHashRequiresConnections(t *testing.T) {
+	summary, err := VerifyFullHash(context.TODO(), nil, nil, Options{})
+	if err == nil {
+		t.Fatalf("expected error for nil connections, got summary=%+v", summary)
+	}
+}

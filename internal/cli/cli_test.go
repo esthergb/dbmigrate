@@ -235,6 +235,22 @@ func TestRunVerifyDryRunDataSample(t *testing.T) {
 	}
 }
 
+func TestRunVerifyDryRunDataFullHash(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"verify",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--verify-level", "data",
+		"--data-mode", "full-hash",
+		"--dry-run",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunVerifyInvalidSampleSize(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{

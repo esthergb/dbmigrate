@@ -19,7 +19,8 @@ Last updated: 2026-03-04
   - PR #7 merged by user on 2026-03-04; branch `codex/feat/schema-verify-phase5` deleted.
   - PR #8 merged by user on 2026-03-04; branch `codex/feat/data-verify-phase6` deleted.
   - PR #9 merged by user on 2026-03-04; branch `codex/feat/data-verify-hash-phase7` deleted.
-  - Current branch: `codex/feat/data-verify-sample-phase8`; PR #10 open with CI rerun after lint fix.
+  - PR #10 merged by user on 2026-03-04; branch `codex/feat/data-verify-sample-phase8` deleted.
+  - Current branch: `codex/feat/data-verify-fullhash-phase9`.
 - Done:
   - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
   - Phase 5 implemented and merged:
@@ -42,12 +43,17 @@ Last updated: 2026-03-04
     - deterministic sample hashing per table with explicit sample-size control.
     - command/CLI/docs updates for sample mode.
     - CI fix applied: staticcheck SA1012 in `internal/verify/data/verify_test.go` (replaced nil context with `context.TODO()`).
+  - Phase 8 merged.
+  - Phase 9 implementation added on current branch:
+    - `verify --verify-level=data --data-mode=full-hash` implemented.
+    - `VerifyFullHash` path wired to full-table deterministic hash verification.
+    - CLI/tests/docs updated for full-hash mode.
   - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
-  - Commit, push, and open PR for Phase 8 sample mode.
+  - Commit, push, and open PR for Phase 9 full-hash mode.
 - Next:
-  - Merge PR for sample mode after CI/review.
-  - Continue with remaining data mode (`full-hash`) before replication hardening.
+  - Merge PR for full-hash mode.
+  - Continue with replication hardening milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family.
 - Working set (files/ids/commands):

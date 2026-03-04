@@ -32,11 +32,13 @@ Checkpoint and resume:
   - `dbmigrate verify --source "<dsn>" --dest "<dsn>" --verify-level data --data-mode hash`
 - Data verification (sample hash mode):
   - `dbmigrate verify --source "<dsn>" --dest "<dsn>" --verify-level data --data-mode sample --sample-size 1000`
+- Data verification (full hash mode):
+  - `dbmigrate verify --source "<dsn>" --dest "<dsn>" --verify-level data --data-mode full-hash`
 
 Verification behavior:
 - Any diff returns non-zero exit code.
 - `--json` emits structured diff details for automation pipelines.
-- Data mode `full-hash` is reserved for a follow-up phase.
+- `sample` mode uses `--sample-size` rows per table; `full-hash` hashes full table content.
 
 ## Safety defaults
 

@@ -135,6 +135,11 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 	return summary, nil
 }
 
+// VerifyFullHash compares full-table deterministic content hashes for all selected tables.
+func VerifyFullHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Summary, error) {
+	return VerifyHash(ctx, source, dest, opts)
+}
+
 // VerifySample compares deterministic per-table sample hashes between source and destination.
 func VerifySample(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Summary, error) {
 	if source == nil || dest == nil {
