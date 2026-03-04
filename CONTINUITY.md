@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-conflict-samples-phase19` from `main@bea0369` (PR #20 merged by user).
   - Phase 19 changes implemented locally; local tests passing.
+  - PR #21 opened: `feat: phase 19 table-level conflict value samples` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -68,9 +69,8 @@ Last updated: 2026-03-04
     - SQL error classification attaches sampled key values to categorized failures for faster triage.
     - state/report tests updated for `value_sample` persistence; load/run tests updated for key-arg extraction and sampling behavior.
 - Now:
-  - Commit, push, and open PR for Phase 19.
+  - Wait for PR #21 checks and merge.
 - Next:
-  - Merge Phase 19 PR.
   - Continue with richer per-table conflict payloads (column-name aware samples).
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
