@@ -17,8 +17,10 @@ Last updated: 2026-03-04
   - Allow partial-database scope via `--databases`.
 - State:
   - Branch: `codex/feat/strict-lts-matrix-phase23` from `main@de5396e` (PR #24 merged by user on 2026-03-04).
+  - PR #25 is open: https://github.com/esthergb/dbmigrate/pull/25
   - User selected supported downgrade profiles and requested selectable profile behavior.
-  - Phase 23 strict-lts matrix hardening is complete locally; full test suite passes.
+  - Phase 23 strict-lts matrix hardening is committed/pushed; full test suite passed locally.
+  - PR #25 required CI checks (`validate` push/pull_request) are pending.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -89,7 +91,7 @@ Last updated: 2026-03-04
     - config-file support added for `downgrade-profile` (YAML) / `downgrade_profile` (JSON).
     - docs updated in README/operators guide.
     - tests expanded across `compat`, `config`, and `cli` for profile selection and validation.
-  - Phase 23 implemented locally (pending commit/PR):
+  - Phase 23 implemented and pushed (PR #25 open):
     - strict-lts now uses explicit same-engine matrix entries in code instead of implicit line checks.
     - strict-lts failures now return matrix-specific findings:
       - `strict_lts_matrix_out_of_range`
@@ -99,7 +101,7 @@ Last updated: 2026-03-04
     - tests expanded for strict-lts out-of-range, cross-line mismatch, and same-line success.
     - README/operators guide now document the explicit strict-lts same-engine matrix.
 - Now:
-  - Commit/push and open PR for Phase 23.
+  - Wait for PR #25 CI/review and merge.
 - Next:
   - Merge Phase 23 PR.
   - Continue with report ergonomics (structured diff hints) after matrix hardening.
