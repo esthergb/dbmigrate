@@ -16,22 +16,28 @@ Last updated: 2026-03-04
   - Keep local full tests; CI remains minimum validation.
 - State:
   - PR #6 merged by user on 2026-03-04; branch `codex/feat/data-baseline-checkpoint-phase4` deleted.
-  - PR #7 (`codex/feat/schema-verify-phase5` -> `main`) had merge conflicts after PR #6 merge.
-  - Conflicts currently being resolved on this branch.
+  - PR #7 merged by user on 2026-03-04; branch `codex/feat/schema-verify-phase5` deleted.
+  - Current branch: `codex/feat/data-verify-phase6` with data verification baseline implementation ready for PR.
 - Done:
   - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
-  - Phase 5 implemented on branch:
+  - Phase 5 implemented and merged:
     - `verify --verify-level=schema` with fail-on-diff behavior.
     - schema diff engine (`internal/verify/schema`) with deterministic outputs.
     - JSON/text verify reporting and unit tests.
+  - Phase 6 implementation added on current branch:
+    - new package `internal/verify/data` with deterministic table row-count verification.
+    - `verify --verify-level=data --data-mode=count` wired into command flow.
+    - fail-fast behavior for unimplemented data modes (`hash`, `sample`, `full-hash`).
+    - JSON/text data diff reporting with non-zero exit on mismatches.
+    - unit tests for data verifier, command parsing/output, and CLI verify paths.
+  - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
-  - Resolve PR #7 merge conflicts (`CONTINUITY.md`, `internal/cli/cli_test.go`).
-  - Re-run test suite and push updated branch.
+  - Commit, push, and open PR for Phase 6 data verifier baseline.
 - Next:
-  - Confirm PR #7 checks are green and merge PR #7.
-  - Start next phase branch.
+  - Merge PR for data verifier baseline.
+  - Continue with next milestone (replication hardening).
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/cli/cli_test.go`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/schema/*`, `Instructions.md` (untracked)
-  - Commands: `git merge origin/main`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`
+  - Files: `CONTINUITY.md`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/data/*` (new), `internal/cli/cli_test.go`, `Instructions.md` (untracked)
+  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`
