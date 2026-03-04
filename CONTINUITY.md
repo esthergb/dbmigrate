@@ -17,7 +17,8 @@ Last updated: 2026-03-04
   - Allow partial-database scope via `--databases`.
 - State:
   - Branch: `codex/feat/replicate-column-samples-phase20` from `main@1112ba0` (PR #21 merged by user).
-  - Phase 20 code/test updates are implemented locally and full test suite passes.
+  - PR #22 is open: https://github.com/esthergb/dbmigrate/pull/22
+  - Phase 20 code/test updates are pushed; local full test suite passes.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -67,15 +68,15 @@ Last updated: 2026-03-04
     - row apply pipeline now tracks key args per event and propagates samples into failures/reports.
     - SQL error classification attaches sampled key values to categorized failures for faster triage.
     - state/report tests updated for `value_sample` persistence; load/run tests updated for key-arg extraction and sampling behavior.
-  - Phase 20 implemented locally (pending commit/PR):
+  - Phase 20 implemented and pushed (PR #22 open):
     - apply events now carry key column names in addition to key values.
     - `value_sample` generation is column-aware (`id=42`) with fallback to ordinal labels (`v1=42`) when names are unavailable.
     - row-event mapping now propagates key columns for insert/update/delete conflict reporting.
     - tests updated for key-column propagation and column-aware sample formatting.
 - Now:
-  - Commit, push, and open PR for Phase 20.
+  - Wait for PR #22 CI/review and merge.
 - Next:
-  - Merge Phase 20 PR.
+  - Create Phase 21 branch from updated `main` after PR #22 merges.
   - Continue with per-table conflict payload evolution (old/new row snapshots where safe).
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
