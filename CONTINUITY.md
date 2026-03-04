@@ -16,9 +16,10 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-conflict-samples-phase19` from `main@bea0369` (PR #20 merged by user).
-  - Phase 19 changes implemented locally; local tests passing.
-  - PR #21 opened: `feat: phase 19 table-level conflict value samples` (CI pending).
+  - Branch: `codex/feat/replicate-column-samples-phase20` from `main@1112ba0` (PR #21 merged by user).
+  - PR #22 is open: https://github.com/esthergb/dbmigrate/pull/22
+  - Phase 20 code/test updates are pushed; local full test suite passes.
+  - PR #22 required CI checks (`validate` push/pull_request) are pending.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -63,17 +64,23 @@ Last updated: 2026-03-04
     - conflict report schema now includes `sql_error_code` when available.
     - execution error classification now derives targeted remediation guidance per failure class.
     - tests added for SQL error classification and conflict report SQL-code persistence.
-  - Phase 19 implemented on branch (pending PR merge):
+  - Phase 19 merged:
     - replication conflict reports now include `value_sample` for table-level key/value context.
     - row apply pipeline now tracks key args per event and propagates samples into failures/reports.
     - SQL error classification attaches sampled key values to categorized failures for faster triage.
     - state/report tests updated for `value_sample` persistence; load/run tests updated for key-arg extraction and sampling behavior.
+  - Phase 20 implemented and pushed (PR #22 open):
+    - apply events now carry key column names in addition to key values.
+    - `value_sample` generation is column-aware (`id=42`) with fallback to ordinal labels (`v1=42`) when names are unavailable.
+    - row-event mapping now propagates key columns for insert/update/delete conflict reporting.
+    - tests updated for key-column propagation and column-aware sample formatting.
 - Now:
-  - Wait for PR #21 checks and merge.
+  - Wait for PR #22 CI/review and merge.
 - Next:
-  - Continue with richer per-table conflict payloads (column-name aware samples).
+  - Create Phase 21 branch from updated `main` after PR #22 merges.
+  - Continue with per-table conflict payload evolution (old/new row snapshots where safe).
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/load_test.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
-  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go mod tidy`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/load_test.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict_test.go`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.

@@ -25,7 +25,7 @@ func TestReplicationConflictReportRoundTrip(t *testing.T) {
 	report.Operation = "update"
 	report.TableName = "app.items"
 	report.Query = "UPDATE `app`.`items` SET `name`=? WHERE `id` <=> ?"
-	report.ValueSample = []string{"v1=42", "v2=legacy-name"}
+	report.ValueSample = []string{"id=42", "name=legacy-name"}
 	report.Message = "conflict-policy=fail detected non-applied update"
 	report.Remediation = "rerun with source-wins after review"
 
