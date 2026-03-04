@@ -1,130 +1,37 @@
 Last updated: 2026-03-04
 
 - Goal (incl. success criteria):
-  - Implementar `dbmigrate` en Go según `Instructions.md` con ejecución faseada por hitos/PRs, incluyendo migración inicial, replicación incremental, verificación, documentación completa, CI y flujo Git/PR.
-  - Éxito: cumplir criterios de aceptación definidos en `Instructions.md`.
+  - Deliver `dbmigrate` in phased PRs with stable core workflows: baseline migration, verification, replication, reporting, and operator-safe defaults from `Instructions.md`.
+  - Success: each phase is merged to `main` with passing CI/tests and updated operator docs.
 - Constraints/Assumptions:
-  - Seguir instrucciones del repo y evitar dependencias pesadas.
-  - Usar dependencias ampliamente adoptadas y estables.
-  - Documentación en inglés.
-  - Reportes: JSON obligatorio ahora; HTML diferido a fase futura.
-  - Licencia MIT.
-  - Correr pruebas completas en Mac Mini Apple Silicon considerando arquitectura Docker.
-  - `git@github.com:esthergb/dbmigrate.git` es el remoto objetivo (UNCONFIRMED: acceso SSH efectivo desde este entorno).
+  - License: MIT.
+  - Documentation in English.
+  - JSON-first outputs; HTML optional in a future phase.
+  - Fail-fast defaults for incompatible features; auto-fix deferred.
+  - DDL policy surface restricted to `--apply-ddl={ignore,apply,warn}`.
+  - `Instructions.md` must remain untracked.
 - Key decisions:
-  - Usar `CONTINUITY.md` por tratarse de trabajo multi-sesión.
-  - Entrega faseada por hitos/PRs.
-  - Orden de compatibilidad priorizado:
-    - Fase de motores homogéneos MariaDB->MariaDB (upgrade/downgrade).
-    - Luego MySQL->MySQL (upgrade/downgrade).
-    - Luego cruces MariaDB<->MySQL.
-  - Conflictos por defecto en replicación: `fail`.
-  - DDL: usar solo `--apply-ddl={ignore,apply,warn}`.
-  - Incompatibilidades al inicio: fail-fast; auto-fix se documenta como futura fase.
-  - Migración de usuarios/grants: soportar dos modos (incluir sistema o excluir sistema) y generar reporte detallado de plugins/auth incompatibles.
-  - Reportes de conflicto/diffs con dos opciones: valores reales o redactados.
-  - CI: pruebas mínimas en CI; matriz completa en local.
-  - Crear ramas y commits desde el inicio.
-  - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
+  - Milestone delivery through small PRs from `codex/*` branches.
+  - Protected `main` requires CI + approving review.
+  - Keep local full tests; CI remains minimum validation.
 - State:
-  - PR #5 fusionado en `main`; fase actual en progreso: baseline data migrator + checkpoint/resume (PR pendiente de abrir).
+  - PR #6 merged by user on 2026-03-04; branch `codex/feat/data-baseline-checkpoint-phase4` deleted.
+  - PR #7 (`codex/feat/schema-verify-phase5` -> `main`) had merge conflicts after PR #6 merge.
+  - Conflicts currently being resolved on this branch.
 - Done:
-  - Leído `Instructions.md` completo.
-  - Verificado estado inicial del repo (solo `Instructions.md`).
-  - Recibidas 12 respuestas de alcance/orden/prioridades del usuario.
-  - Creado `AGENTS.md` con decisiones confirmadas y política de ejecución por fases.
-  - Creados skills:
-    - `skills/dbmigrate-phase-delivery`
-    - `skills/dbmigrate-research-risk`
-    - `skills/dbmigrate-test-matrix`
-  - Añadidos recursos de skills (references y scripts de matrix).
-  - Validación de skills con `quick_validate.py` (3/3 OK).
-  - Smoke básico de scripts (`--help`) OK.
-  - Creada rama `codex/chore/agent-skills-bootstrap`.
-  - Commit realizado: `984d687` (`chore: add agent playbook and project skills`).
-  - Aprobación explícita del usuario para commit/push y comienzo de Fase 0.
-  - Push de rama bootstrap completado: `origin/codex/chore/agent-skills-bootstrap`.
-  - Creada rama de fase 0: `codex/feat/docs-phase0-research`.
-  - Creados `docs/known-problems.md` y `docs/risk-checklist.md`.
-  - Commit Fase 0: `56c7e79` (`docs: add phase-0 migration risks and operator checklist`).
-  - Push Fase 0: `origin/codex/feat/docs-phase0-research`.
-  - Creada rama Fase 1: `codex/feat/foundation-phase1`.
-  - Scaffold inicial generado: Go module, CLI subcommands skeleton, config/runtime, tests base, CI mínima, docs de contribución y plan.
-  - Commit Fase 1: `27b270d` (`feat: scaffold phase-1 cli foundation and ci baseline`).
-  - Push Fase 1: `origin/codex/feat/foundation-phase1`.
-  - Creada rama remota `main` apuntando a baseline `b30a93d`.
-  - PR abierto #1: `codex/feat/docs-phase0-research` -> `main`.
-  - PR abierto #2: `codex/feat/foundation-phase1` -> `codex/feat/docs-phase0-research`.
-  - Rama por defecto de GitHub actualizada a `main`.
-  - PR #1 fusionado por usuario y rama `codex/feat/docs-phase0-research` eliminada.
-  - Protección aplicada a `main`:
-    - required status check: `validate` (strict)
-    - required approving reviews: 1
-    - dismiss stale reviews: true
-    - force pushes: disabled
-    - deletions: disabled
-    - required conversation resolution: enabled
-  - Error de CI identificado en PR #2: `golangci-lint` falla por configuración inválida de `.golangci.yml` (versión no especificada).
-  - Correcciones aplicadas a PR #2 (`codex/feat/foundation-phase1`):
-    - `fix: declare golangci-lint v2 config schema` (`d9f218e`)
-    - `fix: remove deprecated gosimple linter from config` (`2487986`)
-    - `fix: satisfy errcheck for cli and version output` (`924abd6`)
-  - Estado actual de PR #2 checks: `validate` en PASS.
-  - PR #2 cerrado por solicitud del usuario.
-  - PR #3 abierto: `codex/feat/foundation-phase1` -> `main`.
-  - Rama de PR #3 actualizada con `main` usando `gh pr update-branch`.
-  - Checks relanzados y en PASS tras el update.
-  - PR #3 fusionado por usuario (`2026-03-04T19:04:09Z`).
-  - Rama remota `codex/feat/foundation-phase1` eliminada por usuario tras merge.
-  - Rama nueva de Fase 2 creada/push: `codex/feat/config-connection-phase2-v2` (base `codex/feat/foundation-phase1`).
-  - WIP de Fase 2 transferido localmente a `codex/feat/config-connection-phase2-v2`.
-  - Fase 2 implementada y publicada en PR #4:
-    - soporte `--config` YAML/JSON con precedencia de flags
-    - utilidades DSN (`NormalizeDSN`, `RedactDSN`, `OpenAndPing`)
-    - `plan` valida DSN source/dest
-    - tests de config y DSN
-  - Correcciones de CI aplicadas en PR #4:
-    - `go.sum` añadido y dependencias tidy
-    - fix parse DSN en formato driver vs URI
-    - fix `errcheck` en cierre de conexión
-  - Estado actual de PR #4 checks: `validate` en PASS.
-  - Sincronización local ejecutada: `git pull --ff-only` en `codex/feat/config-connection-phase2-v2` (fast-forward a `edb75fb`).
-  - PR #4 fusionado por usuario (`2026-03-04T19:08:49Z`) y `main` avanza a `f03e6dd`.
-  - Nueva rama de trabajo creada desde `main`: `codex/feat/schema-baseline-phase3`.
-  - Implementación Fase 3 añadida:
-    - paquete `internal/schema` para extracción/aplicación de tablas y vistas
-    - `migrate` con flags `--schema-only`, `--data-only`, `--dest-empty-required`, `--force`
-    - validación de destino no vacío y selección include/exclude de bases
-    - tests de unidad para CLI migrate, parse de flags y utilidades de esquema
-  - Verificación local ejecutada con toolchain temporal:
-    - `gofmt` en archivos modificados
-    - `go test ./... -count=1` (PASS)
-  - Commit/push Fase 3: `346c2c7` en `codex/feat/schema-baseline-phase3`.
-  - PR #5 abierto: `codex/feat/schema-baseline-phase3` -> `main`.
-  - PR #5 fusionado por usuario (`2026-03-04T19:44:09Z`) y `main` avanza a `a394462`.
-  - Rama nueva de Fase 4 creada desde `main`: `codex/feat/data-baseline-checkpoint-phase4`.
-  - Implementación Fase 4 añadida:
-    - paquete `internal/state` con checkpoint JSON atómico (`LoadDataCheckpoint`, `SaveDataCheckpoint`).
-    - paquete `internal/data` para copia baseline en lotes con estado y reanudación (`CopyBaselineData`).
-    - integración en `migrate` para modos schema/data/full con flags `--chunk-size` y `--resume`.
-    - tests de unidad para checkpoint, SQL builders y parseo/CLI migrate actualizado.
-  - Ajuste de `.gitignore`: `state/` anclado a raíz como `/state/` para no excluir `internal/state`.
-  - Documentación actualizada para Fase 4:
-    - `README.md` con estado de fases 0-4 y modos de baseline migration.
-    - `docs/operators-guide.md` con ejecución schema/data/full, checkpoint y `--resume`.
-  - Verificación local ejecutada:
-    - `gofmt -w` sobre archivos de Fase 4.
-    - `/tmp/go-toolchain/go/bin/go test ./... -count=1` (PASS).
-    - `golangci-lint run ./...` no disponible localmente (`command not found`).
+  - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
+  - Phase 5 implemented on branch:
+    - `verify --verify-level=schema` with fail-on-diff behavior.
+    - schema diff engine (`internal/verify/schema`) with deterministic outputs.
+    - JSON/text verify reporting and unit tests.
 - Now:
-  - Preparar commit/push de Fase 4 y abrir PR a `main`.
+  - Resolve PR #7 merge conflicts (`CONTINUITY.md`, `internal/cli/cli_test.go`).
+  - Re-run test suite and push updated branch.
 - Next:
-  - Completar revisión de PR de fase de datos y merge.
-  - Continuar con mejoras de verificación y robustez de migración incremental.
-  - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
+  - Confirm PR #7 checks are green and merge PR #7.
+  - Start next phase branch.
 - Open questions (UNCONFIRMED if needed):
-  - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Ninguna bloqueante inmediata.
+  - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `internal/state/*`, `internal/data/*`, `internal/commands/migrate*`, `internal/cli/cli*`
-  - Commands: `git push`, `gh pr create`, `/tmp/go-toolchain/go/bin/go test`, `/tmp/go-toolchain/go/bin/gofmt`, `rg`, `cat`
+  - Files: `CONTINUITY.md`, `internal/cli/cli_test.go`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/schema/*`, `Instructions.md` (untracked)
+  - Commands: `git merge origin/main`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`
