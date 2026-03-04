@@ -8,6 +8,10 @@
 4. Run verification (`dbmigrate verify`).
 5. Generate machine-readable report (`dbmigrate report --json`).
 
+Compatibility profile selection:
+- `dbmigrate plan --source "<dsn>" --dest "<dsn>" --downgrade-profile strict-lts`
+- Supported values: `strict-lts` (default), `same-major`, `adjacent-minor`, `max-compat`.
+
 ## Baseline migration execution
 
 - Schema-only:

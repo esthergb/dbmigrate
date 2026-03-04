@@ -33,6 +33,18 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..."
 dbmigrate report --source "mysql://..." --dest "mysql://..." --json
 ```
 
+Downgrade profile selection for `plan`:
+
+```bash
+dbmigrate plan --source "mysql://..." --dest "mysql://..." --downgrade-profile strict-lts
+```
+
+Supported profiles:
+- `strict-lts` (default)
+- `same-major`
+- `adjacent-minor`
+- `max-compat`
+
 ## Baseline migration modes
 
 ```bash
@@ -94,6 +106,7 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data
 
 Use `--config <path>` to load YAML/JSON runtime options.
 When both are present, explicit CLI flags override config-file values.
+You can set `downgrade-profile` (YAML) or `downgrade_profile` (JSON) in config files.
 
 ## Build
 

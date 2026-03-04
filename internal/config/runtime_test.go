@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeConfigValidation(t *testing.T) {
-	cfg := RuntimeConfig{TLSMode: "required", Concurrency: 2}
+	cfg := RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts"}
 	if err := cfg.ValidateBasic(); err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
@@ -14,6 +14,11 @@ func TestRuntimeConfigValidation(t *testing.T) {
 	cfg.Concurrency = 0
 	if err := cfg.ValidateBasic(); err == nil {
 		t.Fatal("expected concurrency validation error")
+	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "invalid"}
+	if err := cfg.ValidateBasic(); err == nil {
+		t.Fatal("expected downgrade-profile validation error")
 	}
 }
 
@@ -38,6 +43,9 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 	}
 	if cfg.Concurrency != 8 {
 		t.Fatalf("expected concurrency=8, got %d", cfg.Concurrency)
+	}
+	if cfg.DowngradeProfile != "strict-lts" {
+		t.Fatalf("expected default downgrade-profile strict-lts, got %q", cfg.DowngradeProfile)
 	}
 	if len(cfg.ExcludeDatabases) == 0 {
 		t.Fatal("expected default excluded databases")
