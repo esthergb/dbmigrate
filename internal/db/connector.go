@@ -23,13 +23,13 @@ func NormalizeDSN(raw string) (string, error) {
 		return "", errors.New("dsn is empty")
 	}
 
+	if _, err := mysqlDriver.ParseDSN(raw); err == nil {
+		return raw, nil
+	}
+
 	u, err := url.Parse(raw)
 	if err == nil && u.Scheme != "" {
 		return uriToDriverDSN(u)
-	}
-
-	if _, err := mysqlDriver.ParseDSN(raw); err == nil {
-		return raw, nil
 	}
 
 	return "", fmt.Errorf("unsupported DSN format")
@@ -41,8 +41,16 @@ func RedactDSN(raw string) string {
 		return raw
 	}
 
+	cfg, err := mysqlDriver.ParseDSN(raw)
+	if err == nil {
+		if cfg.Passwd != "" {
+			cfg.Passwd = "***"
+		}
+		return cfg.FormatDSN()
+	}
+
 	u, err := url.Parse(raw)
-	if err == nil && u.Scheme != "" {
+	if err == nil && (strings.EqualFold(u.Scheme, "mysql") || strings.EqualFold(u.Scheme, "mariadb")) {
 		if u.User != nil {
 			if _, ok := u.User.Password(); ok {
 				u.User = url.UserPassword(u.User.Username(), "***")
@@ -51,14 +59,7 @@ func RedactDSN(raw string) string {
 		return u.String()
 	}
 
-	cfg, err := mysqlDriver.ParseDSN(raw)
-	if err != nil {
-		return raw
-	}
-	if cfg.Passwd != "" {
-		cfg.Passwd = "***"
-	}
-	return cfg.FormatDSN()
+	return raw
 }
 
 // OpenAndPing opens a MySQL connection and verifies connectivity.
