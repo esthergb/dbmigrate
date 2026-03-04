@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Usuario instaló `gh`. En progreso: apertura de PRs + scaffold inicial de Fase 1.
+  - Fase 1 scaffold en progreso avanzado; apertura de PRs bloqueada por `gh` sin autenticación y ausencia inicial de rama `main` remota.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -48,15 +48,17 @@ Last updated: 2026-03-04
   - Creados `docs/known-problems.md` y `docs/risk-checklist.md`.
   - Commit Fase 0: `56c7e79` (`docs: add phase-0 migration risks and operator checklist`).
   - Push Fase 0: `origin/codex/feat/docs-phase0-research`.
+  - Creada rama Fase 1: `codex/feat/foundation-phase1`.
+  - Scaffold inicial generado: Go module, CLI subcommands skeleton, config/runtime, tests base, CI mínima, docs de contribución y plan.
 - Now:
-  - Abrir PRs de ramas ya subidas y arrancar Fase 1 en nueva rama de trabajo.
+  - Cerrar commit de Fase 1 y preparar base remota para abrir PRs.
 - Next:
-  - Completar scaffold del proyecto Go (`cmd/`, `internal/`, `tests/`, CI mínima).
-  - Crear `docs/development-plan.md` alineado a hitos/PRs.
+  - Crear/push de rama `main` en remoto (si no existe).
+  - Abrir PRs de `codex/chore/agent-skills-bootstrap` y `codex/feat/docs-phase0-research` cuando `gh` esté autenticado.
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Ninguna bloqueante para iniciar Fase 1.
+  - Requiere `gh auth login` para apertura automática de PRs.
 - Working set (files/ids/commands):
-  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`
-  - Commands: `git push`, `git checkout -b`, `gh pr create`, `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
+  - Files: `Instructions.md` (untracked by request), `CONTINUITY.md`, `AGENTS.md`, `skills/*`, `docs/known-problems.md`, `docs/risk-checklist.md`, scaffold de fase 1
+  - Commands: `git push`, `git checkout -b`, `gh pr create`, `go test` (blocked: go missing), `rg`, `cat`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
