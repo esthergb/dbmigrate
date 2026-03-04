@@ -53,8 +53,8 @@ Replication checkpoint behavior:
 - Run summary reports `start`, `source_end`, `applied_end`, and `applied_events`.
 - Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
 - Event application is transaction-batch based; checkpoint advances only after commit.
-- Current milestone keeps event loading as no-op (`applied_events=0`) while replay phases are implemented.
-- Source preflight gates: `log_bin=ON` and `binlog_format=ROW`.
+- Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
+- Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.
 
 ## Safety defaults
 
