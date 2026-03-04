@@ -17,8 +17,9 @@ Last updated: 2026-03-04
   - Allow partial-database scope via `--databases`.
 - State:
   - Branch: `codex/feat/replicate-row-payload-phase21` from `main@785d587` (PR #22 merged by user on 2026-03-04).
-  - Phase 21 implementation is complete locally for detailed conflict payload (`old_row_sample` / `new_row_sample`).
-  - Local full test suite passes after Phase 21 edits.
+  - PR #23 is open: https://github.com/esthergb/dbmigrate/pull/23
+  - Phase 21 changes are committed/pushed for detailed conflict payload (`old_row_sample` / `new_row_sample`).
+  - Local full test suite passed before PR creation.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -73,15 +74,15 @@ Last updated: 2026-03-04
     - `value_sample` generation is column-aware (`id=42`) with fallback to ordinal labels (`v1=42`) when names are unavailable.
     - row-event mapping now propagates key columns for insert/update/delete conflict reporting.
     - tests updated for key-column propagation and column-aware sample formatting.
-  - Phase 21 implemented locally (pending commit/PR):
+  - Phase 21 implemented and pushed (PR #23 open):
     - conflict reports include `old_row_sample` and `new_row_sample` JSON fields.
     - binlog apply events now carry per-row payload snapshots (old/new rows) for insert/update/delete operations.
     - SQL and zero-row conflict failures now include key sample + old/new row samples for faster triage.
     - tests expanded for row payload propagation and conflict report round-trip persistence.
 - Now:
-  - Commit/push and open PR for Phase 21.
+  - Wait for PR #23 CI/review and merge.
 - Next:
-  - Merge Phase 21 PR.
+  - Create next phase branch from updated `main` after PR #23 merge.
   - Continue with report ergonomics (structured diff hints) after Phase 21 merge.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
