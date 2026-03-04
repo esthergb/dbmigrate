@@ -18,8 +18,10 @@ Last updated: 2026-03-05
 - State:
   - Branch: `codex/feat/row-diff-sample-phase25` from `main@308d4fd` (PR #25 already merged).
   - PR #26 is open: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + `Instructions.md` tracked).
+  - PR #26 required CI checks (`validate` push/pull_request) are passing.
   - PR #27 is open: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - Phase 25 implementation is committed/pushed; local full test suite passed.
+  - PR #27 required CI checks (`validate` push/pull_request) are pending.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
