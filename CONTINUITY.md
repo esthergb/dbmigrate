@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-conflict-report-phase17` from `main@5a1546c` (PR #18 merged by user).
   - Phase 17 changes implemented locally; local tests passing.
+  - PR #19 opened: `feat: phase 17 detailed replication conflict reports` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -58,9 +59,8 @@ Last updated: 2026-03-04
     - new state persistence module added for conflict reports with round-trip tests.
     - replication run tests now validate conflict report generation on apply failures.
 - Now:
-  - Commit, push, and open PR for Phase 17.
+  - Wait for PR #19 checks and merge.
 - Next:
-  - Merge Phase 17 PR.
   - Continue with schema drift handling/reporting and richer conflict detail categorization.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
