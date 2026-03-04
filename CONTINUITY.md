@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-apply-phase14` from `main@794b754`.
   - Phase 14 changes implemented locally; local tests passing.
+  - PR #16 opened: `feat: phase 14 transactional replication apply scaffold` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -38,9 +39,9 @@ Last updated: 2026-03-04
     - new tests for apply transaction behavior (no batches, commit path, exec error rollback, commit error path).
     - docs refined for transaction-batch checkpoint semantics.
 - Now:
-  - Commit, push, and open PR for Phase 14.
+  - Wait for PR #16 checks and merge.
 - Next:
-  - Merge Phase 14 PR.
+  - Start Phase 15 for real binlog event loading/decoding and SQL mapping.
   - Continue with real binlog decoding/application flow in following phase.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
