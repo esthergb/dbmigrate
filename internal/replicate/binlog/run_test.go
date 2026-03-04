@@ -3,7 +3,9 @@ package binlog
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/esthergb/dbmigrate/internal/state"
@@ -207,18 +209,215 @@ func TestRunCheckpointAdvancesOnlyToAppliedEnd(t *testing.T) {
 	}
 }
 
+func TestApplyWindowTransactionalNoBatches(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return nil, nil
+	}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		t.Fatal("begin transaction should not be called when no batches exist")
+		return nil, nil
+	}
+
+	result, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000001",
+		StartPos:  4,
+		EndFile:   "mysql-bin.000001",
+		EndPos:    200,
+	}, Options{ApplyDDL: "warn"})
+	if err != nil {
+		t.Fatalf("applyWindowTransactional: %v", err)
+	}
+	if result.File != "mysql-bin.000001" || result.Pos != 4 || result.AppliedEvents != 0 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestApplyWindowTransactionalAdvancesOnCommit(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000011",
+				EndPos:  110,
+				Events:  []applyEvent{{Query: "INSERT INTO t VALUES (?)", Args: []any{1}}},
+			},
+			{
+				EndFile: "mysql-bin.000011",
+				EndPos:  160,
+				Events: []applyEvent{
+					{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}},
+					{Query: "DELETE FROM t WHERE id=?", Args: []any{3}},
+				},
+			},
+		}, nil
+	}
+
+	txs := []*fakeTx{{}, {}}
+	beginCalls := 0
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		tx := txs[beginCalls]
+		beginCalls++
+		return tx, nil
+	}
+
+	result, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000011",
+		StartPos:  100,
+		EndFile:   "mysql-bin.000011",
+		EndPos:    160,
+	}, Options{ApplyDDL: "warn"})
+	if err != nil {
+		t.Fatalf("applyWindowTransactional: %v", err)
+	}
+	if result.File != "mysql-bin.000011" || result.Pos != 160 || result.AppliedEvents != 3 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if beginCalls != 2 {
+		t.Fatalf("unexpected begin calls: %d", beginCalls)
+	}
+	if !txs[0].committed || txs[0].rolledBack {
+		t.Fatalf("unexpected tx0 state: %+v", txs[0])
+	}
+	if !txs[1].committed || txs[1].rolledBack {
+		t.Fatalf("unexpected tx1 state: %+v", txs[1])
+	}
+}
+
+func TestApplyWindowTransactionalExecErrorRollsBack(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000030",
+				EndPos:  150,
+				Events:  []applyEvent{{Query: "INSERT INTO t VALUES (?)", Args: []any{1}}},
+			},
+			{
+				EndFile: "mysql-bin.000030",
+				EndPos:  220,
+				Events:  []applyEvent{{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}}},
+			},
+		}, nil
+	}
+
+	txs := []*fakeTx{{}, {execErr: errors.New("boom")}}
+	beginCalls := 0
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		tx := txs[beginCalls]
+		beginCalls++
+		return tx, nil
+	}
+
+	_, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000030",
+		StartPos:  120,
+		EndFile:   "mysql-bin.000030",
+		EndPos:    220,
+	}, Options{ApplyDDL: "warn"})
+	if err == nil {
+		t.Fatal("expected applyWindowTransactional to fail on exec error")
+	}
+	if !strings.Contains(err.Error(), "apply event at mysql-bin.000030:220") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !txs[0].committed || txs[0].rolledBack {
+		t.Fatalf("unexpected tx0 state: %+v", txs[0])
+	}
+	if txs[1].committed || !txs[1].rolledBack {
+		t.Fatalf("unexpected tx1 state: %+v", txs[1])
+	}
+}
+
+func TestApplyWindowTransactionalCommitErrorRollsBack(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000040",
+				EndPos:  300,
+				Events:  []applyEvent{{Query: "INSERT INTO t VALUES (?)", Args: []any{1}}},
+			},
+		}, nil
+	}
+
+	tx := &fakeTx{commitErr: errors.New("commit failed")}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		return tx, nil
+	}
+
+	_, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000040",
+		StartPos:  240,
+		EndFile:   "mysql-bin.000040",
+		EndPos:    300,
+	}, Options{ApplyDDL: "warn"})
+	if err == nil {
+		t.Fatal("expected applyWindowTransactional to fail on commit error")
+	}
+	if !strings.Contains(err.Error(), "commit destination transaction at mysql-bin.000040:300") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tx.committed || !tx.rolledBack {
+		t.Fatalf("unexpected tx state: %+v", tx)
+	}
+}
+
 func stubRunHooks(t *testing.T) func() {
 	t.Helper()
 
 	origPreflight := checkSourcePreflightFn
 	origQuery := queryBinlogPositionFn
+	origLoadBatches := loadApplyBatchesFn
+	origBeginTx := beginDestinationTxFn
 	origApply := applyWindowFn
 	origNow := timeNowFn
 
 	return func() {
 		checkSourcePreflightFn = origPreflight
 		queryBinlogPositionFn = origQuery
+		loadApplyBatchesFn = origLoadBatches
+		beginDestinationTxFn = origBeginTx
 		applyWindowFn = origApply
 		timeNowFn = origNow
 	}
+}
+
+type fakeTx struct {
+	execErr     error
+	commitErr   error
+	execCalls   int
+	committed   bool
+	rolledBack  bool
+	lastQueries []string
+}
+
+func (f *fakeTx) ExecContext(_ context.Context, query string, _ ...any) (sql.Result, error) {
+	f.execCalls++
+	f.lastQueries = append(f.lastQueries, query)
+	if f.execErr != nil {
+		return nil, f.execErr
+	}
+	return nil, nil
+}
+
+func (f *fakeTx) Commit() error {
+	if f.commitErr != nil {
+		return f.commitErr
+	}
+	f.committed = true
+	return nil
+}
+
+func (f *fakeTx) Rollback() error {
+	f.rolledBack = true
+	return nil
 }
