@@ -82,7 +82,7 @@ func OpenAndPing(ctx context.Context, rawDSN string) (*sql.DB, error) {
 	}
 
 	if err := db.PingContext(deadlineCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping mysql: %w", err)
 	}
 
