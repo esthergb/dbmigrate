@@ -56,6 +56,7 @@ type applyResult struct {
 type applyEvent struct {
 	Query               string
 	Args                []any
+	KeyColumns          []string
 	KeyArgs             []any
 	Operation           string
 	TableName           string
@@ -512,7 +513,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 						Operation:   event.Operation,
 						TableName:   event.TableName,
 						Query:       event.Query,
-						ValueSample: buildValueSample(event.KeyArgs),
+						ValueSample: buildValueSample(event.KeyColumns, event.KeyArgs),
 						Message: fmt.Sprintf(
 							"conflict-policy=fail detected non-applied %s on %s at %s:%d",
 							event.Operation,

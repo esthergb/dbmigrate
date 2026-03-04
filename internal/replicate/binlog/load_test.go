@@ -46,6 +46,9 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	if len(batches[0].Events[0].KeyArgs) != 1 {
 		t.Fatalf("expected insert key args sample")
 	}
+	if len(batches[0].Events[0].KeyColumns) != 1 || batches[0].Events[0].KeyColumns[0] != "id" {
+		t.Fatalf("expected insert key columns sample, got %#v", batches[0].Events[0].KeyColumns)
+	}
 	if batches[1].EndPos != 140 || len(batches[1].Events) != 1 {
 		t.Fatalf("unexpected second batch: %+v", batches[1])
 	}
@@ -212,6 +215,19 @@ func TestExtractKeyArgsUsesPrimaryKeyWhenAvailable(t *testing.T) {
 	}
 	if args[0] != "t1" || args[1] != int64(7) {
 		t.Fatalf("unexpected key args values: %#v", args)
+	}
+}
+
+func TestExtractKeyColumnsUsesPrimaryKeyWhenAvailable(t *testing.T) {
+	columns := extractKeyColumns(tableMetadata{
+		Columns:     []string{"id", "name", "tenant"},
+		KeyOrdinals: []int{2, 0},
+	})
+	if len(columns) != 2 {
+		t.Fatalf("unexpected key columns length: %d", len(columns))
+	}
+	if columns[0] != "tenant" || columns[1] != "id" {
+		t.Fatalf("unexpected key columns: %#v", columns)
 	}
 }
 

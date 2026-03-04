@@ -46,7 +46,7 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 		Operation:   event.Operation,
 		TableName:   event.TableName,
 		Query:       event.Query,
-		ValueSample: buildValueSample(event.KeyArgs),
+		ValueSample: buildValueSample(event.KeyColumns, event.KeyArgs),
 		Message:     fmt.Sprintf("apply event at %s:%d failed", file, pos),
 		Cause:       cause,
 		Remediation: "review table schema and conflicting destination rows, then rerun replicate from checkpoint",
@@ -89,7 +89,7 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 	return failure
 }
 
-func buildValueSample(values []any) []string {
+func buildValueSample(columns []string, values []any) []string {
 	if len(values) == 0 {
 		return nil
 	}
@@ -101,7 +101,11 @@ func buildValueSample(values []any) []string {
 
 	sample := make([]string, 0, limit+1)
 	for i := 0; i < limit; i++ {
-		sample = append(sample, fmt.Sprintf("v%d=%s", i+1, sampleValue(values[i])))
+		label := fmt.Sprintf("v%d", i+1)
+		if i < len(columns) && strings.TrimSpace(columns[i]) != "" {
+			label = strings.TrimSpace(columns[i])
+		}
+		sample = append(sample, fmt.Sprintf("%s=%s", label, sampleValue(values[i])))
 	}
 	if len(values) > limit {
 		sample = append(sample, fmt.Sprintf("... +%d more", len(values)-limit))

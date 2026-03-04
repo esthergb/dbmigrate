@@ -45,7 +45,10 @@ func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
 			Operation: "insert",
 			TableName: "app.items",
 			Query:     "INSERT INTO `app`.`items` (`id`) VALUES (?)",
-			KeyArgs:   []any{int64(42)},
+			KeyColumns: []string{
+				"id",
+			},
+			KeyArgs: []any{int64(42)},
 		},
 		"mysql-bin.000001",
 		220,
@@ -62,7 +65,7 @@ func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
 	if !strings.Contains(failure.Remediation, "--conflict-policy=source-wins") {
 		t.Fatalf("unexpected remediation: %s", failure.Remediation)
 	}
-	if len(failure.ValueSample) != 1 || failure.ValueSample[0] != "v1=42" {
+	if len(failure.ValueSample) != 1 || failure.ValueSample[0] != "id=42" {
 		t.Fatalf("unexpected value sample: %#v", failure.ValueSample)
 	}
 }
@@ -74,7 +77,10 @@ func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 			Operation: "update",
 			TableName: "app.items",
 			Query:     "UPDATE `app`.`items` SET `x`=? WHERE `id` <=> ?",
-			KeyArgs:   []any{int64(7)},
+			KeyColumns: []string{
+				"id",
+			},
+			KeyArgs: []any{int64(7)},
 		},
 		"mysql-bin.000001",
 		320,
@@ -92,15 +98,25 @@ func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 
 func TestBuildValueSampleTruncatesAndLimits(t *testing.T) {
 	longText := strings.Repeat("a", 200)
-	sample := buildValueSample([]any{int64(1), longText, []byte("blob"), nil, "x", "y", "z"})
+	sample := buildValueSample(
+		[]string{"id", "description", "payload", "optional", "c5", "c6", "c7"},
+		[]any{int64(1), longText, []byte("blob"), nil, "x", "y", "z"},
+	)
 	if len(sample) != 7 {
 		t.Fatalf("unexpected sample length: %d", len(sample))
 	}
-	if !strings.HasPrefix(sample[2], "v3=blob") {
+	if !strings.HasPrefix(sample[2], "payload=blob") {
 		t.Fatalf("unexpected blob sample: %s", sample[2])
 	}
 	if !strings.Contains(sample[len(sample)-1], "... +1 more") {
 		t.Fatalf("expected overflow marker, got: %s", sample[len(sample)-1])
+	}
+}
+
+func TestBuildValueSampleFallsBackToOrdinalLabels(t *testing.T) {
+	sample := buildValueSample(nil, []any{int64(9)})
+	if len(sample) != 1 || sample[0] != "v1=9" {
+		t.Fatalf("unexpected sample: %#v", sample)
 	}
 }
 
@@ -382,7 +398,7 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 			Operation:    "update",
 			TableName:    "app.items",
 			Query:        "UPDATE `app`.`items` SET `missing`=? WHERE `id` <=> ?",
-			ValueSample:  []string{"v1=42"},
+			ValueSample:  []string{"id=42"},
 			Message:      "apply event at mysql-bin.000200:600 failed",
 			Remediation:  "run migrate --schema-only",
 			AppliedFile:  "mysql-bin.000200",
@@ -409,7 +425,7 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 	if report.FailureType != "schema_drift" {
 		t.Fatalf("unexpected failure type: %s", report.FailureType)
 	}
-	if len(report.ValueSample) != 1 || report.ValueSample[0] != "v1=42" {
+	if len(report.ValueSample) != 1 || report.ValueSample[0] != "id=42" {
 		t.Fatalf("unexpected value sample: %#v", report.ValueSample)
 	}
 }
