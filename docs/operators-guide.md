@@ -55,6 +55,7 @@ Replication checkpoint behavior:
 ## Safety defaults
 
 - Fail fast on known incompatible features.
+- Downgrade incompatibilities must fail with detailed remediation proposals.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
 
