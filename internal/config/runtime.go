@@ -17,6 +17,7 @@ var validTLSModes = map[string]struct{}{
 type RuntimeConfig struct {
 	Source           string
 	Dest             string
+	ConfigFile       string
 	Databases        []string
 	ExcludeDatabases []string
 	IncludeObjects   []string
@@ -39,6 +40,7 @@ type RuntimeConfig struct {
 func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.Source, "source", "", "source DSN")
 	fs.StringVar(&cfg.Dest, "dest", "", "destination DSN")
+	fs.StringVar(&cfg.ConfigFile, "config", "", "optional path to YAML/JSON config file")
 	fs.StringVar(&cfg.databasesRaw, "databases", "", "comma-separated databases")
 	fs.StringVar(&cfg.excludeDatabasesRaw, "exclude-databases", "information_schema,performance_schema,sys,mysql", "comma-separated excluded databases")
 	fs.StringVar(&cfg.includeObjectsRaw, "include-objects", "tables,views,routines,triggers,events", "comma-separated object types")
@@ -55,9 +57,15 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 
 // Finalize normalizes derived fields after flag parsing.
 func (c *RuntimeConfig) Finalize() {
-	c.Databases = csvToList(c.databasesRaw)
-	c.ExcludeDatabases = csvToList(c.excludeDatabasesRaw)
-	c.IncludeObjects = csvToList(c.includeObjectsRaw)
+	if c.databasesRaw != "" {
+		c.Databases = csvToList(c.databasesRaw)
+	}
+	if c.excludeDatabasesRaw != "" {
+		c.ExcludeDatabases = csvToList(c.excludeDatabasesRaw)
+	}
+	if c.includeObjectsRaw != "" {
+		c.IncludeObjects = csvToList(c.includeObjectsRaw)
+	}
 
 	if len(c.Databases) == 0 {
 		c.Databases = nil
@@ -100,5 +108,14 @@ func csvToList(raw string) []string {
 		}
 		out = append(out, trimmed)
 	}
+	return out
+}
+
+// CollectSetFlags returns the flag names explicitly set in CLI arguments.
+func CollectSetFlags(fs *flag.FlagSet) map[string]struct{} {
+	out := map[string]struct{}{}
+	fs.Visit(func(f *flag.Flag) {
+		out[f.Name] = struct{}{}
+	})
 	return out
 }

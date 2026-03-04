@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -34,5 +36,45 @@ func TestRunPlanJSON(t *testing.T) {
 	}
 	if out.Len() == 0 {
 		t.Fatal("expected command output")
+	}
+}
+
+func TestRunPlanWithConfigFile(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "dbmigrate.yaml")
+	cfg := []byte("source: mysql://cfg-src\ndest: mysql://cfg-dst\njson: true\n")
+	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	var out bytes.Buffer
+	args := []string{"plan", "--config", cfgPath}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+	if out.Len() == 0 {
+		t.Fatal("expected command output")
+	}
+}
+
+func TestRunPlanFlagOverridesConfig(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "dbmigrate.yaml")
+	cfg := []byte("source: mysql://cfg-src\ndest: mysql://cfg-dst\n")
+	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	var out bytes.Buffer
+	args := []string{
+		"plan",
+		"--config", cfgPath,
+		"--source", "mysql://flag-src",
+		"--dest", "mysql://flag-dst",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }
