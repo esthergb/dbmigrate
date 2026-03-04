@@ -39,5 +39,5 @@ func writeResult(out io.Writer, cfg config.RuntimeConfig, command, message strin
 
 // WriteVersion prints the binary version information.
 func WriteVersion(out io.Writer) {
-	fmt.Fprintf(out, "dbmigrate version=%s commit=%s build_date=%s\n", version.Version, version.Commit, version.BuildDate)
+	_, _ = fmt.Fprintf(out, "dbmigrate version=%s commit=%s build_date=%s\n", version.Version, version.Commit, version.BuildDate)
 }

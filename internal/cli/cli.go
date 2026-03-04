@@ -38,7 +38,7 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 
 	handler, ok := registry[args[0]]
 	if !ok {
-		fmt.Fprintf(stderr, "unknown subcommand %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "unknown subcommand %q\n", args[0])
 		writeHelp(stderr, registry)
 		return exitUsage
 	}
@@ -57,24 +57,24 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 
 	cfg.Finalize()
 	if err := cfg.ValidateBasic(); err != nil {
-		fmt.Fprintf(stderr, "invalid configuration: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid configuration: %v\n", err)
 		return exitUsage
 	}
 
 	if err := handler(ctx, cfg, fs.Args(), stdout); err != nil {
-		fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
+		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
 		return exitRun
 	}
 	return exitOK
 }
 
 func writeHelp(out io.Writer, registry map[string]commands.Handler) {
-	fmt.Fprintln(out, "dbmigrate - MySQL/MariaDB migration and replication tool")
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  dbmigrate <subcommand> [flags]")
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Subcommands:")
+	_, _ = fmt.Fprintln(out, "dbmigrate - MySQL/MariaDB migration and replication tool")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Usage:")
+	_, _ = fmt.Fprintln(out, "  dbmigrate <subcommand> [flags]")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintln(out, "Subcommands:")
 
 	names := make([]string, 0, len(registry))
 	for name := range registry {
@@ -82,7 +82,7 @@ func writeHelp(out io.Writer, registry map[string]commands.Handler) {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		fmt.Fprintf(out, "  %-10s %s\n", name, commands.Synopsis(name))
+		_, _ = fmt.Fprintf(out, "  %-10s %s\n", name, commands.Synopsis(name))
 	}
-	fmt.Fprintln(out, "  version    print build version")
+	_, _ = fmt.Fprintln(out, "  version    print build version")
 }
