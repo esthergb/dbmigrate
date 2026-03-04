@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-safety-phase13` (from `main` at `4dc59a8`).
   - Phase 13 code changes implemented locally; tests pass.
+  - PR #15 opened: `feat: phase 13 replication checkpoint safety hardening` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -32,9 +33,8 @@ Last updated: 2026-03-04
     - replication run tests added for checkpoint safety and apply-window semantics.
     - docs updated in README/operators guide for new replication summary semantics.
 - Now:
-  - Commit, push, and open PR for Phase 13.
+  - Wait for PR #15 checks and merge.
 - Next:
-  - Merge Phase 13 PR.
   - Start next phase for real event apply ordering and idempotent replay semantics.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
