@@ -29,7 +29,7 @@ func TestRunUnknownSubcommand(t *testing.T) {
 
 func TestRunPlanJSON(t *testing.T) {
 	var out bytes.Buffer
-	args := []string{"plan", "--source", "mysql://src", "--dest", "mysql://dst", "--json"}
+	args := []string{"plan", "--source", "mysql://src", "--dest", "mysql://dst", "--json", "--dry-run"}
 	code := Run(context.Background(), args, &out, &out)
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d", code)
@@ -42,7 +42,7 @@ func TestRunPlanJSON(t *testing.T) {
 func TestRunPlanWithConfigFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "dbmigrate.yaml")
-	cfg := []byte("source: mysql://cfg-src\ndest: mysql://cfg-dst\njson: true\n")
+	cfg := []byte("source: mysql://cfg-src\ndest: mysql://cfg-dst\njson: true\ndry-run: true\n")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
@@ -72,6 +72,7 @@ func TestRunPlanFlagOverridesConfig(t *testing.T) {
 		"--config", cfgPath,
 		"--source", "mysql://flag-src",
 		"--dest", "mysql://flag-dst",
+		"--dry-run",
 	}
 	code := Run(context.Background(), args, &out, &out)
 	if code != 0 {

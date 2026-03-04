@@ -103,6 +103,7 @@ make vulncheck
 ## Safety notes
 
 - Incompatible features are designed to fail fast.
+- Downgrade incompatibilities fail with non-zero exit code and include remediation proposals in plan/report output.
 - DDL application policy is controlled only by `--apply-ddl={ignore,apply,warn}`.
 - Detailed migration risks and mitigations are documented in [docs/known-problems.md](docs/known-problems.md).
 
