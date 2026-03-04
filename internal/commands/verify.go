@@ -174,8 +174,29 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				)
 			}
 			return nil
+		case "full-hash":
+			summary, err := dataVerify.VerifyFullHash(ctx, sourceDB, destDB, dataVerify.Options{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+				SampleSize:       opts.SampleSize,
+			})
+			if err != nil {
+				return fmt.Errorf("data verification failed: %w", err)
+			}
+			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+				return err
+			}
+			if len(summary.Diffs) > 0 {
+				return fmt.Errorf(
+					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+					summary.MissingInDestination,
+					summary.MissingInSource,
+					summary.HashMismatches,
+				)
+			}
+			return nil
 		default:
-			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample", opts.DataMode)
+			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample, full-hash", opts.DataMode)
 		}
 	default:
 		return fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel)

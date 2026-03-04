@@ -42,6 +42,16 @@ func TestParseVerifyOptionsExplicit(t *testing.T) {
 	}
 }
 
+func TestParseVerifyOptionsExplicitFullHash(t *testing.T) {
+	opts, err := parseVerifyOptions([]string{"--verify-level=data", "--data-mode=full-hash"})
+	if err != nil {
+		t.Fatalf("expected parse success: %v", err)
+	}
+	if opts.DataMode != "full-hash" {
+		t.Fatalf("expected data-mode full-hash, got %q", opts.DataMode)
+	}
+}
+
 func TestParseVerifyOptionsInvalidLevel(t *testing.T) {
 	_, err := parseVerifyOptions([]string{"--verify-level=full"})
 	if err == nil {
