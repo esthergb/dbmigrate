@@ -45,6 +45,12 @@ Supported profiles:
 - `adjacent-minor`
 - `max-compat`
 
+`strict-lts` explicit same-engine matrix:
+- `MySQL 8.0.x -> MySQL 8.0.x`
+- `MySQL 8.4.x -> MySQL 8.4.x`
+- `MariaDB 10.11.x -> MariaDB 10.11.x`
+- `MariaDB 11.4.x -> MariaDB 11.4.x`
+
 ## Baseline migration modes
 
 ```bash

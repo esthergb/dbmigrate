@@ -111,8 +111,32 @@ func TestEvaluateStrictLTSRequiresKnownLTSLine(t *testing.T) {
 	if report.Compatible {
 		t.Fatalf("expected strict-lts unknown line to be incompatible, findings=%#v", report.Findings)
 	}
-	if !hasFinding(report.Findings, "strict_lts_line_unknown") {
-		t.Fatalf("expected strict_lts_line_unknown finding, got %#v", report.Findings)
+	if !hasFinding(report.Findings, "strict_lts_matrix_out_of_range") {
+		t.Fatalf("expected strict_lts_matrix_out_of_range finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateStrictLTSBlocksCrossLineDowngrade(t *testing.T) {
+	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	dest := ParseInstance("8.0.39 MySQL Community Server - GPL")
+	report := Evaluate(source, dest, nil, "strict-lts")
+	if report.Compatible {
+		t.Fatalf("expected strict-lts cross-line downgrade to be incompatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "strict_lts_matrix_mismatch") {
+		t.Fatalf("expected strict_lts_matrix_mismatch finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateStrictLTSAllowsSameLineDowngrade(t *testing.T) {
+	source := ParseInstance("10.11.8-MariaDB")
+	dest := ParseInstance("10.11.5-MariaDB")
+	report := Evaluate(source, dest, nil, "strict-lts")
+	if !report.Compatible {
+		t.Fatalf("expected strict-lts same-line downgrade to be compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "strict_lts_matrix_match") {
+		t.Fatalf("expected strict_lts_matrix_match finding, got %#v", report.Findings)
 	}
 }
 
