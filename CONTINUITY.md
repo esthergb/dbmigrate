@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Preparación previa de implementación completada (AGENTS + skills). En espera de revisión/aprobación del usuario para comenzar implementación.
+  - Preparación previa aprobada por el usuario. En progreso: push de rama y arranque de Fase 0 (research docs).
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -42,14 +42,15 @@ Last updated: 2026-03-04
   - Smoke básico de scripts (`--help`) OK.
   - Creada rama `codex/chore/agent-skills-bootstrap`.
   - Commit realizado: `984d687` (`chore: add agent playbook and project skills`).
+  - Aprobación explícita del usuario para commit/push y comienzo de Fase 0.
 - Now:
-  - Presentar `AGENTS.md` y skills al usuario para revisión.
+  - Hacer push de la rama actual y crear documentos de investigación obligatorios de Fase 0.
 - Next:
-  - Aplicar feedback del usuario sobre `AGENTS.md` + skills.
-  - Tras aprobación, iniciar fase 0: investigación y documentación de riesgos.
+  - Completar `docs/known-problems.md` con fuentes y mitigaciones.
+  - Completar `docs/risk-checklist.md` para operadores.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
-  - Push real y apertura de PR: pedir confirmación explícita antes de ejecutar.
+  - Ninguna bloqueante para iniciar Fase 0.
 - Working set (files/ids/commands):
   - Files: `Instructions.md`, `CONTINUITY.md`, `AGENTS.md`, `skills/*`
   - Commands: `rg --files`, `ls -la`, `cat Instructions.md`, `cat CONTINUITY.md`, `cat skill-creator/SKILL.md`, `init_skill.py`, `generate_openai_yaml.py`, `quick_validate.py`
