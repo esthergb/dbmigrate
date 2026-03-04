@@ -42,9 +42,11 @@ func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
 	failure := classifyApplySQLError(
 		&mysqlDriver.MySQLError{Number: 1062, Message: "Duplicate entry"},
 		applyEvent{
-			Operation: "insert",
-			TableName: "app.items",
-			Query:     "INSERT INTO `app`.`items` (`id`) VALUES (?)",
+			Operation:  "insert",
+			TableName:  "app.items",
+			Query:      "INSERT INTO `app`.`items` (`id`) VALUES (?)",
+			RowColumns: []string{"id"},
+			NewRowArgs: []any{int64(42)},
 			KeyColumns: []string{
 				"id",
 			},
@@ -68,15 +70,21 @@ func TestClassifyApplySQLErrorDuplicateKey(t *testing.T) {
 	if len(failure.ValueSample) != 1 || failure.ValueSample[0] != "id=42" {
 		t.Fatalf("unexpected value sample: %#v", failure.ValueSample)
 	}
+	if len(failure.NewRowSample) != 1 || failure.NewRowSample[0] != "id=42" {
+		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
+	}
 }
 
 func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 	failure := classifyApplySQLError(
 		&mysqlDriver.MySQLError{Number: 1054, Message: "Unknown column"},
 		applyEvent{
-			Operation: "update",
-			TableName: "app.items",
-			Query:     "UPDATE `app`.`items` SET `x`=? WHERE `id` <=> ?",
+			Operation:  "update",
+			TableName:  "app.items",
+			Query:      "UPDATE `app`.`items` SET `x`=? WHERE `id` <=> ?",
+			RowColumns: []string{"id", "name"},
+			OldRowArgs: []any{int64(7), "old"},
+			NewRowArgs: []any{int64(7), "new"},
 			KeyColumns: []string{
 				"id",
 			},
@@ -93,6 +101,12 @@ func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 	}
 	if !strings.Contains(failure.Remediation, "migrate --schema-only") {
 		t.Fatalf("unexpected remediation: %s", failure.Remediation)
+	}
+	if len(failure.OldRowSample) != 2 || failure.OldRowSample[0] != "id=7" {
+		t.Fatalf("unexpected old row sample: %#v", failure.OldRowSample)
+	}
+	if len(failure.NewRowSample) != 2 || failure.NewRowSample[1] != "name=new" {
+		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
 	}
 }
 
@@ -399,6 +413,8 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 			TableName:    "app.items",
 			Query:        "UPDATE `app`.`items` SET `missing`=? WHERE `id` <=> ?",
 			ValueSample:  []string{"id=42"},
+			OldRowSample: []string{"id=42", "name=legacy"},
+			NewRowSample: []string{"id=42", "name=current"},
 			Message:      "apply event at mysql-bin.000200:600 failed",
 			Remediation:  "run migrate --schema-only",
 			AppliedFile:  "mysql-bin.000200",
@@ -427,6 +443,12 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 	}
 	if len(report.ValueSample) != 1 || report.ValueSample[0] != "id=42" {
 		t.Fatalf("unexpected value sample: %#v", report.ValueSample)
+	}
+	if len(report.OldRowSample) != 2 || report.OldRowSample[1] != "name=legacy" {
+		t.Fatalf("unexpected old row sample: %#v", report.OldRowSample)
+	}
+	if len(report.NewRowSample) != 2 || report.NewRowSample[1] != "name=current" {
+		t.Fatalf("unexpected new row sample: %#v", report.NewRowSample)
 	}
 }
 
@@ -605,6 +627,11 @@ func TestApplyWindowTransactionalFailPolicyRequiresAffectedRows(t *testing.T) {
 					{
 						Query:               "UPDATE `app`.`t` SET `c`=? WHERE `id` <=> ?",
 						Args:                []any{3, 1},
+						RowColumns:          []string{"id", "c"},
+						OldRowArgs:          []any{1, 2},
+						NewRowArgs:          []any{1, 3},
+						KeyColumns:          []string{"id"},
+						KeyArgs:             []any{1},
 						Operation:           "update",
 						TableName:           "app.t",
 						RequireRowsAffected: true,
@@ -630,6 +657,19 @@ func TestApplyWindowTransactionalFailPolicyRequiresAffectedRows(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "conflict-policy=fail detected non-applied update") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	var failure *applyFailure
+	if !errors.As(err, &failure) || failure == nil {
+		t.Fatalf("expected applyFailure, got: %T", err)
+	}
+	if len(failure.ValueSample) != 1 || failure.ValueSample[0] != "id=1" {
+		t.Fatalf("unexpected key value sample: %#v", failure.ValueSample)
+	}
+	if len(failure.OldRowSample) != 2 || failure.OldRowSample[1] != "c=2" {
+		t.Fatalf("unexpected old row sample: %#v", failure.OldRowSample)
+	}
+	if len(failure.NewRowSample) != 2 || failure.NewRowSample[1] != "c=3" {
+		t.Fatalf("unexpected new row sample: %#v", failure.NewRowSample)
 	}
 	if tx.committed || !tx.rolledBack {
 		t.Fatalf("unexpected tx state: %+v", tx)

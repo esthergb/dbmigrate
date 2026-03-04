@@ -49,17 +49,26 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	if len(batches[0].Events[0].KeyColumns) != 1 || batches[0].Events[0].KeyColumns[0] != "id" {
 		t.Fatalf("expected insert key columns sample, got %#v", batches[0].Events[0].KeyColumns)
 	}
+	if len(batches[0].Events[0].NewRowArgs) != 2 || batches[0].Events[0].NewRowArgs[0] != int64(1) {
+		t.Fatalf("expected insert new-row payload, got %#v", batches[0].Events[0].NewRowArgs)
+	}
 	if batches[1].EndPos != 140 || len(batches[1].Events) != 1 {
 		t.Fatalf("unexpected second batch: %+v", batches[1])
 	}
 	if !strings.Contains(batches[1].Events[0].Query, "UPDATE `app`.`items`") {
 		t.Fatalf("unexpected update query: %s", batches[1].Events[0].Query)
 	}
+	if len(batches[1].Events[0].OldRowArgs) != 2 || len(batches[1].Events[0].NewRowArgs) != 2 {
+		t.Fatalf("expected update old/new row payload, got old=%#v new=%#v", batches[1].Events[0].OldRowArgs, batches[1].Events[0].NewRowArgs)
+	}
 	if batches[2].EndPos != 160 || len(batches[2].Events) != 1 {
 		t.Fatalf("unexpected third batch: %+v", batches[2])
 	}
 	if !strings.Contains(batches[2].Events[0].Query, "DELETE FROM `app`.`items`") {
 		t.Fatalf("unexpected delete query: %s", batches[2].Events[0].Query)
+	}
+	if len(batches[2].Events[0].OldRowArgs) != 2 || batches[2].Events[0].OldRowArgs[1] != "b" {
+		t.Fatalf("expected delete old-row payload, got %#v", batches[2].Events[0].OldRowArgs)
 	}
 }
 
