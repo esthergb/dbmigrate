@@ -1,82 +1,43 @@
 Last updated: 2026-03-04
 
 - Goal (incl. success criteria):
-  - Deliver `dbmigrate` in phased PRs with stable core workflows: baseline migration, verification, replication, reporting, and operator-safe defaults from `Instructions.md`.
-  - Success: each phase is merged to `main` with passing CI/tests and updated operator docs.
+  - Deliver `dbmigrate` through phased PRs with safe baseline migration, verification, compatibility planning, and incremental replication that does not lose events.
+  - Success: each phase merged to `main` with green CI and operator docs updated.
 - Constraints/Assumptions:
   - License: MIT.
-  - Documentation in English.
-  - JSON-first outputs; HTML optional in a future phase.
-  - Fail-fast defaults for incompatible features; auto-fix deferred.
-  - Downgrade policy: fail always on incompatibility with detailed report and remediation proposals.
-  - DDL policy surface restricted to `--apply-ddl={ignore,apply,warn}`.
-  - `Instructions.md` must remain untracked.
+  - Documentation language: English.
+  - Output priority: JSON first, HTML later.
+  - `--apply-ddl` surface is fixed to `ignore|apply|warn`.
+  - Default behavior is fail-fast on incompatibilities; auto-fix is future work.
+  - `Instructions.md` must stay untracked.
 - Key decisions:
-  - Milestone delivery through small PRs from `codex/*` branches.
-  - Protected `main` requires CI + approving review.
-  - Keep local full tests; CI remains minimum validation.
-  - Max compatibility target with auto-detection; only clear incompatible paths should fail.
-  - Partial-database execution via `--databases` is explicitly allowed.
+  - Deliver in small PRs from `codex/*` branches.
+  - Keep CI minimal and local testing comprehensive.
+  - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
+  - Allow partial-database scope via `--databases`.
 - State:
-  - PR #6 merged by user on 2026-03-04; branch `codex/feat/data-baseline-checkpoint-phase4` deleted.
-  - PR #7 merged by user on 2026-03-04; branch `codex/feat/schema-verify-phase5` deleted.
-  - PR #8 merged by user on 2026-03-04; branch `codex/feat/data-verify-phase6` deleted.
-  - PR #9 merged by user on 2026-03-04; branch `codex/feat/data-verify-hash-phase7` deleted.
-  - PR #10 merged by user on 2026-03-04; branch `codex/feat/data-verify-sample-phase8` deleted.
-  - PR #11 merged by user on 2026-03-04; branch `codex/feat/data-verify-fullhash-phase9` deleted.
-  - PR #12 merged by user on 2026-03-04; branch `codex/feat/replicate-checkpoint-phase10` deleted.
-  - PR #13 merged by user on 2026-03-04; branch `codex/feat/compatibility-plan-phase11` deleted.
-  - Current branch: `main` (synced to `origin/main`).
+  - Branch: `codex/feat/replicate-safety-phase13` (from `main` at `4dc59a8`).
+  - Phase 13 code changes implemented locally; tests pass.
+  - PR #15 opened: `feat: phase 13 replication checkpoint safety hardening` (CI pending).
+  - `Instructions.md` remains untracked.
 - Done:
-  - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
-  - Phase 5 implemented and merged:
-    - `verify --verify-level=schema` with fail-on-diff behavior.
-    - schema diff engine (`internal/verify/schema`) with deterministic outputs.
-    - JSON/text verify reporting and unit tests.
-  - Phase 6 implementation added on current branch:
-    - new package `internal/verify/data` with deterministic table row-count verification.
-    - `verify --verify-level=data --data-mode=count` wired into command flow.
-    - fail-fast behavior for unimplemented data modes (`hash`, `sample`, `full-hash`).
-    - JSON/text data diff reporting with non-zero exit on mismatches.
-    - unit tests for data verifier, command parsing/output, and CLI verify paths.
-  - Phase 7 implementation added on current branch:
-    - `verify --verify-level=data --data-mode=hash` implemented.
-    - deterministic per-table hash computation with stable row serialization and ordering.
-    - hash mismatch reporting integrated into JSON/text verify output.
-    - unit tests extended for hash diff logic and command output.
-  - Phase 8 implementation in progress on current branch:
-    - `verify --verify-level=data --data-mode=sample --sample-size` added.
-    - deterministic sample hashing per table with explicit sample-size control.
-    - command/CLI/docs updates for sample mode.
-    - CI fix applied: staticcheck SA1012 in `internal/verify/data/verify_test.go` (replaced nil context with `context.TODO()`).
-  - Phase 8 merged.
-  - Phase 9 implementation added on current branch:
-    - `verify --verify-level=data --data-mode=full-hash` implemented.
-    - `VerifyFullHash` path wired to full-table deterministic hash verification.
-    - CLI/tests/docs updated for full-hash mode.
-  - Phase 10 implemented and merged:
-    - `replicate` now parses and validates `--apply-ddl={ignore,apply,warn}`.
-    - replication checkpoint state added (`replication-checkpoint.json` in `--state-dir`).
-    - binlog position baseline runner added (`internal/replicate/binlog`).
-    - CLI/command/state/binlog tests added.
-  - Phase 11 implemented and merged:
-    - new compatibility evaluator (`internal/compat`) with engine/version auto-detect.
-    - `plan` now performs live source/destination version detection and compatibility evaluation.
-    - incompatible plan exits non-zero after emitting detailed findings + remediation proposals.
-    - compatibility report includes partial-scope finding when `--databases` is used.
-    - plan command and compatibility unit tests added/updated.
-  - Phase 12 implementation in progress on current branch:
-    - replication source preflight checks added (`log_bin` and `binlog_format`).
-    - replicate summary now includes source binlog readiness details.
-    - binlog helper tests extended for preflight value parsing.
-  - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
+  - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
+  - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
+  - Phase 10 merged (replication checkpoint baseline + `--apply-ddl` validation).
+  - Phase 11 merged (engine/version compatibility auto-detection and fail-fast reports in `plan`).
+  - Phase 12 merged (replication source preflight for `log_bin` and `binlog_format=ROW`).
+  - Phase 13 implemented on branch (pending PR merge):
+    - replication summary now distinguishes `source_end` vs `applied_end`.
+    - checkpoint persists only `applied_end` position.
+    - no-op apply scaffold added with `applied_events=0` for safe event-replay groundwork.
+    - replication run tests added for checkpoint safety and apply-window semantics.
+    - docs updated in README/operators guide for new replication summary semantics.
 - Now:
-  - Run validation and publish PR for Phase 12 replication preflight hardening.
+  - Wait for PR #15 checks and merge.
 - Next:
-  - Merge PR for replication preflight hardening.
-  - Continue with event-apply replication milestone.
+  - Start next phase for real event apply ordering and idempotent replay semantics.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family (current phase adds heuristics and reporting, matrix still to be expanded).
+  - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/replicate.go`, `internal/replicate/binlog/*`, `internal/commands/replicate_test.go`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`, `Instructions.md` (untracked)
-  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/commands/replicate.go`, `README.md`, `docs/operators-guide.md`.
+  - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
