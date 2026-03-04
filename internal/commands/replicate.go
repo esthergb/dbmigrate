@@ -13,10 +13,11 @@ import (
 )
 
 type replicateOptions struct {
-	ApplyDDL  string
-	Resume    bool
-	StartFile string
-	StartPos  uint
+	ApplyDDL       string
+	ConflictPolicy string
+	Resume         bool
+	StartFile      string
+	StartPos       uint
 }
 
 func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -33,9 +34,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			cfg,
 			"replicate",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (resume=%v apply_ddl=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.Resume,
 				opts.ApplyDDL,
+				opts.ConflictPolicy,
 				opts.StartFile,
 				opts.StartPos,
 			),
@@ -59,11 +61,12 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	}()
 
 	summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
-		ApplyDDL:  opts.ApplyDDL,
-		Resume:    opts.Resume,
-		StartFile: opts.StartFile,
-		StartPos:  uint32(opts.StartPos),
-		SourceDSN: cfg.Source,
+		ApplyDDL:       opts.ApplyDDL,
+		ConflictPolicy: opts.ConflictPolicy,
+		Resume:         opts.Resume,
+		StartFile:      opts.StartFile,
+		StartPos:       uint32(opts.StartPos),
+		SourceDSN:      cfg.Source,
 	})
 	if err != nil {
 		return fmt.Errorf("replicate run failed: %w", err)
@@ -74,7 +77,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		cfg,
 		"replicate",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d apply_ddl=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -86,6 +89,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			summary.EndPos,
 			summary.AppliedEvents,
 			summary.ApplyDDL,
+			summary.ConflictPolicy,
 			summary.CheckpointFile,
 		),
 	)
@@ -93,14 +97,16 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 
 func parseReplicateOptions(args []string) (replicateOptions, error) {
 	opts := replicateOptions{
-		ApplyDDL: "warn",
-		Resume:   true,
-		StartPos: 4,
+		ApplyDDL:       "warn",
+		ConflictPolicy: "fail",
+		Resume:         true,
+		StartPos:       4,
 	}
 
 	fs := flag.NewFlagSet("replicate", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
+	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
 	fs.BoolVar(&opts.Resume, "resume", true, "resume from replication checkpoint in --state-dir")
 	fs.StringVar(&opts.StartFile, "start-file", "", "start binlog file when no checkpoint exists")
 	fs.UintVar(&opts.StartPos, "start-pos", 4, "start binlog position when no checkpoint exists")
@@ -113,6 +119,12 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		// valid
 	default:
 		return replicateOptions{}, fmt.Errorf("invalid --apply-ddl value %q (expected ignore, apply, or warn)", opts.ApplyDDL)
+	}
+	switch opts.ConflictPolicy {
+	case "fail", "source-wins", "dest-wins":
+		// valid
+	default:
+		return replicateOptions{}, fmt.Errorf("invalid --conflict-policy value %q (expected fail, source-wins, or dest-wins)", opts.ConflictPolicy)
 	}
 	if opts.StartPos < 4 {
 		return replicateOptions{}, errors.New("start-pos must be >= 4")

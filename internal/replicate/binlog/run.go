@@ -15,17 +15,19 @@ import (
 
 // Options controls checkpointed replication baseline behavior.
 type Options struct {
-	ApplyDDL  string
-	Resume    bool
-	StartFile string
-	StartPos  uint32
-	SourceDSN string
+	ApplyDDL       string
+	ConflictPolicy string
+	Resume         bool
+	StartFile      string
+	StartPos       uint32
+	SourceDSN      string
 }
 
 // Summary reports checkpoint update results.
 type Summary struct {
 	CheckpointFile string
 	ApplyDDL       string
+	ConflictPolicy string
 	SourceLogBin   bool
 	SourceFormat   string
 	SourceRowImage string
@@ -52,8 +54,11 @@ type applyResult struct {
 }
 
 type applyEvent struct {
-	Query string
-	Args  []any
+	Query               string
+	Args                []any
+	Operation           string
+	TableName           string
+	RequireRowsAffected bool
 }
 
 type applyBatch struct {
@@ -82,7 +87,11 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	if source == nil || dest == nil {
 		return Summary{}, errors.New("source and destination connections are required")
 	}
+	opts.ConflictPolicy = normalizeConflictPolicy(opts.ConflictPolicy)
 	if err := validateApplyDDL(opts.ApplyDDL); err != nil {
+		return Summary{}, err
+	}
+	if err := validateConflictPolicy(opts.ConflictPolicy); err != nil {
 		return Summary{}, err
 	}
 	if opts.StartPos > 0 && opts.StartPos < 4 {
@@ -158,6 +167,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	return Summary{
 		CheckpointFile: checkpointFile,
 		ApplyDDL:       opts.ApplyDDL,
+		ConflictPolicy: opts.ConflictPolicy,
 		SourceLogBin:   preflight.LogBinEnabled,
 		SourceFormat:   preflight.BinlogFormat,
 		SourceRowImage: preflight.BinlogRowImage,
@@ -183,6 +193,22 @@ func validateApplyDDL(value string) error {
 		return nil
 	default:
 		return fmt.Errorf("invalid apply-ddl value %q (expected ignore, apply, or warn)", value)
+	}
+}
+
+func normalizeConflictPolicy(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "fail"
+	}
+	return value
+}
+
+func validateConflictPolicy(value string) error {
+	switch value {
+	case "fail", "source-wins", "dest-wins":
+		return nil
+	default:
+		return fmt.Errorf("invalid conflict-policy value %q (expected fail, source-wins, or dest-wins)", value)
 	}
 }
 
@@ -412,9 +438,23 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				_ = tx.Rollback()
 				return applyResult{}, errors.New("apply event query is empty")
 			}
-			if _, err := tx.ExecContext(ctx, event.Query, event.Args...); err != nil {
+			result, err := tx.ExecContext(ctx, event.Query, event.Args...)
+			if err != nil {
 				_ = tx.Rollback()
 				return applyResult{}, fmt.Errorf("apply event at %s:%d: %w", batch.EndFile, batch.EndPos, err)
+			}
+			if event.RequireRowsAffected && result != nil {
+				rowsAffected, rowsErr := result.RowsAffected()
+				if rowsErr == nil && rowsAffected == 0 {
+					_ = tx.Rollback()
+					return applyResult{}, fmt.Errorf(
+						"conflict-policy=fail detected non-applied %s on %s at %s:%d; review drift and rerun with --conflict-policy=source-wins or --conflict-policy=dest-wins if acceptable",
+						event.Operation,
+						event.TableName,
+						batch.EndFile,
+						batch.EndPos,
+					)
+				}
 			}
 		}
 

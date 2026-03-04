@@ -43,17 +43,19 @@ Verification behavior:
 ## Incremental replication checkpoint execution
 
 - Resume from saved checkpoint:
-  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume --apply-ddl warn`
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume --apply-ddl warn --conflict-policy fail`
 - Start from explicit source position:
-  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume=false --start-file mysql-bin.000001 --start-pos 4 --apply-ddl warn`
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume=false --start-file mysql-bin.000001 --start-pos 4 --apply-ddl warn --conflict-policy fail`
 
 Replication checkpoint behavior:
 - Checkpoint file path: `--state-dir/replication-checkpoint.json`.
 - Supported DDL policy values are restricted to `--apply-ddl={ignore,apply,warn}`.
+- Supported conflict policies are `--conflict-policy={fail,source-wins,dest-wins}`.
 - Run summary reports `start`, `source_end`, `applied_end`, and `applied_events`.
 - Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
 - Event application is transaction-batch based; checkpoint advances only after commit.
 - Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
+- `--apply-ddl=apply` is safety-classified: risky DDL (drop/rename/destructive alter patterns) is blocked with remediation guidance.
 - Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.
 
 ## Safety defaults

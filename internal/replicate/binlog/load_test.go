@@ -88,6 +88,20 @@ func TestBuildApplyBatchesDDLApply(t *testing.T) {
 	}
 }
 
+func TestBuildApplyBatchesDDLRiskyBlockedInApplyMode(t *testing.T) {
+	events := []streamEvent{
+		{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 240, Query: "DROP TABLE app.t"},
+	}
+
+	_, err := buildApplyBatches(context.Background(), nil, events, Options{ApplyDDL: "apply"})
+	if err == nil {
+		t.Fatal("expected risky DDL to be blocked in apply mode")
+	}
+	if !strings.Contains(err.Error(), "risky ddl blocked") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestBuildApplyBatchesIncompleteTransactionFails(t *testing.T) {
 	restore := stubLoadHooks(t)
 	defer restore()
@@ -145,6 +159,37 @@ func TestSourceSyncerConfigFlavorAndHost(t *testing.T) {
 	}
 	if mariaCfg.Flavor != "mariadb" || mariaCfg.Host != "db.example" || mariaCfg.Port != 3307 {
 		t.Fatalf("unexpected mariadb sync config: %+v", mariaCfg)
+	}
+}
+
+func TestBuildInsertStatementConflictPolicies(t *testing.T) {
+	metadata := tableMetadata{
+		Columns:     []string{"id", "name"},
+		KeyOrdinals: []int{0},
+	}
+
+	failQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "fail")
+	if err != nil {
+		t.Fatalf("buildInsertStatement fail: %v", err)
+	}
+	if strings.Contains(failQuery, "ON DUPLICATE KEY UPDATE") || strings.Contains(failQuery, "INSERT IGNORE") {
+		t.Fatalf("unexpected fail policy query: %s", failQuery)
+	}
+
+	sourceWinsQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "source-wins")
+	if err != nil {
+		t.Fatalf("buildInsertStatement source-wins: %v", err)
+	}
+	if !strings.Contains(sourceWinsQuery, "ON DUPLICATE KEY UPDATE") {
+		t.Fatalf("unexpected source-wins query: %s", sourceWinsQuery)
+	}
+
+	destWinsQuery, _, err := buildInsertStatement("app", "items", metadata, []any{int64(1), "a"}, "dest-wins")
+	if err != nil {
+		t.Fatalf("buildInsertStatement dest-wins: %v", err)
+	}
+	if !strings.Contains(destWinsQuery, "INSERT IGNORE") {
+		t.Fatalf("unexpected dest-wins query: %s", destWinsQuery)
 	}
 }
 
