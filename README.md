@@ -9,10 +9,12 @@ This repository is in phased development.
 Completed:
 - Phase 0 research docs (`docs/known-problems.md`, `docs/risk-checklist.md`)
 - Phase 1 foundation scaffold (CLI skeleton, project structure, CI baseline)
+- Phase 2 config and connection layer (`--config`, DSN validation/redaction)
+- Phase 3 baseline schema migration (tables/views)
+- Phase 4 baseline data migration with checkpoint/resume (`--chunk-size`, `--resume`)
 
 In progress next:
-- Compatibility planning engine
-- Baseline schema/data migration implementation
+- Schema/data verification and incremental replication hardening
 
 ## Supported migration priorities
 
@@ -28,6 +30,19 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..."
 dbmigrate replicate --source "mysql://..." --dest "mysql://..."
 dbmigrate verify --source "mysql://..." --dest "mysql://..."
 dbmigrate report --source "mysql://..." --dest "mysql://..." --json
+```
+
+## Baseline migration modes
+
+```bash
+# Schema-only baseline
+dbmigrate migrate --source "mysql://..." --dest "mysql://..." --schema-only
+
+# Data-only baseline in chunks (resume from checkpoint on retry)
+dbmigrate migrate --source "mysql://..." --dest "mysql://..." --data-only --chunk-size 1000 --resume
+
+# Full baseline (schema + data)
+dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 ```
 
 ## Configuration file support (phase 2)
