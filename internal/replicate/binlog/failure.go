@@ -16,6 +16,7 @@ type applyFailure struct {
 	Operation    string
 	TableName    string
 	Query        string
+	ValueSample  []string
 	Remediation  string
 	Message      string
 	Cause        error
@@ -45,6 +46,7 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 		Operation:   event.Operation,
 		TableName:   event.TableName,
 		Query:       event.Query,
+		ValueSample: buildValueSample(event.KeyArgs),
 		Message:     fmt.Sprintf("apply event at %s:%d failed", file, pos),
 		Cause:       cause,
 		Remediation: "review table schema and conflicting destination rows, then rerun replicate from checkpoint",
@@ -85,4 +87,46 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 	}
 
 	return failure
+}
+
+func buildValueSample(values []any) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	limit := len(values)
+	if limit > 6 {
+		limit = 6
+	}
+
+	sample := make([]string, 0, limit+1)
+	for i := 0; i < limit; i++ {
+		sample = append(sample, fmt.Sprintf("v%d=%s", i+1, sampleValue(values[i])))
+	}
+	if len(values) > limit {
+		sample = append(sample, fmt.Sprintf("... +%d more", len(values)-limit))
+	}
+	return sample
+}
+
+func sampleValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return "NULL"
+	case []byte:
+		return truncateForSample(string(typed))
+	case string:
+		return truncateForSample(typed)
+	default:
+		return truncateForSample(fmt.Sprint(value))
+	}
+}
+
+func truncateForSample(value string) string {
+	normalized := strings.ReplaceAll(value, "\n", " ")
+	normalized = strings.ReplaceAll(normalized, "\r", " ")
+	if len(normalized) <= 80 {
+		return normalized
+	}
+	return normalized[:80] + "..."
 }

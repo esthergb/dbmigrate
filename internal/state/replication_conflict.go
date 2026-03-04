@@ -25,6 +25,7 @@ type ReplicationConflictReport struct {
 	Operation      string    `json:"operation,omitempty"`
 	TableName      string    `json:"table_name,omitempty"`
 	Query          string    `json:"query,omitempty"`
+	ValueSample    []string  `json:"value_sample,omitempty"`
 	Message        string    `json:"message"`
 	Remediation    string    `json:"remediation,omitempty"`
 }

@@ -345,13 +345,14 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 	case streamEventWriteRows:
 		out := make([]applyEvent, 0, len(event.Rows))
 		for _, row := range event.Rows {
-			query, args, err := buildInsertStatement(event.Schema, event.Table, metadata, row, conflictPolicy)
+			query, args, keyArgs, err := buildInsertStatement(event.Schema, event.Table, metadata, row, conflictPolicy)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, applyEvent{
 				Query:     query,
 				Args:      args,
+				KeyArgs:   keyArgs,
 				Operation: "insert",
 				TableName: targetName,
 			})
@@ -360,13 +361,14 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 	case streamEventDeleteRows:
 		out := make([]applyEvent, 0, len(event.Rows))
 		for _, row := range event.Rows {
-			query, args, err := buildDeleteStatement(event.Schema, event.Table, metadata, row)
+			query, args, keyArgs, err := buildDeleteStatement(event.Schema, event.Table, metadata, row)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, applyEvent{
 				Query:               query,
 				Args:                args,
+				KeyArgs:             keyArgs,
 				Operation:           "delete",
 				TableName:           targetName,
 				RequireRowsAffected: conflictPolicy == "fail",
@@ -381,13 +383,14 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 		for i := 0; i < len(event.Rows); i += 2 {
 			oldRow := event.Rows[i]
 			newRow := event.Rows[i+1]
-			query, args, err := buildUpdateStatement(event.Schema, event.Table, metadata, oldRow, newRow)
+			query, args, keyArgs, err := buildUpdateStatement(event.Schema, event.Table, metadata, oldRow, newRow)
 			if err != nil {
 				return nil, err
 			}
 			out = append(out, applyEvent{
 				Query:               query,
 				Args:                args,
+				KeyArgs:             keyArgs,
 				Operation:           "update",
 				TableName:           targetName,
 				RequireRowsAffected: conflictPolicy == "fail",
@@ -399,9 +402,9 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 	}
 }
 
-func buildInsertStatement(schema string, table string, metadata tableMetadata, row []any, conflictPolicy string) (string, []any, error) {
+func buildInsertStatement(schema string, table string, metadata tableMetadata, row []any, conflictPolicy string) (string, []any, []any, error) {
 	if len(row) != len(metadata.Columns) {
-		return "", nil, fmt.Errorf("row column count mismatch for %s.%s: got=%d expected=%d (require binlog_row_image=FULL)", schema, table, len(row), len(metadata.Columns))
+		return "", nil, nil, fmt.Errorf("row column count mismatch for %s.%s: got=%d expected=%d (require binlog_row_image=FULL)", schema, table, len(row), len(metadata.Columns))
 	}
 	columnList := make([]string, 0, len(metadata.Columns))
 	placeholders := make([]string, 0, len(metadata.Columns))
@@ -441,33 +444,36 @@ func buildInsertStatement(schema string, table string, metadata tableMetadata, r
 			strings.Join(updates, ","),
 		)
 	default:
-		return "", nil, fmt.Errorf("unsupported conflict policy %q", conflictPolicy)
+		return "", nil, nil, fmt.Errorf("unsupported conflict policy %q", conflictPolicy)
+	}
+
+	keyArgs, err := extractKeyArgs(metadata, row)
+	if err != nil {
+		return "", nil, nil, err
 	}
 
 	args := make([]any, len(row))
 	copy(args, row)
-	return query, args, nil
+	return query, args, keyArgs, nil
 }
 
-func buildDeleteStatement(schema string, table string, metadata tableMetadata, row []any) (string, []any, error) {
+func buildDeleteStatement(schema string, table string, metadata tableMetadata, row []any) (string, []any, []any, error) {
 	if len(row) != len(metadata.Columns) {
-		return "", nil, fmt.Errorf("row column count mismatch for %s.%s: got=%d expected=%d (require binlog_row_image=FULL)", schema, table, len(row), len(metadata.Columns))
+		return "", nil, nil, fmt.Errorf("row column count mismatch for %s.%s: got=%d expected=%d (require binlog_row_image=FULL)", schema, table, len(row), len(metadata.Columns))
 	}
-	whereIndexes := metadata.KeyOrdinals
-	if len(whereIndexes) == 0 {
-		whereIndexes = make([]int, 0, len(metadata.Columns))
-		for i := range metadata.Columns {
-			whereIndexes = append(whereIndexes, i)
-		}
+	keyArgs, err := extractKeyArgs(metadata, row)
+	if err != nil {
+		return "", nil, nil, err
 	}
+	whereIndexes := keyOrdinals(metadata)
 	clause, args := whereClauseFromRow(metadata.Columns, whereIndexes, row)
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", qualifiedTable(schema, table), clause)
-	return query, args, nil
+	return query, args, keyArgs, nil
 }
 
-func buildUpdateStatement(schema string, table string, metadata tableMetadata, oldRow []any, newRow []any) (string, []any, error) {
+func buildUpdateStatement(schema string, table string, metadata tableMetadata, oldRow []any, newRow []any) (string, []any, []any, error) {
 	if len(oldRow) != len(metadata.Columns) || len(newRow) != len(metadata.Columns) {
-		return "", nil, fmt.Errorf("row column count mismatch for %s.%s (require binlog_row_image=FULL)", schema, table)
+		return "", nil, nil, fmt.Errorf("row column count mismatch for %s.%s (require binlog_row_image=FULL)", schema, table)
 	}
 
 	setParts := make([]string, 0, len(metadata.Columns))
@@ -477,13 +483,11 @@ func buildUpdateStatement(schema string, table string, metadata tableMetadata, o
 		args = append(args, newRow[i])
 	}
 
-	whereIndexes := metadata.KeyOrdinals
-	if len(whereIndexes) == 0 {
-		whereIndexes = make([]int, 0, len(metadata.Columns))
-		for i := range metadata.Columns {
-			whereIndexes = append(whereIndexes, i)
-		}
+	keyArgs, err := extractKeyArgs(metadata, oldRow)
+	if err != nil {
+		return "", nil, nil, err
 	}
+	whereIndexes := keyOrdinals(metadata)
 	clause, whereArgs := whereClauseFromRow(metadata.Columns, whereIndexes, oldRow)
 	args = append(args, whereArgs...)
 	query := fmt.Sprintf(
@@ -492,7 +496,7 @@ func buildUpdateStatement(schema string, table string, metadata tableMetadata, o
 		strings.Join(setParts, ","),
 		clause,
 	)
-	return query, args, nil
+	return query, args, keyArgs, nil
 }
 
 func whereClauseFromRow(columns []string, indexes []int, row []any) (string, []any) {
@@ -503,6 +507,29 @@ func whereClauseFromRow(columns []string, indexes []int, row []any) (string, []a
 		args = append(args, row[idx])
 	}
 	return strings.Join(parts, " AND "), args
+}
+
+func keyOrdinals(metadata tableMetadata) []int {
+	if len(metadata.KeyOrdinals) > 0 {
+		return metadata.KeyOrdinals
+	}
+	out := make([]int, 0, len(metadata.Columns))
+	for i := range metadata.Columns {
+		out = append(out, i)
+	}
+	return out
+}
+
+func extractKeyArgs(metadata tableMetadata, row []any) ([]any, error) {
+	if len(row) != len(metadata.Columns) {
+		return nil, fmt.Errorf("row column count mismatch while extracting key args: got=%d expected=%d", len(row), len(metadata.Columns))
+	}
+	keyIdx := keyOrdinals(metadata)
+	args := make([]any, 0, len(keyIdx))
+	for _, idx := range keyIdx {
+		args = append(args, row[idx])
+	}
+	return args, nil
 }
 
 func tableKey(schema string, table string) string {

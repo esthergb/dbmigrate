@@ -16,9 +16,8 @@ Last updated: 2026-03-04
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-error-categorization-phase18` from `main@87590f2` (PR #19 merged by user).
-  - Phase 18 changes implemented locally; local tests passing.
-  - PR #20 opened: `feat: phase 18 replication error categorization hardening` (CI pending).
+  - Branch: `codex/feat/replicate-conflict-samples-phase19` from `main@bea0369` (PR #20 merged by user).
+  - Phase 19 changes implemented locally; local tests passing.
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -58,17 +57,23 @@ Last updated: 2026-03-04
     - binlog apply/load paths now emit typed failures (`apply_sql_error`, `conflict_zero_rows`, `ddl_blocked`, `ddl_risky_blocked`, `incomplete_transaction`, etc.) to improve operator diagnostics.
     - new state persistence module added for conflict reports with round-trip tests.
     - replication run tests now validate conflict report generation on apply failures.
-  - Phase 18 implemented on branch (pending PR merge):
+  - Phase 18 merged:
     - SQL execution failures are categorized into explicit failure types (`schema_drift`, `conflict_duplicate_key`, `conflict_foreign_key`, `permission_denied`, `data_conversion_error`, `retryable_transaction_error`, fallback `apply_sql_error`).
     - conflict report schema now includes `sql_error_code` when available.
     - execution error classification now derives targeted remediation guidance per failure class.
     - tests added for SQL error classification and conflict report SQL-code persistence.
+  - Phase 19 implemented on branch (pending PR merge):
+    - replication conflict reports now include `value_sample` for table-level key/value context.
+    - row apply pipeline now tracks key args per event and propagates samples into failures/reports.
+    - SQL error classification attaches sampled key values to categorized failures for faster triage.
+    - state/report tests updated for `value_sample` persistence; load/run tests updated for key-arg extraction and sampling behavior.
 - Now:
-  - Wait for PR #20 checks and merge.
+  - Commit, push, and open PR for Phase 19.
 - Next:
-  - Continue with table-level conflict samples in reports.
+  - Merge Phase 19 PR.
+  - Continue with richer per-table conflict payloads (column-name aware samples).
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/load_test.go`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
   - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go mod tidy`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
