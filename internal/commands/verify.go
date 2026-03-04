@@ -19,6 +19,7 @@ import (
 type verifyOptions struct {
 	VerifyLevel string
 	DataMode    string
+	SampleSize  int
 }
 
 type verifySchemaResult struct {
@@ -50,7 +51,12 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 		return errors.New("verify requires both --source and --dest (or config file equivalents)")
 	}
 	if cfg.DryRun {
-		return writeResult(out, cfg, "verify", fmt.Sprintf("dry-run: verify plan ready (verify_level=%s data_mode=%s)", opts.VerifyLevel, opts.DataMode))
+		return writeResult(
+			out,
+			cfg,
+			"verify",
+			fmt.Sprintf("dry-run: verify plan ready (verify_level=%s data_mode=%s sample_size=%d)", opts.VerifyLevel, opts.DataMode, opts.SampleSize),
+		)
 	}
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
@@ -130,6 +136,28 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			summary, err := dataVerify.VerifyHash(ctx, sourceDB, destDB, dataVerify.Options{
 				IncludeDatabases: cfg.Databases,
 				ExcludeDatabases: cfg.ExcludeDatabases,
+				SampleSize:       opts.SampleSize,
+			})
+			if err != nil {
+				return fmt.Errorf("data verification failed: %w", err)
+			}
+			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+				return err
+			}
+			if len(summary.Diffs) > 0 {
+				return fmt.Errorf(
+					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+					summary.MissingInDestination,
+					summary.MissingInSource,
+					summary.HashMismatches,
+				)
+			}
+			return nil
+		case "sample":
+			summary, err := dataVerify.VerifySample(ctx, sourceDB, destDB, dataVerify.Options{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+				SampleSize:       opts.SampleSize,
 			})
 			if err != nil {
 				return fmt.Errorf("data verification failed: %w", err)
@@ -147,7 +175,7 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			}
 			return nil
 		default:
-			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash", opts.DataMode)
+			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample", opts.DataMode)
 		}
 	default:
 		return fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel)
@@ -158,14 +186,19 @@ func parseVerifyOptions(args []string) (verifyOptions, error) {
 	opts := verifyOptions{
 		VerifyLevel: "schema",
 		DataMode:    "count",
+		SampleSize:  1000,
 	}
 
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.VerifyLevel, "verify-level", "schema", "verification level (schema|data)")
 	fs.StringVar(&opts.DataMode, "data-mode", "count", "data verification mode (count|hash|sample|full-hash)")
+	fs.IntVar(&opts.SampleSize, "sample-size", 1000, "rows per table to hash in data-mode=sample")
 	if err := fs.Parse(args); err != nil {
 		return verifyOptions{}, err
+	}
+	if opts.SampleSize < 1 {
+		return verifyOptions{}, errors.New("sample-size must be >= 1")
 	}
 	switch opts.VerifyLevel {
 	case "schema", "data":

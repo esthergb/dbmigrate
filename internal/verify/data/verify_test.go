@@ -83,10 +83,18 @@ func TestDiffTableHashes(t *testing.T) {
 }
 
 func TestBuildOrderedSelectSQL(t *testing.T) {
-	sql := buildOrderedSelectSQL("app", "users", []string{"id", "name"})
+	sql := buildOrderedSelectSQL("app", "users", []string{"id", "name"}, 0)
 	expected := "SELECT `id`, `name` FROM `app`.`users` ORDER BY `id`, `name`"
 	if sql != expected {
 		t.Fatalf("unexpected select SQL: %s", sql)
+	}
+}
+
+func TestBuildOrderedSelectSQLWithLimit(t *testing.T) {
+	sql := buildOrderedSelectSQL("app", "users", []string{"id", "name"}, 100)
+	expected := "SELECT `id`, `name` FROM `app`.`users` ORDER BY `id`, `name` LIMIT ?"
+	if sql != expected {
+		t.Fatalf("unexpected select SQL with limit: %s", sql)
 	}
 }
 
@@ -99,5 +107,12 @@ func TestNormalizeHashValue(t *testing.T) {
 	}
 	if !strings.HasPrefix(normalizeHashValue(time.Date(2026, 3, 4, 12, 13, 14, 0, time.UTC)), "time:2026-03-04T12:13:14Z") {
 		t.Fatalf("unexpected time marker: %q", normalizeHashValue(time.Date(2026, 3, 4, 12, 13, 14, 0, time.UTC)))
+	}
+}
+
+func TestVerifySampleDefaultsSampleSize(t *testing.T) {
+	summary, err := VerifySample(nil, nil, nil, Options{})
+	if err == nil {
+		t.Fatalf("expected error for nil connections, got summary=%+v", summary)
 	}
 }

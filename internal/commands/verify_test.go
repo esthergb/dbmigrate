@@ -21,10 +21,13 @@ func TestParseVerifyOptionsDefaults(t *testing.T) {
 	if opts.DataMode != "count" {
 		t.Fatalf("expected default data-mode count, got %q", opts.DataMode)
 	}
+	if opts.SampleSize != 1000 {
+		t.Fatalf("expected default sample-size 1000, got %d", opts.SampleSize)
+	}
 }
 
 func TestParseVerifyOptionsExplicit(t *testing.T) {
-	opts, err := parseVerifyOptions([]string{"--verify-level=data", "--data-mode=hash"})
+	opts, err := parseVerifyOptions([]string{"--verify-level=data", "--data-mode=hash", "--sample-size=250"})
 	if err != nil {
 		t.Fatalf("expected parse success: %v", err)
 	}
@@ -33,6 +36,9 @@ func TestParseVerifyOptionsExplicit(t *testing.T) {
 	}
 	if opts.DataMode != "hash" {
 		t.Fatalf("expected data-mode hash, got %q", opts.DataMode)
+	}
+	if opts.SampleSize != 250 {
+		t.Fatalf("expected sample-size 250, got %d", opts.SampleSize)
 	}
 }
 
@@ -47,6 +53,13 @@ func TestParseVerifyOptionsInvalidDataMode(t *testing.T) {
 	_, err := parseVerifyOptions([]string{"--data-mode=approx"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid data-mode")
+	}
+}
+
+func TestParseVerifyOptionsInvalidSampleSize(t *testing.T) {
+	_, err := parseVerifyOptions([]string{"--sample-size=0"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid sample-size")
 	}
 }
 
