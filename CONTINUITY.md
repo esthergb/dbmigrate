@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - Push realizado y Fase 0 ejecutada a nivel documental. Pendiente commit/push de docs de investigación.
+  - Fase 0 completada y subida a remoto en rama dedicada. Pendiente iniciar Fase 1 (scaffolding del repositorio y CI mínima).
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -46,11 +46,13 @@ Last updated: 2026-03-04
   - Push de rama bootstrap completado: `origin/codex/chore/agent-skills-bootstrap`.
   - Creada rama de fase 0: `codex/feat/docs-phase0-research`.
   - Creados `docs/known-problems.md` y `docs/risk-checklist.md`.
+  - Commit Fase 0: `56c7e79` (`docs: add phase-0 migration risks and operator checklist`).
+  - Push Fase 0: `origin/codex/feat/docs-phase0-research`.
 - Now:
-  - Revisar cobertura final de Fase 0 y commitear cambios.
+  - Esperar instrucciones del usuario para arrancar Fase 1.
 - Next:
-  - Push de `codex/feat/docs-phase0-research`.
-  - Continuar con scaffolding del proyecto (fase siguiente) tras confirmación del usuario.
+  - Iniciar scaffold del proyecto Go (`cmd/`, `internal/`, `tests/`, CI mínima).
+  - Crear `docs/development-plan.md` alineado a hitos/PRs.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
   - Ninguna bloqueante para iniciar Fase 0.
