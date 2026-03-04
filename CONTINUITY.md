@@ -18,7 +18,8 @@ Last updated: 2026-03-05
 - State:
   - Branch: `codex/feat/row-diff-sample-phase25` from `main@308d4fd` (PR #25 already merged).
   - PR #26 is open: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + `Instructions.md` tracked).
-  - Phase 25 implementation in progress: add `row_diff_sample` conflict-report hints.
+  - PR #27 is open: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
+  - Phase 25 implementation is committed/pushed; local full test suite passed.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -100,11 +101,15 @@ Last updated: 2026-03-05
   - Phase 24 opened (PR #26):
     - README process/status refresh with current and pending milestones.
     - `Instructions.md` introduced as tracked project documentation.
+  - Phase 25 opened (PR #27):
+    - conflict reports now include `row_diff_sample` for compact old->new field changes.
+    - replication apply failures now emit key sample + old/new row samples + diff hints.
+    - tests updated for row-diff generation and conflict report persistence.
 - Now:
-  - Implement Phase 25 row-level diff hints in replication conflict reports and tests.
+  - Wait for PR #26 and PR #27 CI/review and merge.
 - Next:
-  - Commit/push and open PR for Phase 25.
-  - Merge PR #26, then continue with next implementation branch.
+  - Merge PR #26 and PR #27.
+  - Continue with next implementation branch after report ergonomics update.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
