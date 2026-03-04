@@ -18,6 +18,7 @@ Last updated: 2026-03-04
 - State:
   - Branch: `codex/feat/replicate-conflict-ddl-phase16` from `main@f33746e` (PR #17 merged by user).
   - Phase 16 changes implemented locally; local tests passing.
+  - PR #18 opened: `feat: phase 16 replicate conflict policy and ddl safety gates` (CI pending).
   - `Instructions.md` remains untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -52,9 +53,8 @@ Last updated: 2026-03-04
     - replicate output includes selected `conflict_policy`.
     - CLI/command/binlog tests expanded for conflict policy and DDL safety classification.
 - Now:
-  - Commit, push, and open PR for Phase 16.
+  - Wait for PR #18 checks and merge.
 - Next:
-  - Merge Phase 16 PR.
   - Continue with schema drift handling/reporting and richer conflict detail reports.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
