@@ -40,6 +40,18 @@ Verification behavior:
 - `--json` emits structured diff details for automation pipelines.
 - `sample` mode uses `--sample-size` rows per table; `full-hash` hashes full table content.
 
+## Incremental replication checkpoint execution
+
+- Resume from saved checkpoint:
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume --apply-ddl warn`
+- Start from explicit source position:
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --resume=false --start-file mysql-bin.000001 --start-pos 4 --apply-ddl warn`
+
+Replication checkpoint behavior:
+- Checkpoint file path: `--state-dir/replication-checkpoint.json`.
+- Supported DDL policy values are restricted to `--apply-ddl={ignore,apply,warn}`.
+- Current milestone updates checkpoint from source binlog position as a safe foundation for event apply phases.
+
 ## Safety defaults
 
 - Fail fast on known incompatible features.

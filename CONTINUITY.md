@@ -20,7 +20,8 @@ Last updated: 2026-03-04
   - PR #8 merged by user on 2026-03-04; branch `codex/feat/data-verify-phase6` deleted.
   - PR #9 merged by user on 2026-03-04; branch `codex/feat/data-verify-hash-phase7` deleted.
   - PR #10 merged by user on 2026-03-04; branch `codex/feat/data-verify-sample-phase8` deleted.
-  - Current branch: `codex/feat/data-verify-fullhash-phase9`.
+  - PR #11 merged by user on 2026-03-04; branch `codex/feat/data-verify-fullhash-phase9` deleted.
+  - Current branch: `codex/feat/replicate-checkpoint-phase10`.
 - Done:
   - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
   - Phase 5 implemented and merged:
@@ -48,14 +49,19 @@ Last updated: 2026-03-04
     - `verify --verify-level=data --data-mode=full-hash` implemented.
     - `VerifyFullHash` path wired to full-table deterministic hash verification.
     - CLI/tests/docs updated for full-hash mode.
+  - Phase 10 implementation in progress on current branch:
+    - `replicate` now parses and validates `--apply-ddl={ignore,apply,warn}`.
+    - replication checkpoint state added (`replication-checkpoint.json` in `--state-dir`).
+    - binlog position baseline runner added (`internal/replicate/binlog`).
+    - CLI/command/state/binlog tests added.
   - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
-  - Commit, push, and open PR for Phase 9 full-hash mode.
+  - Commit, push, and open PR for Phase 10 replication checkpoint baseline.
 - Next:
-  - Merge PR for full-hash mode.
+  - Merge PR for replication checkpoint baseline.
   - Continue with replication hardening milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/verify.go`, `internal/commands/verify_test.go`, `internal/verify/data/*`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`, `Instructions.md` (untracked)
+  - Files: `CONTINUITY.md`, `internal/commands/replicate.go`, `internal/commands/replicate_test.go`, `internal/replicate/binlog/*`, `internal/state/replication*`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`, `Instructions.md` (untracked)
   - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`
