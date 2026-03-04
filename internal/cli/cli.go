@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/esthergb/dbmigrate/internal/commands"
 	"github.com/esthergb/dbmigrate/internal/config"
@@ -48,7 +49,8 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	fs.SetOutput(stderr)
 	config.BindGlobalFlags(fs, &cfg)
 
-	if err := fs.Parse(args[1:]); err != nil {
+	globalArgs, commandArgs := splitGlobalAndCommandArgs(args[1:])
+	if err := fs.Parse(globalArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
 		}
@@ -71,7 +73,7 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		return exitUsage
 	}
 
-	if err := handler(ctx, cfg, fs.Args(), stdout); err != nil {
+	if err := handler(ctx, cfg, commandArgs, stdout); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
 		return exitRun
 	}
@@ -95,4 +97,66 @@ func writeHelp(out io.Writer, registry map[string]commands.Handler) {
 		_, _ = fmt.Fprintf(out, "  %-10s %s\n", name, commands.Synopsis(name))
 	}
 	_, _ = fmt.Fprintln(out, "  version    print build version")
+}
+
+func splitGlobalAndCommandArgs(raw []string) ([]string, []string) {
+	globalFlagsWithValue := map[string]struct{}{
+		"source":            {},
+		"dest":              {},
+		"config":            {},
+		"databases":         {},
+		"exclude-databases": {},
+		"include-objects":   {},
+		"concurrency":       {},
+		"tls-mode":          {},
+		"ca-file":           {},
+		"cert-file":         {},
+		"key-file":          {},
+		"state-dir":         {},
+	}
+	globalBoolFlags := map[string]struct{}{
+		"dry-run": {},
+		"verbose": {},
+		"json":    {},
+	}
+
+	global := make([]string, 0, len(raw))
+	command := make([]string, 0, len(raw))
+
+	for i := 0; i < len(raw); i++ {
+		token := raw[i]
+		if token == "--" {
+			command = append(command, raw[i+1:]...)
+			break
+		}
+
+		if !strings.HasPrefix(token, "--") {
+			command = append(command, token)
+			continue
+		}
+
+		name := strings.TrimPrefix(token, "--")
+		hasValueInline := false
+		if idx := strings.Index(name, "="); idx >= 0 {
+			name = name[:idx]
+			hasValueInline = true
+		}
+
+		if _, ok := globalBoolFlags[name]; ok {
+			global = append(global, token)
+			continue
+		}
+		if _, ok := globalFlagsWithValue[name]; ok {
+			global = append(global, token)
+			if !hasValueInline && i+1 < len(raw) {
+				global = append(global, raw[i+1])
+				i++
+			}
+			continue
+		}
+
+		command = append(command, token)
+	}
+
+	return global, command
 }
