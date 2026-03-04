@@ -27,7 +27,7 @@ Last updated: 2026-03-04
   - Crear ramas y commits desde el inicio.
   - Antes de implementar código, crear `AGENTS.md` y skills del proyecto para revisión del usuario.
 - State:
-  - PR #3 fusionado en `main` y rama `codex/feat/foundation-phase1` eliminada en remoto. Fase 2 continúa en rama dedicada.
+  - PR #4 (Fase 2) abierto contra `main` con checks en PASS; merge bloqueado solo por review requerido.
 - Done:
   - Leído `Instructions.md` completo.
   - Verificado estado inicial del repo (solo `Instructions.md`).
@@ -78,11 +78,20 @@ Last updated: 2026-03-04
   - Rama remota `codex/feat/foundation-phase1` eliminada por usuario tras merge.
   - Rama nueva de Fase 2 creada/push: `codex/feat/config-connection-phase2-v2` (base `codex/feat/foundation-phase1`).
   - WIP de Fase 2 transferido localmente a `codex/feat/config-connection-phase2-v2`.
+  - Fase 2 implementada y publicada en PR #4:
+    - soporte `--config` YAML/JSON con precedencia de flags
+    - utilidades DSN (`NormalizeDSN`, `RedactDSN`, `OpenAndPing`)
+    - `plan` valida DSN source/dest
+    - tests de config y DSN
+  - Correcciones de CI aplicadas en PR #4:
+    - `go.sum` añadido y dependencias tidy
+    - fix parse DSN en formato driver vs URI
+    - fix `errcheck` en cierre de conexión
+  - Estado actual de PR #4 checks: `validate` en PASS.
 - Now:
-  - Completar Fase 2: archivo de config con precedencia de flags, normalización/redacción DSN y tests.
+  - Esperar aprobación/merge de PR #4 o bypass según política del repo.
 - Next:
-  - Consolidar cambios en `codex/feat/config-connection-phase2-v2`.
-  - Abrir PR de Fase 2 con base `main`.
+  - Tras merge de PR #4, iniciar siguiente fase funcional (extractor/schema baseline).
   - Mantener `Instructions.md` sin seguimiento en git por decisión de usuario.
 - Open questions (UNCONFIRMED if needed):
   - Política exacta de downgrade por versión se mantiene parcialmente UNCONFIRMED (se sabe que debe soportarse upgrade/downgrade, no el rango detallado).
