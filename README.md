@@ -49,7 +49,7 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 ## Incremental replication baseline
 
 ```bash
-# Update replication checkpoint from source binlog status
+# Replication run with preflight + checkpoint safety tracking
 dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume --apply-ddl warn
 
 # Start from explicit binlog file/position when no checkpoint exists
@@ -59,6 +59,11 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --resume=false -
 Replication preflight requirements:
 - source `log_bin` must be enabled
 - source `binlog_format` must be `ROW`
+
+Replication checkpoint safety behavior:
+- The summary includes `start`, `source_end`, `applied_end`, and `applied_events`.
+- Checkpoint advances only to `applied_end` (never directly to `source_end`).
+- Current milestone keeps apply path as no-op (`applied_events=0`) while event replay is being implemented.
 
 ## Verification modes
 

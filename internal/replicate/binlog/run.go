@@ -29,9 +29,32 @@ type Summary struct {
 	SourceFormat   string
 	StartFile      string
 	StartPos       uint32
+	SourceEndFile  string
+	SourceEndPos   uint32
 	EndFile        string
 	EndPos         uint32
+	AppliedEvents  uint64
 }
+
+type applyWindow struct {
+	StartFile string
+	StartPos  uint32
+	EndFile   string
+	EndPos    uint32
+}
+
+type applyResult struct {
+	File          string
+	Pos           uint32
+	AppliedEvents uint64
+}
+
+var (
+	checkSourcePreflightFn = checkSourcePreflight
+	queryBinlogPositionFn  = queryBinlogPosition
+	applyWindowFn          = applyWindowNoop
+	timeNowFn              = time.Now
+)
 
 // Run updates replication checkpoint based on current source binlog position.
 func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options) (Summary, error) {
@@ -45,7 +68,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		return Summary{}, errors.New("start-pos must be >= 4")
 	}
 
-	preflight, err := checkSourcePreflight(ctx, source)
+	preflight, err := checkSourcePreflightFn(ctx, source)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -71,7 +94,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	}
 
 	if startFile == "" {
-		file, pos, err := queryBinlogPosition(ctx, source)
+		file, pos, err := queryBinlogPositionFn(ctx, source)
 		if err != nil {
 			return Summary{}, fmt.Errorf("query source start position: %w", err)
 		}
@@ -79,17 +102,34 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		startPos = pos
 	}
 
-	endFile, endPos, err := queryBinlogPosition(ctx, source)
+	sourceEndFile, sourceEndPos, err := queryBinlogPositionFn(ctx, source)
 	if err != nil {
 		// If source status is unavailable on second read, keep start as end fallback.
-		endFile = startFile
-		endPos = startPos
+		sourceEndFile = startFile
+		sourceEndPos = startPos
 	}
 
-	checkpoint.BinlogFile = endFile
-	checkpoint.BinlogPos = endPos
+	applied, err := applyWindowFn(ctx, source, dest, applyWindow{
+		StartFile: startFile,
+		StartPos:  startPos,
+		EndFile:   sourceEndFile,
+		EndPos:    sourceEndPos,
+	}, opts)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	if applied.File == "" {
+		applied.File = startFile
+	}
+	if applied.Pos == 0 {
+		applied.Pos = startPos
+	}
+
+	checkpoint.BinlogFile = applied.File
+	checkpoint.BinlogPos = applied.Pos
 	checkpoint.ApplyDDL = opts.ApplyDDL
-	checkpoint.UpdatedAt = time.Now().UTC()
+	checkpoint.UpdatedAt = timeNowFn().UTC()
 	if err := state.SaveReplicationCheckpoint(checkpointFile, checkpoint); err != nil {
 		return Summary{}, err
 	}
@@ -101,8 +141,11 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		SourceFormat:   preflight.BinlogFormat,
 		StartFile:      startFile,
 		StartPos:       startPos,
-		EndFile:        endFile,
-		EndPos:         endPos,
+		SourceEndFile:  sourceEndFile,
+		SourceEndPos:   sourceEndPos,
+		EndFile:        applied.File,
+		EndPos:         applied.Pos,
+		AppliedEvents:  applied.AppliedEvents,
 	}, nil
 }
 
@@ -304,4 +347,12 @@ func normalizeBinlogFormat(value any) string {
 	default:
 		return strings.ToUpper(strings.TrimSpace(fmt.Sprint(value)))
 	}
+}
+
+func applyWindowNoop(_ context.Context, _ *sql.DB, _ *sql.DB, window applyWindow, _ Options) (applyResult, error) {
+	return applyResult{
+		File:          window.StartFile,
+		Pos:           window.StartPos,
+		AppliedEvents: 0,
+	}, nil
 }

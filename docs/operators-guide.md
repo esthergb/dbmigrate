@@ -50,7 +50,9 @@ Verification behavior:
 Replication checkpoint behavior:
 - Checkpoint file path: `--state-dir/replication-checkpoint.json`.
 - Supported DDL policy values are restricted to `--apply-ddl={ignore,apply,warn}`.
-- Current milestone updates checkpoint from source binlog position as a safe foundation for event apply phases.
+- Run summary reports `start`, `source_end`, `applied_end`, and `applied_events`.
+- Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
+- Current milestone keeps apply path as no-op (`applied_events=0`) while replay phases are implemented.
 - Source preflight gates: `log_bin=ON` and `binlog_format=ROW`.
 
 ## Safety defaults
