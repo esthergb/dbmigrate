@@ -25,6 +25,8 @@ type Options struct {
 type Summary struct {
 	CheckpointFile string
 	ApplyDDL       string
+	SourceLogBin   bool
+	SourceFormat   string
 	StartFile      string
 	StartPos       uint32
 	EndFile        string
@@ -41,6 +43,11 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	}
 	if opts.StartPos > 0 && opts.StartPos < 4 {
 		return Summary{}, errors.New("start-pos must be >= 4")
+	}
+
+	preflight, err := checkSourcePreflight(ctx, source)
+	if err != nil {
+		return Summary{}, err
 	}
 
 	checkpointFile := filepath.Join(stateDir, "replication-checkpoint.json")
@@ -90,11 +97,18 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	return Summary{
 		CheckpointFile: checkpointFile,
 		ApplyDDL:       opts.ApplyDDL,
+		SourceLogBin:   preflight.LogBinEnabled,
+		SourceFormat:   preflight.BinlogFormat,
 		StartFile:      startFile,
 		StartPos:       startPos,
 		EndFile:        endFile,
 		EndPos:         endPos,
 	}, nil
+}
+
+type preflightResult struct {
+	LogBinEnabled bool
+	BinlogFormat  string
 }
 
 func validateApplyDDL(value string) error {
@@ -120,6 +134,35 @@ func queryBinlogPosition(ctx context.Context, db *sql.DB) (string, uint32, error
 		return "", 0, lastErr
 	}
 	return "", 0, errors.New("unable to determine binlog position")
+}
+
+func checkSourcePreflight(ctx context.Context, db *sql.DB) (preflightResult, error) {
+	var logBinRaw any
+	var formatRaw any
+	if err := db.QueryRowContext(ctx, "SELECT @@GLOBAL.log_bin, @@GLOBAL.binlog_format").Scan(&logBinRaw, &formatRaw); err != nil {
+		return preflightResult{}, fmt.Errorf("read source binlog preflight variables: %w", err)
+	}
+
+	logBinEnabled, err := parseLogBinEnabled(logBinRaw)
+	if err != nil {
+		return preflightResult{}, fmt.Errorf("parse source log_bin: %w", err)
+	}
+	binlogFormat := normalizeBinlogFormat(formatRaw)
+	if binlogFormat == "" {
+		return preflightResult{}, errors.New("source binlog_format is empty")
+	}
+
+	if !logBinEnabled {
+		return preflightResult{}, errors.New("source log_bin is disabled; enable binary logging before replicate")
+	}
+	if binlogFormat != "ROW" {
+		return preflightResult{}, fmt.Errorf("source binlog_format=%s is unsupported; required=ROW for safe replication", binlogFormat)
+	}
+
+	return preflightResult{
+		LogBinEnabled: logBinEnabled,
+		BinlogFormat:  binlogFormat,
+	}, nil
 }
 
 func queryBinlogPositionWithSQL(ctx context.Context, db *sql.DB, query string) (string, uint32, error) {
@@ -222,5 +265,43 @@ func toUint32(value any) (uint32, error) {
 		return uint32(parsed), nil
 	default:
 		return 0, fmt.Errorf("unsupported position type %T", value)
+	}
+}
+
+func parseLogBinEnabled(value any) (bool, error) {
+	switch typed := value.(type) {
+	case int64:
+		return typed != 0, nil
+	case uint64:
+		return typed != 0, nil
+	case int:
+		return typed != 0, nil
+	case uint:
+		return typed != 0, nil
+	case []byte:
+		return parseLogBinEnabled(string(typed))
+	case string:
+		normalized := strings.ToUpper(strings.TrimSpace(typed))
+		switch normalized {
+		case "1", "ON", "TRUE":
+			return true, nil
+		case "0", "OFF", "FALSE":
+			return false, nil
+		default:
+			return false, fmt.Errorf("unsupported log_bin value %q", typed)
+		}
+	default:
+		return false, fmt.Errorf("unsupported log_bin type %T", value)
+	}
+}
+
+func normalizeBinlogFormat(value any) string {
+	switch typed := value.(type) {
+	case []byte:
+		return strings.ToUpper(strings.TrimSpace(string(typed)))
+	case string:
+		return strings.ToUpper(strings.TrimSpace(typed))
+	default:
+		return strings.ToUpper(strings.TrimSpace(fmt.Sprint(value)))
 	}
 }

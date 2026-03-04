@@ -25,7 +25,8 @@ Last updated: 2026-03-04
   - PR #10 merged by user on 2026-03-04; branch `codex/feat/data-verify-sample-phase8` deleted.
   - PR #11 merged by user on 2026-03-04; branch `codex/feat/data-verify-fullhash-phase9` deleted.
   - PR #12 merged by user on 2026-03-04; branch `codex/feat/replicate-checkpoint-phase10` deleted.
-  - Current branch: `codex/feat/compatibility-plan-phase11`.
+  - PR #13 merged by user on 2026-03-04; branch `codex/feat/compatibility-plan-phase11` deleted.
+  - Current branch: `main` (synced to `origin/main`).
 - Done:
   - Merged phases: 0 research docs, 1 foundation/CI, 2 config+connection, 3 schema baseline, 4 baseline data+checkpoint.
   - Phase 5 implemented and merged:
@@ -58,20 +59,24 @@ Last updated: 2026-03-04
     - replication checkpoint state added (`replication-checkpoint.json` in `--state-dir`).
     - binlog position baseline runner added (`internal/replicate/binlog`).
     - CLI/command/state/binlog tests added.
-  - Phase 11 implementation in progress on current branch:
+  - Phase 11 implemented and merged:
     - new compatibility evaluator (`internal/compat`) with engine/version auto-detect.
     - `plan` now performs live source/destination version detection and compatibility evaluation.
     - incompatible plan exits non-zero after emitting detailed findings + remediation proposals.
     - compatibility report includes partial-scope finding when `--databases` is used.
     - plan command and compatibility unit tests added/updated.
+  - Phase 12 implementation in progress on current branch:
+    - replication source preflight checks added (`log_bin` and `binlog_format`).
+    - replicate summary now includes source binlog readiness details.
+    - binlog helper tests extended for preflight value parsing.
   - Local verification: `/tmp/go-toolchain/go/bin/go test ./... -count=1` PASS.
 - Now:
-  - Commit, push, and open PR for Phase 11 compatibility planning.
+  - Run validation and publish PR for Phase 12 replication preflight hardening.
 - Next:
-  - Merge PR for compatibility planning.
-  - Continue with replication hardening milestone.
+  - Merge PR for replication preflight hardening.
+  - Continue with event-apply replication milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: precise downgrade version compatibility matrix per MySQL/MariaDB family (current phase adds heuristics and reporting, matrix still to be expanded).
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/plan.go`, `internal/commands/plan_test.go`, `internal/compat/*`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`, `Instructions.md` (untracked)
+  - Files: `CONTINUITY.md`, `internal/commands/replicate.go`, `internal/replicate/binlog/*`, `internal/commands/replicate_test.go`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`, `Instructions.md` (untracked)
   - Commands: `git checkout -b`, `/tmp/go-toolchain/go/bin/gofmt`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`
