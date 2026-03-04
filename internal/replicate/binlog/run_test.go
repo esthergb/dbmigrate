@@ -221,6 +221,73 @@ func TestRunCheckpointAdvancesOnlyToAppliedEnd(t *testing.T) {
 	}
 }
 
+func TestRunWritesConflictReportOnApplyFailure(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	checkSourcePreflightFn = func(_ context.Context, _ *sql.DB) (preflightResult, error) {
+		return preflightResult{
+			LogBinEnabled:  true,
+			BinlogFormat:   "ROW",
+			BinlogRowImage: "FULL",
+		}, nil
+	}
+
+	queryCalls := 0
+	queryBinlogPositionFn = func(_ context.Context, _ *sql.DB) (string, uint32, error) {
+		queryCalls++
+		if queryCalls == 1 {
+			return "mysql-bin.000100", 400, nil
+		}
+		return "mysql-bin.000100", 480, nil
+	}
+
+	applyWindowFn = func(_ context.Context, _ *sql.DB, _ *sql.DB, _ applyWindow, _ Options) (applyResult, error) {
+		return applyResult{}, &applyFailure{
+			FailureType: "ddl_risky_blocked",
+			File:        "mysql-bin.000100",
+			Pos:         460,
+			Operation:   "ddl",
+			TableName:   "app",
+			Query:       "DROP TABLE app.items",
+			Message:     "risky ddl blocked at mysql-bin.000100:460",
+			Remediation: "rerun with --apply-ddl=ignore and apply DDL manually",
+			AppliedFile: "mysql-bin.000100",
+			AppliedPos:  420,
+		}
+	}
+
+	tmp := t.TempDir()
+	_, err := Run(context.Background(), &sql.DB{}, &sql.DB{}, tmp, Options{
+		ApplyDDL:       "apply",
+		ConflictPolicy: "fail",
+		Resume:         false,
+	})
+	if err == nil {
+		t.Fatal("expected run to fail")
+	}
+	if !strings.Contains(err.Error(), "replication-conflict-report.json") {
+		t.Fatalf("expected error to include conflict report path, got: %v", err)
+	}
+
+	report, err := state.LoadReplicationConflictReport(filepath.Join(tmp, "replication-conflict-report.json"))
+	if err != nil {
+		t.Fatalf("load conflict report: %v", err)
+	}
+	if report.FailureType != "ddl_risky_blocked" {
+		t.Fatalf("unexpected failure type: %q", report.FailureType)
+	}
+	if report.Operation != "ddl" {
+		t.Fatalf("unexpected operation: %q", report.Operation)
+	}
+	if report.AppliedEndPos != 420 {
+		t.Fatalf("unexpected applied end pos: %d", report.AppliedEndPos)
+	}
+	if report.SourceEndPos != 460 {
+		t.Fatalf("unexpected source end pos: %d", report.SourceEndPos)
+	}
+}
+
 func TestApplyWindowTransactionalNoBatches(t *testing.T) {
 	restore := stubRunHooks(t)
 	defer restore()
@@ -436,6 +503,7 @@ func stubRunHooks(t *testing.T) func() {
 	origBeginTx := beginDestinationTxFn
 	origApply := applyWindowFn
 	origNow := timeNowFn
+	origSaveReport := saveConflictReportFn
 
 	return func() {
 		checkSourcePreflightFn = origPreflight
@@ -444,6 +512,7 @@ func stubRunHooks(t *testing.T) func() {
 		beginDestinationTxFn = origBeginTx
 		applyWindowFn = origApply
 		timeNowFn = origNow
+		saveConflictReportFn = origSaveReport
 	}
 }
 
