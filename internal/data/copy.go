@@ -267,7 +267,115 @@ func listBaseTables(ctx context.Context, db *sql.DB, databaseName string) ([]str
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return orderTableNamesByForeignKeys(ctx, db, databaseName, out)
+}
+
+func orderTableNamesByForeignKeys(ctx context.Context, db *sql.DB, databaseName string, tableNames []string) ([]string, error) {
+	if len(tableNames) < 2 {
+		return tableNames, nil
+	}
+
+	dependencies := make(map[string]map[string]struct{}, len(tableNames))
+	tableSet := make(map[string]struct{}, len(tableNames))
+	for _, tableName := range tableNames {
+		dependencies[tableName] = map[string]struct{}{}
+		tableSet[tableName] = struct{}{}
+	}
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT TABLE_NAME, REFERENCED_TABLE_NAME
+		FROM information_schema.KEY_COLUMN_USAGE
+		WHERE TABLE_SCHEMA = ?
+		  AND REFERENCED_TABLE_NAME IS NOT NULL
+		  AND (REFERENCED_TABLE_SCHEMA IS NULL OR REFERENCED_TABLE_SCHEMA = TABLE_SCHEMA)
+		ORDER BY TABLE_NAME, REFERENCED_TABLE_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var tableName string
+		var referencedTableName string
+		if err := rows.Scan(&tableName, &referencedTableName); err != nil {
+			return nil, err
+		}
+
+		if tableName == referencedTableName {
+			continue
+		}
+		if _, ok := tableSet[tableName]; !ok {
+			continue
+		}
+		if _, ok := tableSet[referencedTableName]; !ok {
+			continue
+		}
+		dependencies[tableName][referencedTableName] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return sortTableNamesByDependencies(tableNames, dependencies), nil
+}
+
+func sortTableNamesByDependencies(tableNames []string, dependencies map[string]map[string]struct{}) []string {
+	remainingDependencies := make(map[string]map[string]struct{}, len(tableNames))
+	dependents := make(map[string][]string, len(tableNames))
+	for _, tableName := range tableNames {
+		remainingDependencies[tableName] = map[string]struct{}{}
+		for dep := range dependencies[tableName] {
+			remainingDependencies[tableName][dep] = struct{}{}
+			dependents[dep] = append(dependents[dep], tableName)
+		}
+	}
+	for tableName := range dependents {
+		sort.Strings(dependents[tableName])
+	}
+
+	ready := make([]string, 0, len(tableNames))
+	for _, tableName := range tableNames {
+		if len(remainingDependencies[tableName]) == 0 {
+			ready = append(ready, tableName)
+		}
+	}
+	sort.Strings(ready)
+
+	ordered := make([]string, 0, len(tableNames))
+	processed := make(map[string]struct{}, len(tableNames))
+	for len(ready) > 0 {
+		current := ready[0]
+		ready = ready[1:]
+		if _, seen := processed[current]; seen {
+			continue
+		}
+		processed[current] = struct{}{}
+		ordered = append(ordered, current)
+
+		for _, dependentTable := range dependents[current] {
+			delete(remainingDependencies[dependentTable], current)
+			if len(remainingDependencies[dependentTable]) == 0 {
+				ready = append(ready, dependentTable)
+			}
+		}
+		sort.Strings(ready)
+	}
+
+	if len(ordered) == len(tableNames) {
+		return ordered
+	}
+
+	remaining := make([]string, 0, len(tableNames)-len(ordered))
+	for _, tableName := range tableNames {
+		if _, seen := processed[tableName]; !seen {
+			remaining = append(remaining, tableName)
+		}
+	}
+	sort.Strings(remaining)
+	return append(ordered, remaining...)
 }
 
 func listTableColumns(ctx context.Context, db *sql.DB, databaseName string, tableName string) ([]string, error) {

@@ -40,3 +40,48 @@ func TestRewriteSchemaStatementForSandbox(t *testing.T) {
 		t.Fatalf("unexpected rewritten statement: %q", out)
 	}
 }
+
+func TestSortTableNamesByDependencies(t *testing.T) {
+	tableNames := []string{"cart_items", "users", "orders"}
+	dependencies := map[string]map[string]struct{}{
+		"cart_items": {
+			"users":  {},
+			"orders": {},
+		},
+		"users":  {},
+		"orders": {"users": {}},
+	}
+
+	got := sortTableNamesByDependencies(tableNames, dependencies)
+	want := []string{"users", "orders", "cart_items"}
+
+	if len(got) != len(want) {
+		t.Fatalf("unexpected sorted length: got=%d want=%d (%#v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected sorted order: got=%#v want=%#v", got, want)
+		}
+	}
+}
+
+func TestSortTableNamesByDependenciesCycleFallback(t *testing.T) {
+	tableNames := []string{"b", "c", "a"}
+	dependencies := map[string]map[string]struct{}{
+		"a": {"b": {}},
+		"b": {"a": {}},
+		"c": {},
+	}
+
+	got := sortTableNamesByDependencies(tableNames, dependencies)
+	want := []string{"c", "a", "b"}
+
+	if len(got) != len(want) {
+		t.Fatalf("unexpected sorted length: got=%d want=%d (%#v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected sorted order: got=%#v want=%#v", got, want)
+		}
+	}
+}

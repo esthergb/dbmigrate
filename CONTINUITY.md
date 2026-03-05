@@ -12,28 +12,38 @@ Last updated: 2026-03-05
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
 - State:
-  - Current branch: `codex/feat/dry-run-sandbox-phase53`.
-  - `main` includes PR #51 merged.
-  - PR #52 is open: https://github.com/esthergb/dbmigrate/pull/52
+  - Current branch: `codex/feat/testing-assets-phase54`.
+  - `main` includes PR #52 merged.
   - Local workspace contains untracked testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, plus `MIGRATION_TESTING.md`.
-  - One end-to-end script run (`mariadb10 -> mariadb11`) failed waiting for `mariadb11` health within current timeout.
+  - Asset validation completed: compose syntax OK, script syntax OK, all config dry-run checks OK.
+  - FK dependency ordering fix implemented for both schema DDL apply and baseline data copy.
+  - Sample E2E scenarios now pass after FK ordering fix (`mariadb10 -> mariadb11`, `mysql80 -> mysql84`).
 - Done:
   - Phases 0-51 merged.
   - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
   - Phase 48 synchronized README/continuity status with merged reality.
   - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
   - Phase 50 added scope-aware candidate findings for full-scope vs partial-scope pilot.
+  - FK ordering limitation in `migrate` resolved in code paths:
+    - schema apply (`internal/schema/copy.go`)
+    - baseline data copy and dry-run data validation ordering (`internal/data/copy.go`)
+  - New ordering tests added in:
+    - `internal/schema/copy_test.go`
+    - `internal/data/copy_test.go`
+  - Verification completed:
+    - `go test ./internal/schema ./internal/data ./internal/commands -count=1`
+    - `go test ./... -count=1`
+    - `bash scripts/test-mariadb10-to-mariadb11.sh`
+    - `bash scripts/test-mysql80-to-mysql84.sh`
 - Now:
-  - Wait for PR #52 checks/review/merge.
+  - Prepare commit for FK ordering fix and open dedicated PR.
 - Next:
-  - Merge PR #52 after checks.
-  - Open PR for phase 52 testing assets and merge after checks.
-  - Phase 53: run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
-  - Add dry-run sandbox behavior to operator docs and run it in matrix validation workflow.
+  - Resume phase 54 testing-assets PR after FK ordering fix is merged.
+  - Run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
   - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
   - UNCONFIRMED: scope of transactional `--dry-run` requirement across commands (`migrate` only vs wider command set).
 - Working set (files/ids/commands):
-  - Files: `internal/config/runtime.go`, `internal/config/file.go`, `internal/cli/cli.go`, `internal/commands/migrate.go`, `internal/schema/copy.go`, `internal/data/copy.go`, related tests, plus phase52 assets.
-  - Commands: `go test ./internal/config ./internal/cli ./internal/commands ./internal/schema ./internal/data -count=1`, `go test ./... -count=1`.
+  - Files: `internal/schema/copy.go`, `internal/schema/copy_test.go`, `internal/data/copy.go`, `internal/data/copy_test.go`, `CONTINUITY.md` (plus untracked testing assets kept pending).
+  - Commands: `go test ./internal/schema ./internal/data ./internal/commands -count=1`, `go test ./... -count=1`, `bash scripts/test-mariadb10-to-mariadb11.sh`, `bash scripts/test-mysql80-to-mysql84.sh`.
