@@ -1,6 +1,11 @@
 package commands
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestDestinationEnforcesZeroDateStrict(t *testing.T) {
 	tests := []struct {
@@ -77,6 +82,7 @@ func TestBuildZeroDatePrecheckFindings(t *testing.T) {
 	report := zeroDateDefaultsPrecheckReport{
 		Name:               "zero-date-defaults",
 		DestinationSQLMode: "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE",
+		FixScriptPath:      "./state/precheck-zero-date-fixes.sql",
 		IssueCount:         1,
 		Issues: []zeroDateDefaultIssue{
 			{
@@ -100,7 +106,61 @@ func TestBuildZeroDatePrecheckFindings(t *testing.T) {
 	if findings[1].Code != "zero_date_default_column" {
 		t.Fatalf("unexpected issue finding code: %s", findings[1].Code)
 	}
-	if findings[1].Proposal == "" {
-		t.Fatal("expected auto-fix proposal in issue finding")
+	if !strings.Contains(findings[0].Proposal, "precheck-zero-date-fixes.sql") {
+		t.Fatalf("expected summary proposal to include fix script path, got %q", findings[0].Proposal)
+	}
+	if !strings.Contains(findings[1].Proposal, "precheck-zero-date-fixes.sql") {
+		t.Fatalf("expected issue proposal to include fix script path, got %q", findings[1].Proposal)
+	}
+}
+
+func TestWriteAndCleanupZeroDateFixScript(t *testing.T) {
+	tmp := t.TempDir()
+	stateDir := filepath.Join(tmp, "state")
+	issues := []zeroDateDefaultIssue{
+		{
+			ProposedFixSQL: "ALTER TABLE `db`.`t2` ALTER COLUMN `c2` SET DEFAULT '1970-01-01';",
+		},
+		{
+			ProposedFixSQL: "ALTER TABLE `db`.`t1` ALTER COLUMN `c1` SET DEFAULT '1970-01-01 00:00:01';",
+		},
+		{
+			ProposedFixSQL: "ALTER TABLE `db`.`t1` ALTER COLUMN `c1` SET DEFAULT '1970-01-01 00:00:01';",
+		},
+	}
+
+	path, err := writeZeroDateFixScript(stateDir, issues)
+	if err != nil {
+		t.Fatalf("writeZeroDateFixScript failed: %v", err)
+	}
+	if path != filepath.Join(stateDir, "precheck-zero-date-fixes.sql") {
+		t.Fatalf("unexpected script path: %s", path)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fix script failed: %v", err)
+	}
+	content := string(raw)
+	if !strings.Contains(content, "dbmigrate auto-generated zero-date precheck fixes") {
+		t.Fatalf("missing header in fix script: %q", content)
+	}
+	first := "ALTER TABLE `db`.`t1` ALTER COLUMN `c1` SET DEFAULT '1970-01-01 00:00:01';"
+	second := "ALTER TABLE `db`.`t2` ALTER COLUMN `c2` SET DEFAULT '1970-01-01';"
+	if !strings.Contains(content, first) || !strings.Contains(content, second) {
+		t.Fatalf("missing expected SQL statements in fix script: %q", content)
+	}
+	if strings.Count(content, first) != 1 {
+		t.Fatalf("expected deduplicated statements, got content: %q", content)
+	}
+	if strings.Index(content, first) > strings.Index(content, second) {
+		t.Fatalf("expected sorted statements in fix script, got content: %q", content)
+	}
+
+	if err := cleanupZeroDateFixScript(stateDir); err != nil {
+		t.Fatalf("cleanupZeroDateFixScript failed: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected script to be deleted, stat err=%v", err)
 	}
 }

@@ -39,6 +39,8 @@ Zero-date default precheck:
 - If destination `sql_mode` enforces strict zero-date rules (`STRICT_*` + `NO_ZERO_DATE`/`NO_ZERO_IN_DATE`), zero-date defaults in source schema fail fast.
 - Findings include per-column auto-fix SQL proposals:
   - `ALTER TABLE <db>.<table> ALTER COLUMN <column> SET DEFAULT '<safe-value>';`
+- A reusable fix script is generated at:
+  - `--state-dir/precheck-zero-date-fixes.sql`
 
 ## Baseline migration execution
 

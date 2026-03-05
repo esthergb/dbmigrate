@@ -96,6 +96,7 @@ func TestWriteMigratePrecheckReportText(t *testing.T) {
 		Incompatible:        true,
 		DestinationSQLMode:  "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE",
 		DestinationEnforced: true,
+		FixScriptPath:       "./state/precheck-zero-date-fixes.sql",
 		IssueCount:          1,
 		Findings: []compat.Finding{
 			{
@@ -113,6 +114,9 @@ func TestWriteMigratePrecheckReportText(t *testing.T) {
 	text := out.String()
 	if !strings.Contains(text, "status=incompatible") || !strings.Contains(text, "precheck=zero-date-defaults") {
 		t.Fatalf("unexpected report text: %q", text)
+	}
+	if !strings.Contains(text, "fix_script=\"./state/precheck-zero-date-fixes.sql\"") {
+		t.Fatalf("expected fix script path in precheck output: %q", text)
 	}
 	if !strings.Contains(text, "code=zero_date_default_column") {
 		t.Fatalf("expected finding line in report text: %q", text)

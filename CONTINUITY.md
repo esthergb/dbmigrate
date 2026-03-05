@@ -1,10 +1,10 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 57 precheck hardening:
-    - detect zero-date temporal defaults before schema apply,
-    - fail fast with detailed findings and automatic fix proposals,
-    - enforce the precheck in `plan` and `migrate`.
+  - Implement Phase 58 precheck artifact hardening:
+    - keep zero-date precheck fail-fast behavior,
+    - generate a deterministic auto-fix SQL artifact in `--state-dir` when incompatibilities are found,
+    - surface artifact path in findings/output for operator execution.
   - Keep dbmigrate delivered in phased PRs with green CI and explicit compatibility policy.
 - Constraints/Assumptions:
   - MIT license, docs in English, JSON-first.
@@ -17,9 +17,10 @@ Last updated: 2026-03-06
   - Option B matrix is adopted (active-LTS-first).
   - Compatibility probes are the execution surface for reproducible engine/version behavior deltas.
 - State:
-  - Current branch: `codex/feat/precheck-zero-date-phase57`.
+  - Current branch: `codex/feat/precheck-autofix-artifact-phase58`.
   - Phase 56 PR `#55` merged by user.
-  - Phase 57 PR opened: `#56` (<https://github.com/esthergb/dbmigrate/pull/56>).
+  - Phase 57 PR `#56` merged by user.
+  - Phase 58 PR opened: `#57` (<https://github.com/esthergb/dbmigrate/pull/57>).
   - `main` includes PR #54 merged (testing assets + docs).
   - Local `reports/` directory exists as local run artifacts and should remain ignored/untracked.
   - `Instructions.md` remains tracked in `main` (confirmed by user).
@@ -106,13 +107,25 @@ Last updated: 2026-03-06
   - Before merge of PR #56, datasets were updated to include optional zero-date examples (disabled by default):
     - appended `OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)` block to all `datasets/populate_*.sql`
     - updated `datasets/README.md` with enablement guidance and strict `sql_mode` notes
+  - Phase 58 implementation completed locally:
+    - precheck now generates deterministic auto-fix artifact at `--state-dir/precheck-zero-date-fixes.sql`
+    - precheck now cleans stale fix artifact when no zero-date incompatibilities are detected
+    - artifact path is surfaced in plan/migrate findings/output
+  - Phase 58 validation completed:
+    - `go test ./internal/commands -count=1`
+    - `go test ./... -count=1`
+    - manual run verified script creation on incompatible source defaults
+    - manual run verified stale-script cleanup on compatible rerun
+  - Docs updated to describe fix artifact path:
+    - `README.md`
+    - `docs/operators-guide.md`
 - Now:
-  - Wait for user review/merge of updated PR #56.
+  - Wait for user review/merge of Phase 58 PR.
 - Next:
   - After merge confirmation from user, continue next planned phase.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
   - UNCONFIRMED: timeline/priority order between strict-lts promotion and additional precheck/autofix hardening.
 - Working set (files/ids/commands):
-  - Files: `datasets/populate_mariadb10.sql`, `datasets/populate_mariadb11.sql`, `datasets/populate_mariadb12.sql`, `datasets/populate_mysql80.sql`, `datasets/populate_mysql84.sql`, `datasets/README.md`, `CONTINUITY.md`.
-  - Commands: dataset tail/grep validation + commit/push to PR #56.
+  - Files: `internal/commands/temporal_precheck.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `internal/commands/temporal_precheck_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
+  - Commands: focused `go test` + full `go test ./...` + manual artifact create/cleanup verification, commit `170fb76`, PR #57.

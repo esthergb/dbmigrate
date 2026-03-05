@@ -134,6 +134,8 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 - When destination `sql_mode` enforces strict zero-date validation (`STRICT_*` + `NO_ZERO_DATE`/`NO_ZERO_IN_DATE`), the command fails fast with:
   - detailed findings per affected column
   - auto-fix SQL proposals (`ALTER TABLE ... ALTER COLUMN ... SET DEFAULT ...`)
+- When incompatibilities are found, dbmigrate also writes an auto-fix artifact at:
+  - `--state-dir/precheck-zero-date-fixes.sql`
 - This precheck returns incompatibility exit semantics (`exit 2`) rather than runtime crash semantics.
 
 ## Incremental replication baseline
