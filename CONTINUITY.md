@@ -12,8 +12,9 @@ Last updated: 2026-03-05
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
 - State:
-  - Current branch: `codex/feat/testing-assets-phase52`.
+  - Current branch: `codex/feat/dry-run-sandbox-phase53`.
   - `main` includes PR #51 merged.
+  - PR #52 is open: https://github.com/esthergb/dbmigrate/pull/52
   - Local workspace contains untracked testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, plus `MIGRATION_TESTING.md`.
   - One end-to-end script run (`mariadb10 -> mariadb11`) failed waiting for `mariadb11` health within current timeout.
 - Done:
@@ -23,9 +24,9 @@ Last updated: 2026-03-05
   - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
   - Phase 50 added scope-aware candidate findings for full-scope vs partial-scope pilot.
 - Now:
-  - Split `--dry-run-mode=sandbox` implementation into a dedicated PR (separate from testing-assets PR).
+  - Wait for PR #52 checks/review/merge.
 - Next:
-  - Open PR for dry-run sandbox feature and merge after checks.
+  - Merge PR #52 after checks.
   - Open PR for phase 52 testing assets and merge after checks.
   - Phase 53: run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
   - Add dry-run sandbox behavior to operator docs and run it in matrix validation workflow.
