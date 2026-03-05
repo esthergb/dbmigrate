@@ -23,6 +23,12 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 	if opts.ConflictPolicy != "fail" {
 		t.Fatalf("expected default conflict-policy fail, got %q", opts.ConflictPolicy)
 	}
+	if opts.EnableTriggerCDC {
+		t.Fatal("expected default enable-trigger-cdc=false")
+	}
+	if opts.TeardownCDC {
+		t.Fatal("expected default teardown-cdc=false")
+	}
 	if !opts.Resume {
 		t.Fatal("expected default resume=true")
 	}
@@ -36,6 +42,7 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 		"--replication-mode=hybrid",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
+		"--enable-trigger-cdc",
 		"--resume=false",
 		"--start-file=mysql-bin.000010",
 		"--start-pos=987",
@@ -51,6 +58,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	}
 	if opts.ConflictPolicy != "source-wins" {
 		t.Fatalf("expected conflict-policy source-wins, got %q", opts.ConflictPolicy)
+	}
+	if !opts.EnableTriggerCDC {
+		t.Fatal("expected enable-trigger-cdc=true")
 	}
 	if opts.Resume {
 		t.Fatal("expected resume=false")
@@ -101,6 +111,20 @@ func TestRunReplicateUnsupportedModeFailsFast(t *testing.T) {
 		t.Fatal("expected unsupported replication mode error")
 	}
 	if !strings.Contains(err.Error(), "not implemented yet") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunReplicateTriggerCDCFlagsFailFast(t *testing.T) {
+	var out bytes.Buffer
+	err := runReplicate(context.Background(), config.RuntimeConfig{
+		Source: "mysql://src",
+		Dest:   "mysql://dst",
+	}, []string{"--enable-trigger-cdc"}, &out)
+	if err == nil {
+		t.Fatal("expected trigger cdc unsupported error")
+	}
+	if !strings.Contains(err.Error(), "trigger CDC mode is not implemented yet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

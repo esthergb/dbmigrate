@@ -317,6 +317,34 @@ func TestRunReplicateUnsupportedMode(t *testing.T) {
 	}
 }
 
+func TestRunReplicateEnableTriggerCDCUnsupported(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--enable-trigger-cdc",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunReplicateTeardownCDCUnsupported(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--teardown-cdc",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunReplicateInvalidApplyDDL(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
