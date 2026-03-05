@@ -541,3 +541,38 @@ func TestRunReportIgnoresStaleConflictWhenCheckpointAdvanced(t *testing.T) {
 		t.Fatalf("expected status ok, got %#v", payload["status"])
 	}
 }
+
+func TestRunReportIgnoresStaleConflictByTimestampFallback(t *testing.T) {
+	var out bytes.Buffer
+	tmp := t.TempDir()
+
+	replicationPath := filepath.Join(tmp, "replication-checkpoint.json")
+	replicationRaw := []byte(`{"version":1,"binlog_file":"mysql-bin.000301","binlog_pos":900,"apply_ddl":"warn","updated_at":"2026-03-05T14:00:00Z"}`)
+	if err := os.WriteFile(replicationPath, replicationRaw, 0o600); err != nil {
+		t.Fatalf("write replication checkpoint: %v", err)
+	}
+
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+	conflictRaw := []byte(`{"version":1,"generated_at":"2026-03-05T13:30:00Z","failure_type":"schema_drift","message":"legacy conflict artifact"}`)
+	if err := os.WriteFile(conflictPath, conflictRaw, 0o600); err != nil {
+		t.Fatalf("write conflict report: %v", err)
+	}
+
+	args := []string{
+		"report",
+		"--state-dir", tmp,
+		"--json",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if payload["status"] != "ok" {
+		t.Fatalf("expected status ok, got %#v", payload["status"])
+	}
+}

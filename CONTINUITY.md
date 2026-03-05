@@ -14,30 +14,28 @@ Last updated: 2026-03-05
 - Key decisions:
   - Work via small branches `codex/*` and PRs to `main`.
   - Profiles remain: `strict-lts`, `same-major`, `adjacent-minor`, `max-compat`.
-  - User confirmed **Option B** for downgrade matrix hardening (active-LTS-first policy).
+  - User confirmed Option B for downgrade matrix hardening (active-LTS-first policy).
 - State:
   - Current branch: `codex/feat/compat-matrix-optionb-phase43`.
-  - `main` is at `1ce7060`.
-  - PR #44 is open (phase42): https://github.com/esthergb/dbmigrate/pull/44
-  - PR #45 is open (phase43): https://github.com/esthergb/dbmigrate/pull/45
+  - `main` includes PR #44 merged.
+  - PR #45 is open: https://github.com/esthergb/dbmigrate/pull/45
+  - PR #45 currently required merge update was being resolved via `merge main` into branch.
 - Done:
-  - Phases 0-43 merged (latest merged: PR #43 stale conflict artifact handling in `report`).
-  - Phase42 implemented and open as PR #44 (timestamp fallback for stale conflict artifacts).
-  - Phase43 local implementation completed:
+  - Phases 0-44 merged (latest merged: PR #44 report stale-conflict timestamp fallback).
+  - Phase 43 implementation completed and pushed in PR #45:
     - `strict-lts` same-engine matrix now active-LTS-first: MySQL 8.4, MariaDB 10.11/11.4/11.8.
     - `strict-lts` cross-engine matrix keeps explicit validated pair `MySQL 8.4 <-> MariaDB 11.4`.
-    - `same-major` and `adjacent-minor` no longer include legacy lines (MySQL 8.0, MariaDB 10.6).
+    - `same-major` and `adjacent-minor` remove legacy lines (MySQL 8.0, MariaDB 10.6).
     - `max-compat` adds explicit warnings for legacy lines (MySQL 8.0, MariaDB 10.6).
     - tests updated in `internal/compat/evaluate_test.go`; docs updated in `README.md` and `docs/operators-guide.md`.
     - local tests passing: `/tmp/go-toolchain/go/bin/go test ./... -count=1`.
 - Now:
-  - Wait for CI/review on PR #44 and PR #45.
+  - Finish merge resolution on branch and push updated PR #45.
 - Next:
-  - Merge PR #44.
   - Merge PR #45 after CI.
   - Continue next phase from updated `main`.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to add `MySQL 8.4 <-> MariaDB 11.8` as `strict-lts` cross-engine pair or keep it only under `max-compat` until validated.
 - Working set (files/ids/commands):
   - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git merge main`, `git commit`, `git push`, `gh pr checks`.
