@@ -6,6 +6,7 @@ dist/
 
 # Local runtime state directory (repo root)
 /state/
+/reports/
 *.log
 
 # Editor/system

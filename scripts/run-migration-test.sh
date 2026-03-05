@@ -10,6 +10,7 @@ SOURCE_SERVICE="$1"
 DEST_SERVICE="$2"
 CONFIG_FILE="$3"
 LABEL="$4"
+ENABLE_COMPAT_PROBES="${DBMIGRATE_ENABLE_COMPAT_PROBES:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -84,17 +85,34 @@ echo "=========================================="
 echo "Testing: $LABEL"
 echo "=========================================="
 
-echo "[1/6] Resetting containers and volumes..."
+echo "[1/7] Resetting containers and volumes..."
 compose down -v --remove-orphans >/dev/null 2>&1 || true
 
-echo "[2/6] Starting source and destination containers..."
+echo "[2/7] Starting source and destination containers..."
 compose up -d "$SOURCE_SERVICE" "$DEST_SERVICE"
 
-echo "[3/6] Waiting for database health checks..."
+echo "[3/7] Waiting for database health checks..."
 wait_for_db_health "$SOURCE_SERVICE"
 wait_for_db_health "$DEST_SERVICE"
 
-echo "[4/6] Preparing source dataset and local state..."
+STATE_DIR_RAW="$(state_dir_for_config "$CONFIG_FILE")"
+if [ -n "$STATE_DIR_RAW" ]; then
+  STATE_DIR="$PROJECT_ROOT/${STATE_DIR_RAW#./}"
+else
+  STATE_DIR="$PROJECT_ROOT/state/${SOURCE_SERVICE}-to-${DEST_SERVICE}"
+fi
+rm -rf "$STATE_DIR"
+mkdir -p "$STATE_DIR"
+
+if [ "$ENABLE_COMPAT_PROBES" = "1" ]; then
+  echo "[4/7] Running compatibility probes..."
+  "$SCRIPT_DIR/run-compat-probes.sh" "$SOURCE_SERVICE" "$STATE_DIR/compat-probes-source.json"
+  "$SCRIPT_DIR/run-compat-probes.sh" "$DEST_SERVICE" "$STATE_DIR/compat-probes-dest.json"
+else
+  echo "[4/7] Compatibility probes disabled (DBMIGRATE_ENABLE_COMPAT_PROBES=$ENABLE_COMPAT_PROBES)"
+fi
+
+echo "[5/7] Preparing source dataset and local state..."
 DATASET_FILE="$(dataset_for_service "$SOURCE_SERVICE")"
 if [ ! -f "$DATASET_FILE" ]; then
   echo "dataset file not found: $DATASET_FILE" >&2
@@ -102,20 +120,14 @@ if [ ! -f "$DATASET_FILE" ]; then
 fi
 seed_source_dataset "$SOURCE_SERVICE" "$DATASET_FILE"
 
-STATE_DIR_RAW="$(state_dir_for_config "$CONFIG_FILE")"
-if [ -n "$STATE_DIR_RAW" ]; then
-  STATE_DIR="$PROJECT_ROOT/${STATE_DIR_RAW#./}"
-  rm -rf "$STATE_DIR"
-fi
-
 if [ ! -f "$PROJECT_ROOT/bin/dbmigrate" ]; then
-  echo "[5/6] Building dbmigrate..."
+  echo "[6/7] Building dbmigrate..."
   (cd "$PROJECT_ROOT" && make build)
 else
-  echo "[5/6] dbmigrate binary found, skipping build"
+  echo "[6/7] dbmigrate binary found, skipping build"
 fi
 
-echo "[6/6] Running migration pipeline..."
+echo "[7/7] Running migration pipeline..."
 first_failure=0
 plan_rc=0
 migrate_rc=0
