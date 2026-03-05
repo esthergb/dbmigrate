@@ -1,11 +1,21 @@
 package commands
 
-import "testing"
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/esthergb/dbmigrate/internal/config"
+)
 
 func TestParseReplicateOptionsDefaults(t *testing.T) {
 	opts, err := parseReplicateOptions(nil)
 	if err != nil {
 		t.Fatalf("expected parse success: %v", err)
+	}
+	if opts.ReplicationMode != "binlog" {
+		t.Fatalf("expected default replication-mode binlog, got %q", opts.ReplicationMode)
 	}
 	if opts.ApplyDDL != "warn" {
 		t.Fatalf("expected default apply-ddl warn, got %q", opts.ApplyDDL)
@@ -23,6 +33,7 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 
 func TestParseReplicateOptionsExplicit(t *testing.T) {
 	opts, err := parseReplicateOptions([]string{
+		"--replication-mode=hybrid",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
 		"--resume=false",
@@ -31,6 +42,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("expected parse success: %v", err)
+	}
+	if opts.ReplicationMode != "hybrid" {
+		t.Fatalf("expected replication-mode hybrid, got %q", opts.ReplicationMode)
 	}
 	if opts.ApplyDDL != "ignore" {
 		t.Fatalf("expected apply-ddl ignore, got %q", opts.ApplyDDL)
@@ -56,6 +70,13 @@ func TestParseReplicateOptionsInvalidApplyDDL(t *testing.T) {
 	}
 }
 
+func TestParseReplicateOptionsInvalidReplicationMode(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--replication-mode=stream"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid replication-mode")
+	}
+}
+
 func TestParseReplicateOptionsInvalidStartPos(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--start-pos=3"})
 	if err == nil {
@@ -67,5 +88,19 @@ func TestParseReplicateOptionsInvalidConflictPolicy(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--conflict-policy=merge"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid conflict-policy")
+	}
+}
+
+func TestRunReplicateUnsupportedModeFailsFast(t *testing.T) {
+	var out bytes.Buffer
+	err := runReplicate(context.Background(), config.RuntimeConfig{
+		Source: "mysql://src",
+		Dest:   "mysql://dst",
+	}, []string{"--replication-mode=capture-triggers"}, &out)
+	if err == nil {
+		t.Fatal("expected unsupported replication mode error")
+	}
+	if !strings.Contains(err.Error(), "not implemented yet") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

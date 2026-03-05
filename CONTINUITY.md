@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/exit-code-semantics-phase31` pushed to origin.
+  - Branch: `codex/feat/replication-mode-phase32` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -24,7 +24,8 @@ Last updated: 2026-03-05
   - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
   - PR #31 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
   - PR #32 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
-  - PR #33 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/33 (command-specific exit code semantics).
+  - PR #33 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/33 (command-specific exit code semantics).
+  - PR #34 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/34 (replication-mode fail-fast surface).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -34,7 +35,8 @@ Last updated: 2026-03-05
   - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` runs `22728867046`, `22728920003`, success).
   - Manual CI validated on PR #31 head via `make ci-manual` (`workflow_dispatch` run `22729122875`, success).
   - Manual CI validated on PR #32 head via `make ci-manual` (`workflow_dispatch` run `22729367637`, success).
-  - Manual CI validated on PR #33 head via `make ci-manual` (`workflow_dispatch` run `22729731271`, success).
+  - Manual CI validated on PR #33 head via `make ci-manual` (`workflow_dispatch` runs `22729731271`, `22729775133`, success).
+  - Automatic `validate` checks on PR #34 passed (`22730086420`, `22730103030`).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -145,7 +147,7 @@ Last updated: 2026-03-05
   - Phase 30 merged (PR #32):
     - command scaffold output status normalized away from legacy `phase1-scaffold`.
     - dry-run command outputs standardized with explicit `dry-run` status.
-  - Phase 31 in progress (local branch only):
+  - Phase 31 merged (PR #33):
     - added typed command errors carrying explicit exit codes.
     - `plan` incompatibility now exits with code `2`.
     - `verify` diffs now exit with code `2`; verify runtime/tool failures exit with code `4`.
@@ -153,17 +155,24 @@ Last updated: 2026-03-05
     - CLI tests and command tests updated for new exit-code semantics.
     - README documents current exit-code contract.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 32 in progress (local branch only):
+    - `replicate` adds `--replication-mode={binlog,capture-triggers,hybrid}` (default `binlog`).
+    - non-binlog modes fail fast with explicit "not implemented yet" guidance.
+    - replicate dry-run/success outputs now include selected `replication_mode`.
+    - CLI and command tests expanded for replication-mode parsing and fail-fast behavior.
+    - README replication examples and mode notes updated.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #33 review/merge.
+  - Wait for PR #34 review/merge.
 - Next:
-  - Merge PR #33.
+  - Merge PR #34.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `README.md`, `internal/cli/cli.go`, `internal/cli/cli_test.go`, `internal/commands/exit_error.go`, `internal/commands/exit_error_test.go`, `internal/commands/plan.go`, `internal/commands/report.go`, `internal/commands/verify.go`.
+  - Files: `CONTINUITY.md`, `README.md`, `internal/commands/replicate.go`, `internal/commands/replicate_test.go`, `internal/cli/cli_test.go`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.
