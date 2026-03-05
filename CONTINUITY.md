@@ -1,259 +1,43 @@
 Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
-  - Deliver `dbmigrate` through phased PRs with safe baseline migration, verification, compatibility planning, and incremental replication that does not lose events.
-  - Success: each phase merged to `main` with green CI and operator docs updated.
+  - Deliver `dbmigrate` in phased PRs with safe migration/replication and explicit compatibility policy.
+  - Success: each phase merged to `main` with green CI, tests updated, and operator docs aligned.
 - Constraints/Assumptions:
   - License: MIT.
-  - Documentation language: English.
-  - Output priority: JSON first, HTML later.
-  - `--apply-ddl` surface is fixed to `ignore|apply|warn`.
-  - Default behavior is fail-fast on incompatibilities; auto-fix is future work.
-  - `Instructions.md` is tracked project documentation (merged in PR #26).
+  - Docs in English.
+  - JSON-first output.
+  - `--apply-ddl` values fixed to `ignore|apply|warn`.
+  - Default fail-fast on incompatibilities; auto-fix remains future work.
+  - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
+  - Keep `datasets/` untracked.
 - Key decisions:
-  - Deliver in small PRs from `codex/*` branches.
-  - Keep CI minimal and local testing comprehensive.
-  - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
-  - Allow partial-database scope via `--databases`.
+  - Work via small branches `codex/*` and PRs to `main`.
+  - Profiles remain: `strict-lts`, `same-major`, `adjacent-minor`, `max-compat`.
+  - User confirmed **Option B** for downgrade matrix hardening (active-LTS-first policy).
 - State:
-  - Branch: `codex/feat/report-ignore-stale-conflict-phase41`.
-  - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
-  - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
-  - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
-  - PR #29 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
-  - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
-  - PR #31 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
-  - PR #32 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
-  - PR #33 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/33 (command-specific exit code semantics).
-  - PR #34 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/34 (replication-mode fail-fast surface).
-  - PR #35 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/35 (trigger-CDC flag fail-fast surface).
-  - PR #36 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/36 (`--start-from` validation surface).
-  - PR #37 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/37 (`--max-events` transactional apply cap).
-  - PR #38 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/38 (`--idempotent` conflict-policy guard).
-  - PR #39 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/39 (`--max-lag-seconds` fail-fast guard).
-  - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
-  - PR #41 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
-  - PR #42 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
-  - PR #43 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/43 (`report` stale conflict artifact handling).
-  - `Instructions.md` is present and tracked on `main`.
-  - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
-  - Branch protection restored: required status check `validate` is re-enabled on `main`.
-  - Manual CI workaround was executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
-  - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
-  - Manual CI validated again on PR #29 head via `make ci-manual` (`workflow_dispatch` run `22728538011`, success).
-  - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` runs `22728867046`, `22728920003`, success).
-  - Manual CI validated on PR #31 head via `make ci-manual` (`workflow_dispatch` run `22729122875`, success).
-  - Manual CI validated on PR #32 head via `make ci-manual` (`workflow_dispatch` run `22729367637`, success).
-  - Manual CI validated on PR #33 head via `make ci-manual` (`workflow_dispatch` runs `22729731271`, `22729775133`, success).
-  - Automatic `validate` checks on PR #34 passed (`22730086420`, `22730103030`).
-  - Manual CI validated on PR #35 head via `make ci-manual` (`workflow_dispatch` runs `22730464468`, `22730510964`, success).
-  - Manual CI validated on PR #36 head via `make ci-manual` (`workflow_dispatch` run `22730771170`, success).
-  - Manual CI validated on PR #38 head via `make ci-manual` (`workflow_dispatch` run `22731435161`, success).
-  - Automatic `validate` checks on PR #38 passed (`22731436421`, `22731450686`).
-  - Automatic `validate` checks on PR #39 passed (`22732073481`, `22732075309`).
-  - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - Local note: `datasets/` must remain untracked.
-  - Phase 41 local implementation complete; pending push + PR:
-    - `report` now marks conflict artifacts as stale when checkpoint position is ahead of report `applied_end_*`.
-    - stale conflict artifacts no longer force `attention_required`/fail-fast by default.
-    - command + CLI tests added for stale conflict + advanced checkpoint scenarios.
-    - README report behavior updated with stale conflict auto-ignore note.
+  - Current branch: `codex/feat/compat-matrix-optionb-phase43`.
+  - `main` is at `1ce7060`.
+  - PR #44 is open (phase42): https://github.com/esthergb/dbmigrate/pull/44
+  - Phase43 local work implemented (not yet pushed): Option B matrix in compat logic + tests/docs updates.
 - Done:
-  - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
-  - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
-  - Phase 10 merged (replication checkpoint baseline + `--apply-ddl` validation).
-  - Phase 11 merged (engine/version compatibility auto-detection and fail-fast reports in `plan`).
-  - Phase 12 merged (replication source preflight for `log_bin` and `binlog_format=ROW`).
-  - Phase 13 merged:
-    - replication summary now distinguishes `source_end` vs `applied_end`.
-    - checkpoint persists only `applied_end` position.
-    - no-op apply scaffold added with `applied_events=0` for safe event-replay groundwork.
-    - replication run tests added for checkpoint safety and apply-window semantics.
-    - docs updated in README/operators guide for new replication summary semantics.
-  - Phase 14 merged:
-    - transactional apply-window execution added (batch-based destination transactions).
-    - checkpoint progression remains commit-gated by `applied_end`.
-    - apply hooks expanded for next phase binlog event loading.
-    - new tests for apply transaction behavior (no batches, commit path, exec error rollback, commit error path).
-    - docs refined for transaction-batch checkpoint semantics.
-  - Phase 15 merged:
-    - real source binlog streaming and decoding path added via `go-mysql` syncer integration.
-    - row events are converted into transactional SQL apply batches (upsert/update/delete) with commit-boundary checkpointing.
-    - fail-fast handling added for unsupported query events and DDL policy (`warn|apply|ignore`).
-    - source preflight hardened with `binlog_row_image=FULL` requirement.
-    - replication output now includes source row image.
-    - unit tests added for binlog decode-to-batch mapping, DDL policy paths, and binlog position helpers.
-  - Phase 16 merged:
-    - `replicate` supports explicit `--conflict-policy={fail,source-wins,dest-wins}` with default `fail`.
-    - conflict policy now controls insert mapping (`INSERT`, `INSERT ... ON DUPLICATE KEY UPDATE`, `INSERT IGNORE`).
-    - `conflict-policy=fail` enforces affected-row checks for update/delete apply operations and fails with remediation guidance on drift/conflicts.
-    - DDL apply mode now includes safety classification; risky DDL is blocked even under `--apply-ddl=apply` with explicit remediation message.
-    - replicate output includes selected `conflict_policy`.
-    - CLI/command/binlog tests expanded for conflict policy and DDL safety classification.
-  - Phase 17 merged:
-    - replicate now writes detailed failure reports to `--state-dir/replication-conflict-report.json`.
-    - failure reports include apply policy, checkpoint window (`start`, `source_end`, `applied_end`), failure type, operation, table, query, root message, and remediation.
-    - binlog apply/load paths now emit typed failures (`apply_sql_error`, `conflict_zero_rows`, `ddl_blocked`, `ddl_risky_blocked`, `incomplete_transaction`, etc.) to improve operator diagnostics.
-    - new state persistence module added for conflict reports with round-trip tests.
-    - replication run tests now validate conflict report generation on apply failures.
-  - Phase 18 merged:
-    - SQL execution failures are categorized into explicit failure types (`schema_drift`, `conflict_duplicate_key`, `conflict_foreign_key`, `permission_denied`, `data_conversion_error`, `retryable_transaction_error`, fallback `apply_sql_error`).
-    - conflict report schema now includes `sql_error_code` when available.
-    - execution error classification now derives targeted remediation guidance per failure class.
-    - tests added for SQL error classification and conflict report SQL-code persistence.
-  - Phase 19 merged:
-    - replication conflict reports now include `value_sample` for table-level key/value context.
-    - row apply pipeline now tracks key args per event and propagates samples into failures/reports.
-    - SQL error classification attaches sampled key values to categorized failures for faster triage.
-    - state/report tests updated for `value_sample` persistence; load/run tests updated for key-arg extraction and sampling behavior.
-  - Phase 20 merged (PR #22):
-    - apply events now carry key column names in addition to key values.
-    - `value_sample` generation is column-aware (`id=42`) with fallback to ordinal labels (`v1=42`) when names are unavailable.
-    - row-event mapping now propagates key columns for insert/update/delete conflict reporting.
-    - tests updated for key-column propagation and column-aware sample formatting.
-  - Phase 21 merged (PR #23):
-    - conflict reports include `old_row_sample` and `new_row_sample` JSON fields.
-    - binlog apply events now carry per-row payload snapshots (old/new rows) for insert/update/delete operations.
-    - SQL and zero-row conflict failures now include key sample + old/new row samples for faster triage.
-    - tests expanded for row payload propagation and conflict report round-trip persistence.
-  - Phase 22 merged (PR #24):
-    - new global option `--downgrade-profile` added with selectable values:
-      - `strict-lts` (default)
-      - `same-major`
-      - `adjacent-minor`
-      - `max-compat`
-    - compatibility evaluator now receives the selected profile and emits it in plan report payload (`report.downgrade_profile`).
-    - same-engine downgrade decisions are profile-driven; strict-lts adds LTS-line checks, max-compat relaxes guardrails.
-    - config-file support added for `downgrade-profile` (YAML) / `downgrade_profile` (JSON).
-    - docs updated in README/operators guide.
-    - tests expanded across `compat`, `config`, and `cli` for profile selection and validation.
-  - Phase 23 merged (PR #25):
-    - strict-lts now uses explicit same-engine matrix entries in code instead of implicit line checks.
-    - strict-lts failures now return matrix-specific findings:
-      - `strict_lts_matrix_out_of_range`
-      - `strict_lts_matrix_mismatch`
-      - `strict_lts_matrix_match` (info on successful line match)
-    - strict-lts error proposals now include the explicit allowed matrix summary.
-    - tests expanded for strict-lts out-of-range, cross-line mismatch, and same-line success.
-    - README/operators guide now document the explicit strict-lts same-engine matrix.
-  - Phase 24 opened (PR #26):
-    - README process/status refresh with current and pending milestones.
-    - `Instructions.md` introduced as tracked project documentation.
-  - Phase 25 merged (PR #27):
-    - conflict reports now include `row_diff_sample` for compact old->new field changes.
-    - replication apply failures now emit key sample + old/new row samples + diff hints.
-    - tests updated for row-diff generation and conflict report persistence.
-  - Phase 26 merged (PR #28):
-    - `report` command now emits structured state-based output (JSON/text) from `--state-dir` artifacts.
-    - report includes artifact presence, checkpoint summaries, conflict context, and remediation `proposals`.
-    - report status semantics added: `ok`, `attention_required`, `empty`.
-    - report unit tests added and local full suite passed.
-  - Phase 27 merged (PR #29):
-    - `report` now fails by default when status is `attention_required` (fail-fast behavior).
-    - override flag added: `--fail-on-conflict=false` to emit report without non-zero exit.
-    - command now always prints report payload first, then returns error when fail-fast is active.
-    - tests expanded across `internal/commands/report_test.go` and `internal/cli/cli_test.go`.
-    - docs updated in README/operators guide for fail-fast + override behavior.
-  - Phase 28 merged (PR #30):
-    - explicit same-engine matrix ranges added for `same-major` and `adjacent-minor` profiles.
-    - new compatibility findings added for matrix out-of-range/mismatch/match outcomes.
-    - tests extended for profile-matrix enforcement and allowed paths.
-    - README/operators guide matrix sections expanded with exact ranges per engine/profile.
-  - Phase 29 merged (PR #31):
-    - strict-lts cross-engine checks now use explicit matrix pairs (line-to-line mapping).
-    - cross-engine paths under `same-major` and `adjacent-minor` now fail with `profile_same_engine_only`.
-    - max-compat cross-engine paths now emit mapped/unmapped matrix guidance findings.
-    - compat tests expanded for cross-engine strict match/mismatch, profile blocking, and max-compat warnings.
-    - README/operators guide updated with strict-lts cross-engine matrix and profile-scope notes.
-  - Phase 30 merged (PR #32):
-    - command scaffold output status normalized away from legacy `phase1-scaffold`.
-    - dry-run command outputs standardized with explicit `dry-run` status.
-  - Phase 31 merged (PR #33):
-    - added typed command errors carrying explicit exit codes.
-    - `plan` incompatibility now exits with code `2`.
-    - `verify` diffs now exit with code `2`; verify runtime/tool failures exit with code `4`.
-    - `report` `attention_required` fail-fast path now exits with code `2`.
-    - CLI tests and command tests updated for new exit-code semantics.
-    - README documents current exit-code contract.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 32 merged (PR #34):
-    - `replicate` adds `--replication-mode={binlog,capture-triggers,hybrid}` (default `binlog`).
-    - non-binlog modes fail fast with explicit "not implemented yet" guidance.
-    - replicate dry-run/success outputs now include selected `replication_mode`.
-    - CLI and command tests expanded for replication-mode parsing and fail-fast behavior.
-    - README replication examples and mode notes updated.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 33 merged (PR #35):
-    - `replicate` adds trigger-CDC flag surface: `--enable-trigger-cdc`, `--teardown-cdc`.
-    - trigger-CDC flags now fail fast outside dry-run with explicit "not implemented yet" guidance.
-    - parse/CLI tests expanded for trigger-CDC options and unsupported runtime behavior.
-    - README replication mode section updated with trigger-CDC flag status.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 34 merged (PR #36):
-    - `replicate` adds `--start-from={auto,binlog-file:pos,gtid}` surface (default `auto`).
-    - `--start-from=binlog-file:pos` validation enforces `--resume=false` and explicit `--start-file`.
-    - `--start-from=gtid` now fails fast with explicit "not implemented yet" guidance.
-    - replicate dry-run/success outputs include selected `start_from`.
-    - parse/CLI tests expanded for start-from validation and runtime fail-fast paths.
-    - README replication section updated with start-from usage.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 35 merged (PR #37):
-    - `replicate` adds `--max-events` (default `0`, unlimited).
-    - binlog apply now enforces a transaction-boundary cap based on `--max-events`.
-    - checkpoint safety preserved (no partial-transaction checkpoint advancement).
-    - explicit fail-fast when the first transaction exceeds the configured limit.
-    - command/CLI/binlog tests expanded for parsing, cap behavior, and failure mode.
-    - README replication section updated with max-events semantics.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 36 merged (PR #38):
-    - `replicate` adds `--idempotent` guard surface.
-    - validation now rejects `--idempotent` with `--conflict-policy=fail`.
-    - replicate dry-run/success outputs include selected `idempotent` value.
-    - command/CLI tests expanded for idempotent validation behavior.
-    - README replication section updated with idempotent guard semantics.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 37 merged (PR #39):
-    - `replicate` adds `--max-lag-seconds` flag surface.
-    - non-zero `--max-lag-seconds` now fails fast with explicit "not implemented yet" guidance.
-    - replicate dry-run/success outputs include selected `max_lag_seconds`.
-    - command/CLI tests expanded for max-lag-seconds parse and unsupported-runtime behavior.
-    - README replication section updated with max-lag-seconds status.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 38 merged (PR #40):
-    - `--max-lag-seconds` now enforced in binlog apply runtime using transaction-end event timestamps.
-    - apply blocks when lag exceeds threshold before commit (`lag_limit_exceeded`).
-    - lag checks preserve checkpoint safety and transaction boundaries.
-    - stream/apply batch pipeline now propagates event timestamps through batch metadata.
-    - tests expanded across command/CLI/load/run paths for lag validation and runtime lag behavior.
-    - README updated with active max-lag semantics.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 39 merged (PR #41):
-    - `replicate` feature-gated incompatibility paths now return explicit `ExitCodeDiff` (`2`) instead of generic runtime failure.
-    - command + CLI tests now validate exit-code semantics for unsupported mode/start-from/trigger-CDC paths.
-    - README exit-code contract updated to include `replicate` feature-gated incompatibility behavior.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 40 merged (PR #42):
-    - successful `replicate` runs now remove stale `replication-conflict-report.json` from previous failed runs.
-    - regression test added to assert stale conflict-report cleanup on successful apply.
-    - README replication notes updated with cleanup semantics.
-    - local full test suite passes (`go test ./... -count=1`).
-  - Phase 41 opened (PR #43):
-    - `report` now marks conflict artifacts as stale when replication checkpoint has advanced beyond conflict `applied_end_*`.
-    - stale conflict artifacts no longer trigger `attention_required` / fail-fast by default.
-    - command and CLI tests added for stale conflict-report scenarios.
-    - README report behavior updated with stale conflict auto-ignore note.
-    - local full test suite passes (`go test ./... -count=1`).
-  - CI workaround docs updated:
-    - README now includes "Temporary CI workaround (review later)" section.
-    - operators guide now includes temporary CI operations note + review reminder.
+  - Phases 0-43 merged (latest merged: PR #43 stale conflict artifact handling in `report`).
+  - Phase42 implemented and open as PR #44 (timestamp fallback for stale conflict artifacts).
+  - Phase43 local implementation completed:
+    - `strict-lts` same-engine matrix now active-LTS-first: MySQL 8.4, MariaDB 10.11/11.4/11.8.
+    - `strict-lts` cross-engine matrix keeps explicit validated pair `MySQL 8.4 <-> MariaDB 11.4`.
+    - `same-major` and `adjacent-minor` no longer include legacy lines (MySQL 8.0, MariaDB 10.6).
+    - `max-compat` adds explicit warnings for legacy lines (MySQL 8.0, MariaDB 10.6).
+    - tests updated in `internal/compat/evaluate_test.go`; docs updated in `README.md` and `docs/operators-guide.md`.
+    - local tests passing: `/tmp/go-toolchain/go/bin/go test ./... -count=1`.
 - Now:
-  - Wait for PR #43 CI/review/merge.
+  - Commit/push Phase43 branch and open PR.
 - Next:
-  - Merge PR #43 once CI is green.
-  - Continue with next phase branch.
-  - Keep `make ci-manual` as fallback if automatic triggers regress.
+  - Merge PR #44.
+  - Merge Phase43 PR after CI.
+  - Continue next phase from updated `main`.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
+  - UNCONFIRMED: whether to add `MySQL 8.4 <-> MariaDB 11.8` as `strict-lts` cross-engine pair or keep it only under `max-compat` until validated.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `README.md`, `internal/commands/report.go`, `internal/commands/report_test.go`, `internal/cli/cli_test.go`, `configs/mysql84-to-mariadb114.yaml` (untracked/local), `datasets/` (untracked/local).
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.
+  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.

@@ -12,26 +12,25 @@ Compatibility profile selection:
 - `dbmigrate plan --source "<dsn>" --dest "<dsn>" --downgrade-profile strict-lts`
 - Supported values: `strict-lts` (default), `same-major`, `adjacent-minor`, `max-compat`.
 - `strict-lts` explicit same-engine matrix:
-  - `MySQL 8.0.x -> MySQL 8.0.x`
   - `MySQL 8.4.x -> MySQL 8.4.x`
   - `MariaDB 10.11.x -> MariaDB 10.11.x`
   - `MariaDB 11.4.x -> MariaDB 11.4.x`
+  - `MariaDB 11.8.x -> MariaDB 11.8.x`
 - `same-major` explicit same-engine matrix ranges:
-  - `MySQL 8.0-8.4 -> MySQL 8.0-8.4`
-  - `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11`
-  - `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4`
+  - `MySQL 8.4-8.4 -> MySQL 8.4-8.4`
+  - `MariaDB 10.11-10.11 -> MariaDB 10.11-10.11`
+  - `MariaDB 11.4-11.8 -> MariaDB 11.4-11.8`
 - `adjacent-minor` explicit same-engine matrix ranges (same major + one minor step max):
-  - `MySQL 8.0-8.4 -> MySQL 8.0-8.4`
-  - `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11`
-  - `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4`
+  - `MySQL 8.4-8.4 -> MySQL 8.4-8.4`
+  - `MariaDB 10.11-10.11 -> MariaDB 10.11-10.11`
+  - `MariaDB 11.4-11.8 -> MariaDB 11.4-11.8`
 - `strict-lts` explicit cross-engine matrix pairs:
-  - `MySQL 8.0.x -> MariaDB 10.11.x`
-  - `MariaDB 10.11.x -> MySQL 8.0.x`
   - `MySQL 8.4.x -> MariaDB 11.4.x`
   - `MariaDB 11.4.x -> MySQL 8.4.x`
 - Profile scope note:
   - `same-major` and `adjacent-minor` are same-engine only.
   - Use `strict-lts` for explicit cross-engine matrix validation, or `max-compat` for permissive paths with full verification.
+  - `max-compat` emits explicit warnings when source/destination uses legacy lines (for example MySQL 8.0.x or MariaDB 10.6.x).
 
 ## Baseline migration execution
 

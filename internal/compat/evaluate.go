@@ -39,29 +39,27 @@ type crossEngineMatrixEntry struct {
 }
 
 var strictLTSMatrix = []strictLTSMatrixEntry{
-	{Engine: EngineMySQL, Major: 8, Minor: 0, Label: "MySQL 8.0.x"},
 	{Engine: EngineMySQL, Major: 8, Minor: 4, Label: "MySQL 8.4.x"},
 	{Engine: EngineMariaDB, Major: 10, Minor: 11, Label: "MariaDB 10.11.x"},
 	{Engine: EngineMariaDB, Major: 11, Minor: 4, Label: "MariaDB 11.4.x"},
+	{Engine: EngineMariaDB, Major: 11, Minor: 8, Label: "MariaDB 11.8.x"},
 }
 
 var strictLTSCrossEngineMatrix = []crossEngineMatrixEntry{
-	{SourceLine: "MySQL 8.0.x", DestLine: "MariaDB 10.11.x"},
-	{SourceLine: "MariaDB 10.11.x", DestLine: "MySQL 8.0.x"},
 	{SourceLine: "MySQL 8.4.x", DestLine: "MariaDB 11.4.x"},
 	{SourceLine: "MariaDB 11.4.x", DestLine: "MySQL 8.4.x"},
 }
 
 var sameMajorMatrix = []profileMatrixRange{
-	{Engine: EngineMySQL, Major: 8, MinMinor: 0, MaxMinor: 4, Label: "MySQL 8.0-8.4"},
-	{Engine: EngineMariaDB, Major: 10, MinMinor: 6, MaxMinor: 11, Label: "MariaDB 10.6-10.11"},
-	{Engine: EngineMariaDB, Major: 11, MinMinor: 0, MaxMinor: 4, Label: "MariaDB 11.0-11.4"},
+	{Engine: EngineMySQL, Major: 8, MinMinor: 4, MaxMinor: 4, Label: "MySQL 8.4-8.4"},
+	{Engine: EngineMariaDB, Major: 10, MinMinor: 11, MaxMinor: 11, Label: "MariaDB 10.11-10.11"},
+	{Engine: EngineMariaDB, Major: 11, MinMinor: 4, MaxMinor: 8, Label: "MariaDB 11.4-11.8"},
 }
 
 var adjacentMinorMatrix = []profileMatrixRange{
-	{Engine: EngineMySQL, Major: 8, MinMinor: 0, MaxMinor: 4, Label: "MySQL 8.0-8.4"},
-	{Engine: EngineMariaDB, Major: 10, MinMinor: 6, MaxMinor: 11, Label: "MariaDB 10.6-10.11"},
-	{Engine: EngineMariaDB, Major: 11, MinMinor: 0, MaxMinor: 4, Label: "MariaDB 11.0-11.4"},
+	{Engine: EngineMySQL, Major: 8, MinMinor: 4, MaxMinor: 4, Label: "MySQL 8.4-8.4"},
+	{Engine: EngineMariaDB, Major: 10, MinMinor: 11, MaxMinor: 11, Label: "MariaDB 10.11-10.11"},
+	{Engine: EngineMariaDB, Major: 11, MinMinor: 4, MaxMinor: 8, Label: "MariaDB 11.4-11.8"},
 }
 
 // DowngradeProfile controls strictness for downgrade compatibility checks.
@@ -230,6 +228,7 @@ func Evaluate(source Instance, dest Instance, selectedDatabases []string, downgr
 			Message:  "max-compat profile selected: downgrade guardrails are relaxed.",
 			Proposal: "Run full verification and inspect detailed reports before cutover because compatibility checks are permissive.",
 		})
+		appendMaxCompatLegacyWarnings(&report)
 	}
 
 	if report.Compatible {
@@ -521,6 +520,39 @@ func profileMatrixSummary(matrix []profileMatrixRange) string {
 		labels = append(labels, fmt.Sprintf("%s->%s", entry.Label, entry.Label))
 	}
 	return strings.Join(labels, ", ")
+}
+
+func appendMaxCompatLegacyWarnings(report *Report) {
+	sourceLegacyLabel, sourceLegacy := legacyLine(report.Source)
+	if sourceLegacy {
+		report.Findings = append(report.Findings, Finding{
+			Code:     "max_compat_legacy_line",
+			Severity: "warn",
+			Message:  fmt.Sprintf("max-compat source uses legacy line %s (%s %s).", sourceLegacyLabel, report.Source.Engine, report.Source.Version),
+			Proposal: "Prefer active LTS lines (MySQL 8.4.x, MariaDB 10.11.x/11.4.x/11.8.x) or validate rollback and full verification evidence before cutover.",
+		})
+	}
+
+	destLegacyLabel, destLegacy := legacyLine(report.Dest)
+	if destLegacy {
+		report.Findings = append(report.Findings, Finding{
+			Code:     "max_compat_legacy_line",
+			Severity: "warn",
+			Message:  fmt.Sprintf("max-compat destination uses legacy line %s (%s %s).", destLegacyLabel, report.Dest.Engine, report.Dest.Version),
+			Proposal: "Prefer active LTS lines (MySQL 8.4.x, MariaDB 10.11.x/11.4.x/11.8.x) or accept explicit risk with staged migration and full verification.",
+		})
+	}
+}
+
+func legacyLine(instance Instance) (string, bool) {
+	switch {
+	case instance.Engine == EngineMySQL && instance.Major == 8 && instance.Minor == 0:
+		return "MySQL 8.0.x", true
+	case instance.Engine == EngineMariaDB && instance.Major == 10 && instance.Minor == 6:
+		return "MariaDB 10.6.x", true
+	default:
+		return "", false
+	}
 }
 
 func detectEngine(rawVersion string) Engine {

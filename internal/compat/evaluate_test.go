@@ -50,8 +50,8 @@ func TestEvaluateCrossEngineDowngradeThreshold(t *testing.T) {
 }
 
 func TestEvaluateCrossEngineStrictLTSAllowedPair(t *testing.T) {
-	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
-	dest := ParseInstance("10.11.8-MariaDB")
+	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	dest := ParseInstance("11.4.2-MariaDB")
 	report := Evaluate(source, dest, nil, "strict-lts")
 	if !report.Compatible {
 		t.Fatalf("expected compatible strict-lts matrix pair, findings=%#v", report.Findings)
@@ -62,8 +62,8 @@ func TestEvaluateCrossEngineStrictLTSAllowedPair(t *testing.T) {
 }
 
 func TestEvaluateCrossEngineStrictLTSMismatch(t *testing.T) {
-	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
-	dest := ParseInstance("11.4.2-MariaDB")
+	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	dest := ParseInstance("10.11.8-MariaDB")
 	report := Evaluate(source, dest, nil, "strict-lts")
 	if report.Compatible {
 		t.Fatalf("expected strict-lts matrix mismatch to be incompatible, findings=%#v", report.Findings)
@@ -135,8 +135,8 @@ func TestEvaluateDefaultsToStrictLTS(t *testing.T) {
 }
 
 func TestEvaluateSameMajorProfileAllowsSameMajorDowngrade(t *testing.T) {
-	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
-	dest := ParseInstance("8.0.39 MySQL Community Server - GPL")
+	source := ParseInstance("11.8.2-MariaDB")
+	dest := ParseInstance("11.7.1-MariaDB")
 	report := Evaluate(source, dest, nil, "same-major")
 	if !report.Compatible {
 		t.Fatalf("expected compatible same-major downgrade, findings=%#v", report.Findings)
@@ -159,8 +159,8 @@ func TestEvaluateSameMajorProfileRejectsOutOfMatrixRange(t *testing.T) {
 }
 
 func TestEvaluateAdjacentMinorProfileRejectsNonAdjacentDowngrade(t *testing.T) {
-	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
-	dest := ParseInstance("8.1.39 MySQL Community Server - GPL")
+	source := ParseInstance("11.8.2-MariaDB")
+	dest := ParseInstance("11.6.1-MariaDB")
 	report := Evaluate(source, dest, nil, "adjacent-minor")
 	if report.Compatible {
 		t.Fatalf("expected incompatible adjacent-minor downgrade with large gap, findings=%#v", report.Findings)
@@ -171,8 +171,8 @@ func TestEvaluateAdjacentMinorProfileRejectsNonAdjacentDowngrade(t *testing.T) {
 }
 
 func TestEvaluateAdjacentMinorProfileAllowsAdjacentStepInsideMatrix(t *testing.T) {
-	source := ParseInstance("10.11.8-MariaDB")
-	dest := ParseInstance("10.10.9-MariaDB")
+	source := ParseInstance("11.8.2-MariaDB")
+	dest := ParseInstance("11.7.1-MariaDB")
 	report := Evaluate(source, dest, nil, "adjacent-minor")
 	if !report.Compatible {
 		t.Fatalf("expected adjacent-minor downgrade to be compatible, findings=%#v", report.Findings)
@@ -204,6 +204,9 @@ func TestEvaluateMaxCompatAllowsLargeGapDowngrade(t *testing.T) {
 	if !hasFinding(report.Findings, "max_compat_profile") {
 		t.Fatalf("expected max_compat_profile finding, got %#v", report.Findings)
 	}
+	if !hasFinding(report.Findings, "max_compat_legacy_line") {
+		t.Fatalf("expected max_compat_legacy_line finding, got %#v", report.Findings)
+	}
 }
 
 func TestEvaluateStrictLTSRequiresKnownLTSLine(t *testing.T) {
@@ -219,8 +222,8 @@ func TestEvaluateStrictLTSRequiresKnownLTSLine(t *testing.T) {
 }
 
 func TestEvaluateStrictLTSBlocksCrossLineDowngrade(t *testing.T) {
-	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
-	dest := ParseInstance("8.0.39 MySQL Community Server - GPL")
+	source := ParseInstance("11.8.2-MariaDB")
+	dest := ParseInstance("11.4.7-MariaDB")
 	report := Evaluate(source, dest, nil, "strict-lts")
 	if report.Compatible {
 		t.Fatalf("expected strict-lts cross-line downgrade to be incompatible, findings=%#v", report.Findings)
