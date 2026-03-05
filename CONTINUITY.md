@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/idempotent-guard-phase36` pushed to origin.
+  - Branch: `codex/feat/max-lag-seconds-phase37` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -29,7 +29,8 @@ Last updated: 2026-03-05
   - PR #35 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/35 (trigger-CDC flag fail-fast surface).
   - PR #36 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/36 (`--start-from` validation surface).
   - PR #37 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/37 (`--max-events` transactional apply cap).
-  - PR #38 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/38 (`--idempotent` conflict-policy guard).
+  - PR #38 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/38 (`--idempotent` conflict-policy guard).
+  - PR #39 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/39 (`--max-lag-seconds` fail-fast guard).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -46,6 +47,7 @@ Last updated: 2026-03-05
   - Manual CI validated on PR #38 head via `make ci-manual` (`workflow_dispatch` run `22731435161`, success).
   - Automatic `validate` checks on PR #38 passed (`22731436421`, `22731450686`).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
+  - Local note: `datasets/` must remain untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -193,20 +195,27 @@ Last updated: 2026-03-05
     - command/CLI/binlog tests expanded for parsing, cap behavior, and failure mode.
     - README replication section updated with max-events semantics.
     - local full test suite passes (`go test ./... -count=1`).
-  - Phase 36 opened (PR #38):
+  - Phase 36 merged (PR #38):
     - `replicate` adds `--idempotent` guard surface.
     - validation now rejects `--idempotent` with `--conflict-policy=fail`.
     - replicate dry-run/success outputs include selected `idempotent` value.
     - command/CLI tests expanded for idempotent validation behavior.
     - README replication section updated with idempotent guard semantics.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 37 opened (PR #39):
+    - `replicate` adds `--max-lag-seconds` flag surface.
+    - non-zero `--max-lag-seconds` now fails fast with explicit "not implemented yet" guidance.
+    - replicate dry-run/success outputs include selected `max_lag_seconds`.
+    - command/CLI tests expanded for max-lag-seconds parse and unsupported-runtime behavior.
+    - README replication section updated with max-lag-seconds status.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #38 review/merge.
+  - Wait for PR #39 review/merge.
 - Next:
-  - Merge PR #38.
+  - Merge PR #39.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):

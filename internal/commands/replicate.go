@@ -16,6 +16,7 @@ type replicateOptions struct {
 	ReplicationMode  string
 	StartFrom        string
 	MaxEvents        uint64
+	MaxLagSeconds    uint64
 	Idempotent       bool
 	ApplyDDL         string
 	ConflictPolicy   string
@@ -41,10 +42,11 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d idempotent=%v enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
 				opts.StartFrom,
 				opts.MaxEvents,
+				opts.MaxLagSeconds,
 				opts.Idempotent,
 				opts.EnableTriggerCDC,
 				opts.TeardownCDC,
@@ -58,6 +60,9 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	}
 	if opts.EnableTriggerCDC || opts.TeardownCDC {
 		return errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication")
+	}
+	if opts.MaxLagSeconds > 0 {
+		return errors.New("max-lag-seconds is not implemented yet; use max-events to bound apply windows for now")
 	}
 	if opts.StartFrom == "gtid" {
 		return errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos")
@@ -89,6 +94,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		ApplyDDL:       opts.ApplyDDL,
 		ConflictPolicy: opts.ConflictPolicy,
 		MaxEvents:      opts.MaxEvents,
+		MaxLagSeconds:  opts.MaxLagSeconds,
 		Idempotent:     opts.Idempotent,
 		Resume:         opts.Resume,
 		StartFile:      opts.StartFile,
@@ -105,7 +111,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s max_events=%d idempotent=%v apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -119,6 +125,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			opts.ReplicationMode,
 			opts.StartFrom,
 			opts.MaxEvents,
+			opts.MaxLagSeconds,
 			opts.Idempotent,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
@@ -132,6 +139,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		ReplicationMode: "binlog",
 		StartFrom:       "auto",
 		MaxEvents:       0,
+		MaxLagSeconds:   0,
 		Idempotent:      false,
 		ApplyDDL:        "warn",
 		ConflictPolicy:  "fail",
@@ -144,6 +152,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.StringVar(&opts.ReplicationMode, "replication-mode", "binlog", "replication mode (binlog|capture-triggers|hybrid)")
 	fs.StringVar(&opts.StartFrom, "start-from", "auto", "replication start reference (auto|binlog-file:pos|gtid)")
 	fs.Uint64Var(&opts.MaxEvents, "max-events", 0, "max apply events per run (0 means no explicit limit)")
+	fs.Uint64Var(&opts.MaxLagSeconds, "max-lag-seconds", 0, "max allowed lag in seconds before apply (planned)")
 	fs.BoolVar(&opts.Idempotent, "idempotent", false, "enforce idempotent-safe conflict policy for replay runs")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
