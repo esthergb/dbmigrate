@@ -103,13 +103,16 @@ Last updated: 2026-03-05
   - Documentation updated for operators:
     - `README.md` (new precheck section + safety note)
     - `docs/operators-guide.md` (workflow + safety defaults)
+  - Before merge of PR #56, datasets were updated to include optional zero-date examples (disabled by default):
+    - appended `OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)` block to all `datasets/populate_*.sql`
+    - updated `datasets/README.md` with enablement guidance and strict `sql_mode` notes
 - Now:
-  - Wait for user review/merge of PR #56.
+  - Commit and push the dataset updates to PR #56.
 - Next:
-  - After merge confirmation from user, continue next planned phase.
+  - Wait for user review/merge of updated PR #56.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
   - UNCONFIRMED: timeline/priority order between strict-lts promotion and additional precheck/autofix hardening.
 - Working set (files/ids/commands):
-  - Files: `internal/commands/temporal_precheck.go`, `internal/commands/temporal_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: `go test ./internal/commands -count=1`, `go test ./... -count=1`, manual `plan/migrate` precheck validation against docker services, commit `269dcea`, PR #56.
+  - Files: `datasets/populate_mariadb10.sql`, `datasets/populate_mariadb11.sql`, `datasets/populate_mariadb12.sql`, `datasets/populate_mysql80.sql`, `datasets/populate_mysql84.sql`, `datasets/README.md`, `CONTINUITY.md`.
+  - Commands: dataset tail/grep validation + commit/push to PR #56.
