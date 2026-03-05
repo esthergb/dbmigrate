@@ -73,6 +73,9 @@ Replication checkpoint behavior:
 
 - Generate machine-readable report from state artifacts:
   - `dbmigrate report --state-dir ./state --json`
+- Default behavior is fail-fast when conflicts are present (`status=attention_required`), returning non-zero exit.
+- Optional override to keep reporting but not fail the command:
+  - `dbmigrate report --state-dir ./state --json --fail-on-conflict=false`
 - Report scans these files when present:
   - `data-baseline-checkpoint.json`
   - `replication-checkpoint.json`
@@ -95,3 +98,11 @@ Replication checkpoint behavior:
 - Take source and destination backups before baseline migration.
 - Keep replication checkpoints immutable per successful run.
 - If verification fails, stop apply loop and inspect report before retry.
+
+## Temporary CI operations note (review later)
+
+- If GitHub automatic workflow triggers are degraded, dispatch CI manually for a branch:
+  - `make ci-manual`
+  - or `make ci-manual BRANCH=<branch-name>`
+- This is a temporary operational workaround.
+- Review later: re-enable strict required status checks on `main` after automatic `push`/`pull_request` triggers are healthy again.

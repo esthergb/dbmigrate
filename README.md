@@ -105,6 +105,9 @@ Replication checkpoint safety behavior:
 ```bash
 # JSON-first detailed operator report from --state-dir artifacts
 dbmigrate report --state-dir ./state --json
+
+# Override fail-fast behavior to emit report without non-zero exit
+dbmigrate report --state-dir ./state --json --fail-on-conflict=false
 ```
 
 Current report behavior:
@@ -117,6 +120,7 @@ Current report behavior:
   - `attention_required` when a replication conflict failure is present
   - `empty` when no known state artifacts are found
 - Includes remediation proposals from conflict reports in the `proposals` section.
+- Fails by default (`exit 3`) when report status is `attention_required` (active replication conflict report). Use `--fail-on-conflict=false` to emit report without failing.
 
 ## Verification modes
 
@@ -162,6 +166,23 @@ If `golangci-lint` and `govulncheck` are installed:
 make lint
 make vulncheck
 ```
+
+## Temporary CI workaround (review later)
+
+- Current repository issue: automatic GitHub Actions triggers (`push`/`pull_request`) may not fire reliably.
+- Temporary workaround: run CI manually for the current branch:
+
+```bash
+make ci-manual
+```
+
+- Optional explicit branch:
+
+```bash
+make ci-manual BRANCH=codex/feat/report-fail-default-phase27
+```
+
+- TODO: once automatic triggers are stable again, restore required status checks on `main` and remove this workaround section.
 
 ## Safety notes
 
