@@ -70,9 +70,10 @@ type applyEvent struct {
 }
 
 type applyBatch struct {
-	EndFile string
-	EndPos  uint32
-	Events  []applyEvent
+	EndFile      string
+	EndPos       uint32
+	EndTimestamp uint32
+	Events       []applyEvent
 }
 
 type txRunner interface {
@@ -451,6 +452,25 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 		if len(batch.Events) == 0 {
 			continue
 		}
+		if opts.MaxLagSeconds > 0 && batch.EndTimestamp > 0 {
+			lagSeconds := estimateLagSeconds(batch.EndTimestamp, timeNowFn().UTC())
+			if lagSeconds > opts.MaxLagSeconds {
+				return applyResult{}, &applyFailure{
+					FailureType: "lag_limit_exceeded",
+					File:        batch.EndFile,
+					Pos:         batch.EndPos,
+					Operation:   "apply_batch",
+					Message: fmt.Sprintf(
+						"replication lag %ds exceeds --max-lag-seconds=%d before apply",
+						lagSeconds,
+						opts.MaxLagSeconds,
+					),
+					Remediation: "increase --max-lag-seconds or rerun with a smaller apply window (for example via --max-events)",
+					AppliedFile: lastFile,
+					AppliedPos:  lastPos,
+				}
+			}
+		}
 		if opts.MaxEvents > 0 {
 			batchEvents := uint64(len(batch.Events))
 			if batchEvents > opts.MaxEvents && appliedEvents == 0 {
@@ -595,6 +615,15 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 		Pos:           lastPos,
 		AppliedEvents: appliedEvents,
 	}, nil
+}
+
+func estimateLagSeconds(eventTimestamp uint32, now time.Time) uint64 {
+	eventUnix := int64(eventTimestamp)
+	nowUnix := now.Unix()
+	if nowUnix <= eventUnix {
+		return 0
+	}
+	return uint64(nowUnix - eventUnix)
 }
 
 func beginDestinationTx(ctx context.Context, db *sql.DB) (txRunner, error) {

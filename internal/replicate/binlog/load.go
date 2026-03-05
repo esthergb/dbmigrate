@@ -29,13 +29,14 @@ const (
 )
 
 type streamEvent struct {
-	Kind   streamEventKind
-	File   string
-	Pos    uint32
-	Schema string
-	Table  string
-	Query  string
-	Rows   [][]any
+	Kind      streamEventKind
+	File      string
+	Pos       uint32
+	Timestamp uint32
+	Schema    string
+	Table     string
+	Query     string
+	Rows      [][]any
 }
 
 type tableMetadata struct {
@@ -144,17 +145,19 @@ func convertReplicationEvent(event *replication.BinlogEvent, file string) (strea
 			return streamEvent{}, false, errors.New("unexpected query event payload")
 		}
 		return streamEvent{
-			Kind:   streamEventQuery,
-			File:   file,
-			Pos:    event.Header.LogPos,
-			Schema: string(query.Schema),
-			Query:  strings.TrimSpace(string(query.Query)),
+			Kind:      streamEventQuery,
+			File:      file,
+			Pos:       event.Header.LogPos,
+			Timestamp: event.Header.Timestamp,
+			Schema:    string(query.Schema),
+			Query:     strings.TrimSpace(string(query.Query)),
 		}, true, nil
 	case replication.XID_EVENT:
 		return streamEvent{
-			Kind: streamEventXID,
-			File: file,
-			Pos:  event.Header.LogPos,
+			Kind:      streamEventXID,
+			File:      file,
+			Pos:       event.Header.LogPos,
+			Timestamp: event.Header.Timestamp,
 		}, true, nil
 	case replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2:
 		return convertRowsEvent(streamEventWriteRows, event, file)
@@ -184,12 +187,13 @@ func convertRowsEvent(kind streamEventKind, event *replication.BinlogEvent, file
 	}
 
 	return streamEvent{
-		Kind:   kind,
-		File:   file,
-		Pos:    event.Header.LogPos,
-		Schema: string(rowsEvent.Table.Schema),
-		Table:  string(rowsEvent.Table.Table),
-		Rows:   rows,
+		Kind:      kind,
+		File:      file,
+		Pos:       event.Header.LogPos,
+		Timestamp: event.Header.Timestamp,
+		Schema:    string(rowsEvent.Table.Schema),
+		Table:     string(rowsEvent.Table.Table),
+		Rows:      rows,
 	}, true, nil
 }
 
@@ -217,9 +221,10 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 					continue
 				}
 				batches = append(batches, applyBatch{
-					EndFile: event.File,
-					EndPos:  event.Pos,
-					Events:  pending,
+					EndFile:      event.File,
+					EndPos:       event.Pos,
+					EndTimestamp: event.Timestamp,
+					Events:       pending,
 				})
 				pending = make([]applyEvent, 0, 32)
 				pendingFile = ""
@@ -278,8 +283,9 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 					}
 				}
 				batches = append(batches, applyBatch{
-					EndFile: event.File,
-					EndPos:  event.Pos,
+					EndFile:      event.File,
+					EndPos:       event.Pos,
+					EndTimestamp: event.Timestamp,
 					Events: []applyEvent{
 						{
 							Query:     event.Query,
@@ -296,9 +302,10 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 				continue
 			}
 			batches = append(batches, applyBatch{
-				EndFile: event.File,
-				EndPos:  event.Pos,
-				Events:  pending,
+				EndFile:      event.File,
+				EndPos:       event.Pos,
+				EndTimestamp: event.Timestamp,
+				Events:       pending,
 			})
 			pending = make([]applyEvent, 0, 32)
 			pendingFile = ""

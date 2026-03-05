@@ -61,9 +61,6 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	if opts.EnableTriggerCDC || opts.TeardownCDC {
 		return errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication")
 	}
-	if opts.MaxLagSeconds > 0 {
-		return errors.New("max-lag-seconds is not implemented yet; use max-events to bound apply windows for now")
-	}
 	if opts.StartFrom == "gtid" {
 		return errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos")
 	}

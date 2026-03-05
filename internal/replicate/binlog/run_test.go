@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
 
@@ -638,6 +639,82 @@ func TestApplyWindowTransactionalFailsWhenMaxEventsBelowFirstTransaction(t *test
 	}
 	if !strings.Contains(err.Error(), "exceeds --max-events=1") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyWindowTransactionalFailsWhenLagLimitExceeded(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile:      "mysql-bin.000011",
+				EndPos:       160,
+				EndTimestamp: 1700000000,
+				Events: []applyEvent{
+					{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}},
+				},
+			},
+		}, nil
+	}
+	timeNowFn = func() time.Time {
+		return time.Unix(1700000120, 0).UTC()
+	}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		t.Fatal("begin transaction should not be called when lag limit is exceeded")
+		return nil, nil
+	}
+
+	_, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000011",
+		StartPos:  100,
+		EndFile:   "mysql-bin.000011",
+		EndPos:    160,
+	}, Options{ApplyDDL: "warn", MaxLagSeconds: 30})
+	if err == nil {
+		t.Fatal("expected lag limit error")
+	}
+	if !strings.Contains(err.Error(), "exceeds --max-lag-seconds=30") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyWindowTransactionalAllowsWhenLagWithinLimit(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile:      "mysql-bin.000011",
+				EndPos:       160,
+				EndTimestamp: 1700000000,
+				Events: []applyEvent{
+					{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}},
+				},
+			},
+		}, nil
+	}
+	timeNowFn = func() time.Time {
+		return time.Unix(1700000010, 0).UTC()
+	}
+	tx := &fakeTx{}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		return tx, nil
+	}
+
+	result, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000011",
+		StartPos:  100,
+		EndFile:   "mysql-bin.000011",
+		EndPos:    160,
+	}, Options{ApplyDDL: "warn", MaxLagSeconds: 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.AppliedEvents != 1 || result.Pos != 160 {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 

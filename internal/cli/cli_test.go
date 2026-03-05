@@ -359,17 +359,18 @@ func TestRunReplicateInvalidMaxLagSeconds(t *testing.T) {
 	}
 }
 
-func TestRunReplicateUnsupportedMaxLagSeconds(t *testing.T) {
+func TestRunReplicateMaxLagSecondsDryRun(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
 		"--source", "mysql://src",
 		"--dest", "mysql://dst",
 		"--max-lag-seconds", "30",
+		"--dry-run",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }
 
