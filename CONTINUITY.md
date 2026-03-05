@@ -35,6 +35,7 @@ Last updated: 2026-03-05
   - PR #41 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
   - PR #42 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
   - PR #43 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/43 (`report` stale conflict artifact handling).
+  - PR #44 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/44 (`report` stale conflict timestamp fallback).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -243,13 +244,19 @@ Last updated: 2026-03-05
     - command and CLI tests added for stale conflict-report scenarios.
     - README report behavior updated with stale conflict auto-ignore note.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 42 opened (PR #44):
+    - `report` stale-conflict detection now falls back to checkpoint `updated_at` vs conflict `generated_at` for legacy artifacts without `applied_end_*`.
+    - positional stale detection remains preferred when `applied_end_*` exists.
+    - command + CLI tests added for stale timestamp fallback and non-stale newer-conflict guard.
+    - README report behavior updated with timestamp fallback semantics.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Push Phase 42 branch and open PR with CI.
+  - Wait for PR #44 CI/review/merge.
 - Next:
-  - Merge PR for Phase 42 once CI is green.
+  - Merge PR #44 once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
