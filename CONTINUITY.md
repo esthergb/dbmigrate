@@ -19,7 +19,7 @@ Last updated: 2026-03-05
   - Current branch: `codex/feat/compat-matrix-optionb-phase43`.
   - `main` is at `1ce7060`.
   - PR #44 is open (phase42): https://github.com/esthergb/dbmigrate/pull/44
-  - Phase43 local work implemented (not yet pushed): Option B matrix in compat logic + tests/docs updates.
+  - PR #45 is open (phase43): https://github.com/esthergb/dbmigrate/pull/45
 - Done:
   - Phases 0-43 merged (latest merged: PR #43 stale conflict artifact handling in `report`).
   - Phase42 implemented and open as PR #44 (timestamp fallback for stale conflict artifacts).
@@ -31,10 +31,10 @@ Last updated: 2026-03-05
     - tests updated in `internal/compat/evaluate_test.go`; docs updated in `README.md` and `docs/operators-guide.md`.
     - local tests passing: `/tmp/go-toolchain/go/bin/go test ./... -count=1`.
 - Now:
-  - Commit/push Phase43 branch and open PR.
+  - Wait for CI/review on PR #44 and PR #45.
 - Next:
   - Merge PR #44.
-  - Merge Phase43 PR after CI.
+  - Merge PR #45 after CI.
   - Continue next phase from updated `main`.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to add `MySQL 8.4 <-> MariaDB 11.8` as `strict-lts` cross-engine pair or keep it only under `max-compat` until validated.
