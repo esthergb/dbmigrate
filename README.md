@@ -72,6 +72,16 @@ Supported profiles:
 - `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11` (same major + one minor step max)
 - `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4` (same major + one minor step max)
 
+`strict-lts` explicit cross-engine matrix pairs:
+- `MySQL 8.0.x -> MariaDB 10.11.x`
+- `MariaDB 10.11.x -> MySQL 8.0.x`
+- `MySQL 8.4.x -> MariaDB 11.4.x`
+- `MariaDB 11.4.x -> MySQL 8.4.x`
+
+Profile scope note:
+- `same-major` and `adjacent-minor` are same-engine only (cross-engine paths are blocked by default).
+- Use `strict-lts` for matrix-based cross-engine validation or `max-compat` for permissive risk-reviewed paths.
+
 ## Baseline migration modes
 
 ```bash

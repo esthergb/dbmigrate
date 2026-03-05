@@ -44,6 +44,69 @@ func TestEvaluateCrossEngineDowngradeThreshold(t *testing.T) {
 	if report.Compatible {
 		t.Fatal("expected incompatible report for mysql8 -> mariadb10.5")
 	}
+	if !hasFinding(report.Findings, "strict_lts_cross_engine_out_of_range") {
+		t.Fatalf("expected strict_lts_cross_engine_out_of_range finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineStrictLTSAllowedPair(t *testing.T) {
+	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
+	dest := ParseInstance("10.11.8-MariaDB")
+	report := Evaluate(source, dest, nil, "strict-lts")
+	if !report.Compatible {
+		t.Fatalf("expected compatible strict-lts matrix pair, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "strict_lts_cross_engine_matrix_match") {
+		t.Fatalf("expected strict_lts_cross_engine_matrix_match finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineStrictLTSMismatch(t *testing.T) {
+	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
+	dest := ParseInstance("11.4.2-MariaDB")
+	report := Evaluate(source, dest, nil, "strict-lts")
+	if report.Compatible {
+		t.Fatalf("expected strict-lts matrix mismatch to be incompatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "strict_lts_cross_engine_matrix_mismatch") {
+		t.Fatalf("expected strict_lts_cross_engine_matrix_mismatch finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineSameMajorProfileBlocked(t *testing.T) {
+	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
+	dest := ParseInstance("10.11.8-MariaDB")
+	report := Evaluate(source, dest, nil, "same-major")
+	if report.Compatible {
+		t.Fatalf("expected same-major cross-engine path to be blocked, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "profile_same_engine_only") {
+		t.Fatalf("expected profile_same_engine_only finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineAdjacentMinorProfileBlocked(t *testing.T) {
+	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
+	dest := ParseInstance("10.11.8-MariaDB")
+	report := Evaluate(source, dest, nil, "adjacent-minor")
+	if report.Compatible {
+		t.Fatalf("expected adjacent-minor cross-engine path to be blocked, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "profile_same_engine_only") {
+		t.Fatalf("expected profile_same_engine_only finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineMaxCompatWarnsUnmappedPair(t *testing.T) {
+	source := ParseInstance("8.0.36 MySQL Community Server - GPL")
+	dest := ParseInstance("11.4.2-MariaDB")
+	report := Evaluate(source, dest, nil, "max-compat")
+	if !report.Compatible {
+		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
+		t.Fatalf("expected cross_engine_matrix_unmapped finding, got %#v", report.Findings)
+	}
 }
 
 func TestEvaluatePartialScopeInfoFinding(t *testing.T) {

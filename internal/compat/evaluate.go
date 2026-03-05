@@ -33,11 +33,23 @@ type profileMatrixRange struct {
 	Label    string
 }
 
+type crossEngineMatrixEntry struct {
+	SourceLine string
+	DestLine   string
+}
+
 var strictLTSMatrix = []strictLTSMatrixEntry{
 	{Engine: EngineMySQL, Major: 8, Minor: 0, Label: "MySQL 8.0.x"},
 	{Engine: EngineMySQL, Major: 8, Minor: 4, Label: "MySQL 8.4.x"},
 	{Engine: EngineMariaDB, Major: 10, Minor: 11, Label: "MariaDB 10.11.x"},
 	{Engine: EngineMariaDB, Major: 11, Minor: 4, Label: "MariaDB 11.4.x"},
+}
+
+var strictLTSCrossEngineMatrix = []crossEngineMatrixEntry{
+	{SourceLine: "MySQL 8.0.x", DestLine: "MariaDB 10.11.x"},
+	{SourceLine: "MariaDB 10.11.x", DestLine: "MySQL 8.0.x"},
+	{SourceLine: "MySQL 8.4.x", DestLine: "MariaDB 11.4.x"},
+	{SourceLine: "MariaDB 11.4.x", DestLine: "MySQL 8.4.x"},
 }
 
 var sameMajorMatrix = []profileMatrixRange{
@@ -162,9 +174,18 @@ func Evaluate(source Instance, dest Instance, selectedDatabases []string, downgr
 			Message:  fmt.Sprintf("Cross-engine path detected: %s -> %s.", source.Engine, dest.Engine),
 			Proposal: "Run plan/verify on a partial database set first and review object-level incompatibility report before full cutover.",
 		})
-		if profile == ProfileStrictLTS {
+		switch profile {
+		case ProfileStrictLTS:
 			applyCrossEngineStrictChecks(&report)
-		} else {
+		case ProfileSameMajor, ProfileAdjacentMinor:
+			report.Compatible = false
+			report.Findings = append(report.Findings, Finding{
+				Code:     "profile_same_engine_only",
+				Severity: "error",
+				Message:  fmt.Sprintf("%s profile supports same-engine paths only; cross-engine %s -> %s is blocked.", profile, source.Engine, dest.Engine),
+				Proposal: "Use strict-lts for explicit cross-engine matrix validation or max-compat after risk review.",
+			})
+		case ProfileMaxCompat:
 			applyCrossEngineRiskWarnings(&report)
 		}
 		if report.Compatible && !report.Downgrade {
@@ -284,51 +305,60 @@ func applyStrictLTSSameEngineChecks(report *Report) {
 func applyCrossEngineStrictChecks(report *Report) {
 	source := report.Source
 	dest := report.Dest
-	if source.Engine == EngineMySQL && dest.Engine == EngineMariaDB && source.Major >= 8 {
-		if dest.Major < 10 || (dest.Major == 10 && dest.Minor < 6) {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "mysql8_to_old_mariadb_downgrade",
-				Severity: "error",
-				Message:  fmt.Sprintf("MySQL %s downgrade to MariaDB %s is below minimum safe cross-engine baseline.", source.Version, dest.Version),
-				Proposal: "Upgrade destination MariaDB to >= 10.6 or use staged same-engine downgrade before cross-engine migration.",
-			})
-		}
-	}
-
-	if source.Engine == EngineMariaDB && dest.Engine == EngineMySQL && source.Major >= 11 && dest.Major <= 5 {
+	sourceLine, sourceKnown := strictLTSLine(source)
+	destLine, destKnown := strictLTSLine(dest)
+	crossSummary := strictLTSCrossEngineMatrixSummary()
+	if !sourceKnown || !destKnown {
 		report.Compatible = false
 		report.Findings = append(report.Findings, Finding{
-			Code:     "mariadb11_to_mysql57_downgrade",
+			Code:     "strict_lts_cross_engine_out_of_range",
 			Severity: "error",
-			Message:  fmt.Sprintf("MariaDB %s downgrade to MySQL %s is not compatible by default policy.", source.Version, dest.Version),
-			Proposal: "Target MySQL 8.0+ or split migration using --databases and convert incompatible objects before retry.",
+			Message:  fmt.Sprintf("strict-lts cross-engine matrix requires known lines, got %s %s -> %s %s.", source.Engine, source.Version, dest.Engine, dest.Version),
+			Proposal: fmt.Sprintf("Allowed strict-lts cross-engine paths: %s. Use max-compat for broader paths after risk review.", crossSummary),
 		})
+		return
 	}
+
+	if !strictLTSCrossEngineAllowed(sourceLine, destLine) {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "strict_lts_cross_engine_matrix_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("strict-lts cross-engine matrix blocks path: %s -> %s.", sourceLine, destLine),
+			Proposal: fmt.Sprintf("Allowed strict-lts cross-engine paths: %s. Use staged migration or max-compat after risk review.", crossSummary),
+		})
+		return
+	}
+
+	report.Findings = append(report.Findings, Finding{
+		Code:     "strict_lts_cross_engine_matrix_match",
+		Severity: "info",
+		Message:  fmt.Sprintf("strict-lts cross-engine matrix matched: %s -> %s.", sourceLine, destLine),
+		Proposal: "Proceed with phased cutover and full verification gates.",
+	})
 }
 
 func applyCrossEngineRiskWarnings(report *Report) {
 	source := report.Source
 	dest := report.Dest
-	if source.Engine == EngineMySQL && dest.Engine == EngineMariaDB && source.Major >= 8 {
-		if dest.Major < 10 || (dest.Major == 10 && dest.Minor < 6) {
-			report.Findings = append(report.Findings, Finding{
-				Code:     "mysql8_to_old_mariadb_risk",
-				Severity: "warn",
-				Message:  fmt.Sprintf("MySQL %s to MariaDB %s is high-risk on this profile.", source.Version, dest.Version),
-				Proposal: "Prefer MariaDB >= 10.6 and run full verify modes before cutover.",
-			})
-		}
+	sourceLine, sourceKnown := strictLTSLine(source)
+	destLine, destKnown := strictLTSLine(dest)
+	if !sourceKnown || !destKnown || !strictLTSCrossEngineAllowed(sourceLine, destLine) {
+		report.Findings = append(report.Findings, Finding{
+			Code:     "cross_engine_matrix_unmapped",
+			Severity: "warn",
+			Message:  fmt.Sprintf("Cross-engine path %s %s -> %s %s is outside strict-lts cross-engine matrix.", source.Engine, source.Version, dest.Engine, dest.Version),
+			Proposal: fmt.Sprintf("Allowed strict-lts cross-engine paths: %s. Run full verify modes and staged cutover on this relaxed profile.", strictLTSCrossEngineMatrixSummary()),
+		})
+		return
 	}
 
-	if source.Engine == EngineMariaDB && dest.Engine == EngineMySQL && source.Major >= 11 && dest.Major <= 5 {
-		report.Findings = append(report.Findings, Finding{
-			Code:     "mariadb11_to_mysql57_risk",
-			Severity: "warn",
-			Message:  fmt.Sprintf("MariaDB %s to MySQL %s is high-risk on this profile.", source.Version, dest.Version),
-			Proposal: "Prefer MySQL 8.0+ and run full verify modes before cutover.",
-		})
-	}
+	report.Findings = append(report.Findings, Finding{
+		Code:     "cross_engine_matrix_mapped",
+		Severity: "info",
+		Message:  fmt.Sprintf("Cross-engine path maps to strict-lts matrix pair: %s -> %s.", sourceLine, destLine),
+		Proposal: "Still run full verify/report gates because max-compat remains permissive.",
+	})
 }
 
 func strictLTSLine(instance Instance) (string, bool) {
@@ -344,6 +374,23 @@ func strictLTSMatrixSummary() string {
 	labels := make([]string, 0, len(strictLTSMatrix))
 	for _, entry := range strictLTSMatrix {
 		labels = append(labels, fmt.Sprintf("%s->%s", entry.Label, entry.Label))
+	}
+	return strings.Join(labels, ", ")
+}
+
+func strictLTSCrossEngineAllowed(sourceLine string, destLine string) bool {
+	for _, entry := range strictLTSCrossEngineMatrix {
+		if sourceLine == entry.SourceLine && destLine == entry.DestLine {
+			return true
+		}
+	}
+	return false
+}
+
+func strictLTSCrossEngineMatrixSummary() string {
+	labels := make([]string, 0, len(strictLTSCrossEngineMatrix))
+	for _, entry := range strictLTSCrossEngineMatrix {
+		labels = append(labels, fmt.Sprintf("%s->%s", entry.SourceLine, entry.DestLine))
 	}
 	return strings.Join(labels, ", ")
 }

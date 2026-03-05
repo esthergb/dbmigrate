@@ -24,6 +24,14 @@ Compatibility profile selection:
   - `MySQL 8.0-8.4 -> MySQL 8.0-8.4`
   - `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11`
   - `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4`
+- `strict-lts` explicit cross-engine matrix pairs:
+  - `MySQL 8.0.x -> MariaDB 10.11.x`
+  - `MariaDB 10.11.x -> MySQL 8.0.x`
+  - `MySQL 8.4.x -> MariaDB 11.4.x`
+  - `MariaDB 11.4.x -> MySQL 8.4.x`
+- Profile scope note:
+  - `same-major` and `adjacent-minor` are same-engine only.
+  - Use `strict-lts` for explicit cross-engine matrix validation, or `max-compat` for permissive paths with full verification.
 
 ## Baseline migration execution
 
