@@ -22,12 +22,12 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	}
 
 	events := []streamEvent{
-		{Kind: streamEventWriteRows, File: "mysql-bin.000001", Pos: 110, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}}},
-		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 120},
-		{Kind: streamEventUpdateRows, File: "mysql-bin.000001", Pos: 130, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}, {int64(1), "b"}}},
-		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 140},
-		{Kind: streamEventDeleteRows, File: "mysql-bin.000001", Pos: 150, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "b"}}},
-		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 160},
+		{Kind: streamEventWriteRows, File: "mysql-bin.000001", Pos: 110, Timestamp: 1000, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}}},
+		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 120, Timestamp: 1001},
+		{Kind: streamEventUpdateRows, File: "mysql-bin.000001", Pos: 130, Timestamp: 1002, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}, {int64(1), "b"}}},
+		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 140, Timestamp: 1003},
+		{Kind: streamEventDeleteRows, File: "mysql-bin.000001", Pos: 150, Timestamp: 1004, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "b"}}},
+		{Kind: streamEventXID, File: "mysql-bin.000001", Pos: 160, Timestamp: 1005},
 	}
 
 	batches, err := buildApplyBatches(context.Background(), nil, events, Options{ApplyDDL: "warn"})
@@ -39,6 +39,9 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	}
 	if batches[0].EndPos != 120 || len(batches[0].Events) != 1 {
 		t.Fatalf("unexpected first batch: %+v", batches[0])
+	}
+	if batches[0].EndTimestamp != 1001 {
+		t.Fatalf("unexpected first batch timestamp: %d", batches[0].EndTimestamp)
 	}
 	if !strings.Contains(batches[0].Events[0].Query, "INSERT INTO `app`.`items`") {
 		t.Fatalf("unexpected upsert query: %s", batches[0].Events[0].Query)
@@ -55,6 +58,9 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	if batches[1].EndPos != 140 || len(batches[1].Events) != 1 {
 		t.Fatalf("unexpected second batch: %+v", batches[1])
 	}
+	if batches[1].EndTimestamp != 1003 {
+		t.Fatalf("unexpected second batch timestamp: %d", batches[1].EndTimestamp)
+	}
 	if !strings.Contains(batches[1].Events[0].Query, "UPDATE `app`.`items`") {
 		t.Fatalf("unexpected update query: %s", batches[1].Events[0].Query)
 	}
@@ -63,6 +69,9 @@ func TestBuildApplyBatchesRowsWithXID(t *testing.T) {
 	}
 	if batches[2].EndPos != 160 || len(batches[2].Events) != 1 {
 		t.Fatalf("unexpected third batch: %+v", batches[2])
+	}
+	if batches[2].EndTimestamp != 1005 {
+		t.Fatalf("unexpected third batch timestamp: %d", batches[2].EndTimestamp)
 	}
 	if !strings.Contains(batches[2].Events[0].Query, "DELETE FROM `app`.`items`") {
 		t.Fatalf("unexpected delete query: %s", batches[2].Events[0].Query)

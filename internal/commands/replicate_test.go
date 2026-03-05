@@ -216,16 +216,17 @@ func TestRunReplicateStartFromGTIDFailsFast(t *testing.T) {
 	}
 }
 
-func TestRunReplicateMaxLagSecondsFailsFast(t *testing.T) {
+func TestRunReplicateMaxLagSecondsAllowedInDryRun(t *testing.T) {
 	var out bytes.Buffer
 	err := runReplicate(context.Background(), config.RuntimeConfig{
 		Source: "mysql://src",
 		Dest:   "mysql://dst",
+		DryRun: true,
 	}, []string{"--max-lag-seconds=30"}, &out)
-	if err == nil {
-		t.Fatal("expected max-lag-seconds unsupported error")
+	if err != nil {
+		t.Fatalf("expected dry-run to succeed, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "max-lag-seconds is not implemented yet") {
-		t.Fatalf("unexpected error: %v", err)
+	if !strings.Contains(out.String(), "max_lag_seconds=30") {
+		t.Fatalf("expected dry-run output to include max_lag_seconds, got %q", out.String())
 	}
 }
