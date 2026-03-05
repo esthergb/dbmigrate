@@ -33,6 +33,7 @@ Last updated: 2026-03-05
   - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
   - Manual CI validated again on PR #29 head via `make ci-manual` (`workflow_dispatch` run `22728538011`, success).
   - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` run `22728867046`, success).
+  - Manual CI validated on latest PR #30 head commit via `make ci-manual` (`workflow_dispatch` run `22728920003`, success).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
