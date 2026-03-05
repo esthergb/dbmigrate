@@ -85,6 +85,7 @@ Profile scope note:
 - Use `strict-lts` for matrix-based cross-engine validation or `max-compat` for permissive risk-reviewed paths.
 - Under `max-compat`, legacy lines (for example MySQL 8.0.x and MariaDB 10.6.x) are allowed but explicitly warned in findings.
 - Under `max-compat`, `MySQL 8.4.x <-> MariaDB 11.8.x` is flagged as an active-LTS candidate pair pending strict-lts validation.
+- `plan` output surfaces `report.requires_evidence=true` for active-LTS candidate paths that still need repeated staged validation evidence before strict-lts promotion.
 
 ## Baseline migration modes
 

@@ -95,6 +95,7 @@ type Finding struct {
 type Report struct {
 	Compatible       bool      `json:"compatible"`
 	Downgrade        bool      `json:"downgrade"`
+	RequiresEvidence bool      `json:"requires_evidence"`
 	DowngradeProfile string    `json:"downgrade_profile"`
 	Source           Instance  `json:"source"`
 	Dest             Instance  `json:"dest"`
@@ -343,6 +344,7 @@ func applyCrossEngineRiskWarnings(report *Report, selectedDatabases []string) {
 	sourceLine, sourceKnown := strictLTSLine(source)
 	destLine, destKnown := strictLTSLine(dest)
 	if sourceKnown && destKnown && isUnconfirmedActiveLTSPair(sourceLine, destLine) {
+		report.RequiresEvidence = true
 		report.Findings = append(report.Findings, Finding{
 			Code:     "cross_engine_matrix_candidate_unconfirmed",
 			Severity: "warn",

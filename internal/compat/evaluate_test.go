@@ -104,6 +104,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnmappedPair(t *testing.T) {
 	if !report.Compatible {
 		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
 	}
+	if report.RequiresEvidence {
+		t.Fatalf("did not expect requires_evidence for unmapped non-candidate pair")
+	}
 	if !hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
 		t.Fatalf("expected cross_engine_matrix_unmapped finding, got %#v", report.Findings)
 	}
@@ -115,6 +118,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPair(t *testing.T)
 	report := Evaluate(source, dest, nil, "max-compat")
 	if !report.Compatible {
 		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !report.RequiresEvidence {
+		t.Fatalf("expected requires_evidence for active-LTS candidate pair")
 	}
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
 		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
@@ -137,6 +143,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPairReverse(t *tes
 	if !report.Compatible {
 		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
 	}
+	if !report.RequiresEvidence {
+		t.Fatalf("expected requires_evidence for active-LTS candidate pair")
+	}
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
 		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
 	}
@@ -157,6 +166,9 @@ func TestEvaluateCrossEngineMaxCompatCandidateWithPartialScopePilot(t *testing.T
 	report := Evaluate(source, dest, []string{"pilot_db"}, "max-compat")
 	if !report.Compatible {
 		t.Fatalf("expected max-compat cross-engine candidate path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !report.RequiresEvidence {
+		t.Fatalf("expected requires_evidence for active-LTS candidate pair pilot")
 	}
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_partial_scope_active") {
 		t.Fatalf("expected cross_engine_matrix_candidate_partial_scope_active finding, got %#v", report.Findings)
