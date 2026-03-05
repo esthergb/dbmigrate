@@ -525,6 +525,11 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 							event.RowColumns,
 							event.NewRowArgs,
 						),
+						RowDiffSample: buildRowDiffSample(
+							event.RowColumns,
+							event.OldRowArgs,
+							event.NewRowArgs,
+						),
 						Message: fmt.Sprintf(
 							"conflict-policy=fail detected non-applied %s on %s at %s:%d",
 							event.Operation,
@@ -598,6 +603,7 @@ func buildConflictReport(opts Options, startFile string, startPos uint32, source
 		report.ValueSample = failure.ValueSample
 		report.OldRowSample = failure.OldRowSample
 		report.NewRowSample = failure.NewRowSample
+		report.RowDiffSample = failure.RowDiffSample
 		report.Remediation = failure.Remediation
 		if failure.File != "" {
 			report.SourceEndFile = failure.File

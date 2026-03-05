@@ -28,6 +28,7 @@ type ReplicationConflictReport struct {
 	ValueSample    []string  `json:"value_sample,omitempty"`
 	OldRowSample   []string  `json:"old_row_sample,omitempty"`
 	NewRowSample   []string  `json:"new_row_sample,omitempty"`
+	RowDiffSample  []string  `json:"row_diff_sample,omitempty"`
 	Message        string    `json:"message"`
 	Remediation    string    `json:"remediation,omitempty"`
 }
