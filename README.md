@@ -108,6 +108,7 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mo
 Replication mode selection:
 - `--replication-mode=binlog` is the currently implemented mode.
 - `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are accepted values but currently fail fast with an explicit "not implemented yet" error.
+- `--enable-trigger-cdc` and `--teardown-cdc` are accepted flags for upcoming trigger CDC workflows and currently fail fast with explicit "not implemented yet" guidance.
 
 Replication preflight requirements:
 - source `log_bin` must be enabled

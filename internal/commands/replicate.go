@@ -13,12 +13,14 @@ import (
 )
 
 type replicateOptions struct {
-	ReplicationMode string
-	ApplyDDL        string
-	ConflictPolicy  string
-	Resume          bool
-	StartFile       string
-	StartPos        uint
+	ReplicationMode  string
+	ApplyDDL         string
+	ConflictPolicy   string
+	EnableTriggerCDC bool
+	TeardownCDC      bool
+	Resume           bool
+	StartFile        string
+	StartPos         uint
 }
 
 func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -36,8 +38,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
+				opts.EnableTriggerCDC,
+				opts.TeardownCDC,
 				opts.Resume,
 				opts.ApplyDDL,
 				opts.ConflictPolicy,
@@ -45,6 +49,9 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 				opts.StartPos,
 			),
 		)
+	}
+	if opts.EnableTriggerCDC || opts.TeardownCDC {
+		return errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication")
 	}
 	if opts.ReplicationMode != "binlog" {
 		return fmt.Errorf(
@@ -120,6 +127,8 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.StringVar(&opts.ReplicationMode, "replication-mode", "binlog", "replication mode (binlog|capture-triggers|hybrid)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
+	fs.BoolVar(&opts.EnableTriggerCDC, "enable-trigger-cdc", false, "enable trigger-based CDC setup (planned for capture-triggers/hybrid modes)")
+	fs.BoolVar(&opts.TeardownCDC, "teardown-cdc", false, "remove trigger-based CDC objects (planned for capture-triggers/hybrid modes)")
 	fs.BoolVar(&opts.Resume, "resume", true, "resume from replication checkpoint in --state-dir")
 	fs.StringVar(&opts.StartFile, "start-file", "", "start binlog file when no checkpoint exists")
 	fs.UintVar(&opts.StartPos, "start-pos", 4, "start binlog position when no checkpoint exists")
