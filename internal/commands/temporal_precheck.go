@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -31,6 +34,7 @@ type zeroDateDefaultsPrecheckReport struct {
 	DestinationSQLMode  string                 `json:"destination_sql_mode"`
 	DestinationEnforced bool                   `json:"destination_enforced"`
 	IssueCount          int                    `json:"issue_count"`
+	FixScriptPath       string                 `json:"fix_script_path,omitempty"`
 	Issues              []zeroDateDefaultIssue `json:"issues,omitempty"`
 	Findings            []compat.Finding       `json:"findings,omitempty"`
 }
@@ -47,6 +51,7 @@ func runZeroDateDefaultsPrecheck(
 	ctx context.Context,
 	source *sql.DB,
 	dest *sql.DB,
+	stateDir string,
 	includeDatabases []string,
 	excludeDatabases []string,
 ) (zeroDateDefaultsPrecheckReport, error) {
@@ -61,6 +66,9 @@ func runZeroDateDefaultsPrecheck(
 	report.DestinationSQLMode = sqlMode
 	report.DestinationEnforced = destinationEnforcesZeroDateStrict(sqlMode)
 	if !report.DestinationEnforced {
+		if err := cleanupZeroDateFixScript(stateDir); err != nil {
+			return report, err
+		}
 		return report, nil
 	}
 
@@ -79,10 +87,18 @@ func runZeroDateDefaultsPrecheck(
 	}
 	report.IssueCount = len(issues)
 	if len(issues) == 0 {
+		if err := cleanupZeroDateFixScript(stateDir); err != nil {
+			return report, err
+		}
 		return report, nil
 	}
 	report.Issues = issues
 	report.Incompatible = true
+	fixScriptPath, err := writeZeroDateFixScript(stateDir, issues)
+	if err != nil {
+		return report, err
+	}
+	report.FixScriptPath = fixScriptPath
 	report.Findings = buildZeroDatePrecheckFindings(report)
 	return report, nil
 }
@@ -234,12 +250,68 @@ func autoFixAlterDefaultSQL(databaseName string, tableName string, columnName st
 	)
 }
 
+func zeroDateFixScriptPath(stateDir string) string {
+	baseDir := strings.TrimSpace(stateDir)
+	if baseDir == "" {
+		baseDir = "./state"
+	}
+	return filepath.Join(baseDir, "precheck-zero-date-fixes.sql")
+}
+
+func cleanupZeroDateFixScript(stateDir string) error {
+	path := zeroDateFixScriptPath(stateDir)
+	err := os.Remove(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cleanup zero-date fix script %s: %w", path, err)
+	}
+	return nil
+}
+
+func writeZeroDateFixScript(stateDir string, issues []zeroDateDefaultIssue) (string, error) {
+	path := zeroDateFixScriptPath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("mkdir state-dir for zero-date fix script: %w", err)
+	}
+
+	unique := make(map[string]struct{}, len(issues))
+	lines := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		stmt := strings.TrimSpace(issue.ProposedFixSQL)
+		if stmt == "" {
+			continue
+		}
+		if _, ok := unique[stmt]; ok {
+			continue
+		}
+		unique[stmt] = struct{}{}
+		lines = append(lines, stmt)
+	}
+	sort.Strings(lines)
+
+	content := strings.Builder{}
+	content.WriteString("-- dbmigrate auto-generated zero-date precheck fixes\n")
+	content.WriteString("-- Apply on SOURCE database before rerunning plan/migrate.\n\n")
+	for _, line := range lines {
+		content.WriteString(line)
+		content.WriteString("\n")
+	}
+
+	if err := os.WriteFile(path, []byte(content.String()), 0o644); err != nil {
+		return "", fmt.Errorf("write zero-date fix script: %w", err)
+	}
+	return path, nil
+}
+
 func buildZeroDatePrecheckFindings(report zeroDateDefaultsPrecheckReport) []compat.Finding {
 	if report.IssueCount == 0 {
 		return nil
 	}
 
 	findings := make([]compat.Finding, 0, report.IssueCount+1)
+	proposal := "Apply the auto-fix ALTER TABLE ... SET DEFAULT statements listed in findings, then rerun plan/migrate."
+	if report.FixScriptPath != "" {
+		proposal = fmt.Sprintf("Review and apply generated auto-fix script at %q on source, then rerun plan/migrate.", report.FixScriptPath)
+	}
 	findings = append(findings, compat.Finding{
 		Code:     "zero_date_defaults_incompatible",
 		Severity: "error",
@@ -247,10 +319,14 @@ func buildZeroDatePrecheckFindings(report zeroDateDefaultsPrecheckReport) []comp
 			"Detected %d zero-date temporal default(s) in source schema while destination sql_mode enforces strict NO_ZERO_DATE/NO_ZERO_IN_DATE checks.",
 			report.IssueCount,
 		),
-		Proposal: "Apply the auto-fix ALTER TABLE ... SET DEFAULT statements listed in findings, then rerun plan/migrate.",
+		Proposal: proposal,
 	})
 
 	for _, issue := range report.Issues {
+		issueProposal := fmt.Sprintf("Auto-fix candidate: %s", issue.ProposedFixSQL)
+		if report.FixScriptPath != "" {
+			issueProposal = fmt.Sprintf("%s (also written to %q)", issueProposal, report.FixScriptPath)
+		}
 		findings = append(findings, compat.Finding{
 			Code:     "zero_date_default_column",
 			Severity: "error",
@@ -263,7 +339,7 @@ func buildZeroDatePrecheckFindings(report zeroDateDefaultsPrecheckReport) []comp
 				issue.DefaultValue,
 				report.DestinationSQLMode,
 			),
-			Proposal: fmt.Sprintf("Auto-fix candidate: %s", issue.ProposedFixSQL),
+			Proposal: issueProposal,
 		})
 	}
 	return findings
@@ -285,10 +361,11 @@ func writeMigratePrecheckReport(out io.Writer, cfg config.RuntimeConfig, report 
 
 	if _, err := fmt.Fprintf(
 		out,
-		"[migrate] status=incompatible precheck=%s destination_enforced=%v destination_sql_mode=%q findings=%d\n",
+		"[migrate] status=incompatible precheck=%s destination_enforced=%v destination_sql_mode=%q fix_script=%q findings=%d\n",
 		report.Name,
 		report.DestinationEnforced,
 		report.DestinationSQLMode,
+		report.FixScriptPath,
 		len(report.Findings),
 	); err != nil {
 		return err

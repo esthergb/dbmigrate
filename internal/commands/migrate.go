@@ -90,7 +90,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 	}()
 
 	if runSchema {
-		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("schema precheck failed: %w", err)
 		}
