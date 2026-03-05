@@ -347,7 +347,7 @@ func applyCrossEngineRiskWarnings(report *Report) {
 			Code:     "cross_engine_matrix_candidate_unconfirmed",
 			Severity: "warn",
 			Message:  fmt.Sprintf("Cross-engine path %s -> %s uses active LTS lines but is not yet validated in strict-lts matrix.", sourceLine, destLine),
-			Proposal: "Keep max-compat, run full verify modes and staged cutover, then promote to strict-lts matrix only after validation evidence.",
+			Proposal: "Keep max-compat, run full verify modes (count/hash/sample/full-hash), capture report evidence, and promote to strict-lts only after repeated successful staged cutovers.",
 		})
 		return
 	}

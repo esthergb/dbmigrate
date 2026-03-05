@@ -2,33 +2,34 @@ Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
   - Deliver dbmigrate in phased PRs with green CI and explicit compatibility policy.
-  - Keep fail-fast defaults and detailed remediation guidance.
+  - Keep fail-fast defaults and actionable remediation in outputs.
 - Constraints/Assumptions:
-  - MIT license, docs in English, JSON-first output.
+  - MIT license, docs in English, JSON-first.
   - `--apply-ddl` fixed to `ignore|apply|warn`.
   - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
   - Keep `datasets/` untracked.
 - Key decisions:
-  - Delivery via small `codex/*` branches and PRs to `main`.
-  - User selected Option B for downgrade matrix hardening.
+  - Work via `codex/*` branches and PRs to `main`.
+  - Option B matrix is adopted (active-LTS-first).
 - State:
   - Current branch: `codex/feat/compat-unconfirmed-pair-signal-phase46`.
   - `main` includes PR #44 and PR #45 merged.
 - Done:
   - Phases 0-45 merged.
   - Phase 46 local implementation complete (pending push + PR):
-    - `max-compat` cross-engine now emits `cross_engine_matrix_candidate_unconfirmed` for `MySQL 8.4.x <-> MariaDB 11.8.x`.
-    - Existing mapped/unmapped cross-engine behavior remains unchanged for other pairs.
-    - Compat tests expanded for the unconfirmed active-LTS candidate pair.
-    - README and operators guide updated with candidate-pair semantics.
-    - Local full suite passes (`go test ./... -count=1`).
+    - `max-compat` emits dedicated warning `cross_engine_matrix_candidate_unconfirmed` for both directions:
+      - MySQL 8.4.x -> MariaDB 11.8.x
+      - MariaDB 11.8.x -> MySQL 8.4.x
+    - proposal text tightened with concrete validation gates.
+    - tests expanded for both directions and to ensure no fallback `cross_engine_matrix_unmapped` in candidate case.
+    - local full suite passes (`go test ./... -count=1`).
 - Now:
   - Commit, push, and open PR for Phase 46.
 - Next:
-  - Merge Phase 46 PR after CI.
+  - Merge PR #46 after CI.
   - Continue from updated main.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into `strict-lts` after validation evidence.
+  - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
 - Working set (files/ids/commands):
   - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
