@@ -200,13 +200,19 @@ func isStaleConflictReport(report state.ReplicationConflictReport, checkpoint *r
 	if strings.TrimSpace(report.FailureType) == "" {
 		return false
 	}
-	if strings.TrimSpace(report.AppliedEndFile) == "" || report.AppliedEndPos == 0 {
-		return false
+
+	// Preferred path: compare checkpoint position against reported applied-end position.
+	if strings.TrimSpace(report.AppliedEndFile) != "" && report.AppliedEndPos > 0 &&
+		strings.TrimSpace(checkpoint.BinlogFile) != "" && checkpoint.BinlogPos > 0 {
+		return positionAfter(checkpoint.BinlogFile, checkpoint.BinlogPos, report.AppliedEndFile, report.AppliedEndPos)
 	}
-	if strings.TrimSpace(checkpoint.BinlogFile) == "" || checkpoint.BinlogPos == 0 {
-		return false
+
+	// Backward-compatible fallback for older conflict reports without applied-end position.
+	if !checkpoint.UpdatedAt.IsZero() && !report.GeneratedAt.IsZero() {
+		return checkpoint.UpdatedAt.After(report.GeneratedAt)
 	}
-	return positionAfter(checkpoint.BinlogFile, checkpoint.BinlogPos, report.AppliedEndFile, report.AppliedEndPos)
+
+	return false
 }
 
 func positionAfter(file string, pos uint32, targetFile string, targetPos uint32) bool {

@@ -161,7 +161,7 @@ Current report behavior:
   - `ok` when no conflict report failure is present
   - `attention_required` when a replication conflict failure is present
   - `empty` when no known state artifacts are found
-- Stale conflict reports are auto-ignored when replication checkpoint position has advanced beyond the report `applied_end_*` position.
+- Stale conflict reports are auto-ignored when replication checkpoint position has advanced beyond report `applied_end_*`, or (for legacy artifacts) when checkpoint `updated_at` is newer than conflict `generated_at`.
 - Includes remediation proposals from conflict reports in the `proposals` section.
 - Fails by default (`exit 3`) when report status is `attention_required` (active replication conflict report). Use `--fail-on-conflict=false` to emit report without failing.
 

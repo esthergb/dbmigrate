@@ -170,6 +170,93 @@ func TestRunReportJSONIgnoresStaleConflictWhenCheckpointAdvanced(t *testing.T) {
 	}
 }
 
+func TestRunReportJSONIgnoresStaleConflictByTimestampFallback(t *testing.T) {
+	tmp := t.TempDir()
+	replicationPath := filepath.Join(tmp, "replication-checkpoint.json")
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+
+	replicationCheckpoint := state.NewReplicationCheckpoint()
+	replicationCheckpoint.BinlogFile = "mysql-bin.000400"
+	replicationCheckpoint.BinlogPos = 900
+	replicationCheckpoint.ApplyDDL = "warn"
+	replicationCheckpoint.UpdatedAt = time.Date(2026, 3, 5, 14, 0, 0, 0, time.UTC)
+	if err := state.SaveReplicationCheckpoint(replicationPath, replicationCheckpoint); err != nil {
+		t.Fatalf("save replication checkpoint: %v", err)
+	}
+
+	conflictReport := state.NewReplicationConflictReport()
+	conflictReport.GeneratedAt = time.Date(2026, 3, 5, 13, 30, 0, 0, time.UTC)
+	conflictReport.FailureType = "schema_drift"
+	conflictReport.Message = "legacy conflict artifact without applied_end fields"
+	conflictReport.Remediation = "run migrate --schema-only to align schema, then rerun replicate"
+	if err := state.SaveReplicationConflictReport(conflictPath, conflictReport); err != nil {
+		t.Fatalf("save conflict report: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out); err != nil {
+		t.Fatalf("expected stale conflict report to be ignored by timestamp fallback, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "ok" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if !payload.Summary.ReplicationConflictStale {
+		t.Fatal("expected replication conflict report to be marked stale via timestamp fallback")
+	}
+}
+
+func TestRunReportJSONKeepsConflictActiveWhenCheckpointOlderThanReport(t *testing.T) {
+	tmp := t.TempDir()
+	replicationPath := filepath.Join(tmp, "replication-checkpoint.json")
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+
+	replicationCheckpoint := state.NewReplicationCheckpoint()
+	replicationCheckpoint.BinlogFile = "mysql-bin.000500"
+	replicationCheckpoint.BinlogPos = 900
+	replicationCheckpoint.ApplyDDL = "warn"
+	replicationCheckpoint.UpdatedAt = time.Date(2026, 3, 5, 14, 0, 0, 0, time.UTC)
+	if err := state.SaveReplicationCheckpoint(replicationPath, replicationCheckpoint); err != nil {
+		t.Fatalf("save replication checkpoint: %v", err)
+	}
+
+	conflictReport := state.NewReplicationConflictReport()
+	conflictReport.GeneratedAt = time.Date(2026, 3, 5, 14, 5, 0, 0, time.UTC)
+	conflictReport.FailureType = "schema_drift"
+	conflictReport.Message = "new conflict after checkpoint"
+	conflictReport.Remediation = "run migrate --schema-only to align schema, then rerun replicate"
+	if err := state.SaveReplicationConflictReport(conflictPath, conflictReport); err != nil {
+		t.Fatalf("save conflict report: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected report to fail for active conflict")
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if payload.Summary.ReplicationConflictStale {
+		t.Fatal("did not expect conflict report to be stale")
+	}
+}
+
 func TestRunReportTextNoArtifacts(t *testing.T) {
 	tmp := t.TempDir()
 
