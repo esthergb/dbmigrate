@@ -101,7 +101,10 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	}
 
 	if status == "attention_required" && opts.FailOnConflict {
-		return errors.New("report detected unresolved replication conflicts (use --fail-on-conflict=false to report without failing)")
+		return WithExitCode(
+			ExitCodeDiff,
+			errors.New("report detected unresolved replication conflicts (use --fail-on-conflict=false to report without failing)"),
+		)
 	}
 	return nil
 }

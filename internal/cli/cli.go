@@ -75,6 +75,9 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 
 	if err := handler(ctx, cfg, commandArgs, stdout); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
+		if code, ok := commands.ResolveExitCode(err); ok {
+			return code
+		}
 		return exitRun
 	}
 	return exitOK

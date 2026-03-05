@@ -44,11 +44,11 @@ type verifyDataResult struct {
 func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
 	opts, err := parseVerifyOptions(args)
 	if err != nil {
-		return err
+		return WithExitCode(ExitCodeVerifyFailed, err)
 	}
 
 	if cfg.Source == "" || cfg.Dest == "" {
-		return errors.New("verify requires both --source and --dest (or config file equivalents)")
+		return WithExitCode(ExitCodeVerifyFailed, errors.New("verify requires both --source and --dest (or config file equivalents)"))
 	}
 	if cfg.DryRun {
 		return writeResult(
@@ -62,7 +62,7 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
 	if err != nil {
-		return fmt.Errorf("connect source: %w", err)
+		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect source: %w", err))
 	}
 	defer func() {
 		_ = sourceDB.Close()
@@ -70,7 +70,7 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 
 	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
 	if err != nil {
-		return fmt.Errorf("connect destination: %w", err)
+		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect destination: %w", err))
 	}
 	defer func() {
 		_ = destDB.Close()
@@ -82,7 +82,7 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 	switch opts.VerifyLevel {
 	case "schema":
 		if !includeTables && !includeViews {
-			return errors.New("schema verification requires tables/views in --include-objects")
+			return WithExitCode(ExitCodeVerifyFailed, errors.New("schema verification requires tables/views in --include-objects"))
 		}
 
 		summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
@@ -92,24 +92,27 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			IncludeViews:     includeViews,
 		})
 		if err != nil {
-			return fmt.Errorf("schema verification failed: %w", err)
+			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("schema verification failed: %w", err))
 		}
 
 		if err := writeSchemaVerifyResult(out, cfg, opts.VerifyLevel, summary); err != nil {
-			return err
+			return WithExitCode(ExitCodeVerifyFailed, err)
 		}
 		if len(summary.Diffs) > 0 {
-			return fmt.Errorf(
-				"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
-				summary.MissingInDestination,
-				summary.MissingInSource,
-				summary.DefinitionMismatches,
+			return WithExitCode(
+				ExitCodeDiff,
+				fmt.Errorf(
+					"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
+					summary.MissingInDestination,
+					summary.MissingInSource,
+					summary.DefinitionMismatches,
+				),
 			)
 		}
 		return nil
 	case "data":
 		if !includeTables {
-			return errors.New("data verification requires tables in --include-objects")
+			return WithExitCode(ExitCodeVerifyFailed, errors.New("data verification requires tables in --include-objects"))
 		}
 
 		switch opts.DataMode {
@@ -119,17 +122,20 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				ExcludeDatabases: cfg.ExcludeDatabases,
 			})
 			if err != nil {
-				return fmt.Errorf("data verification failed: %w", err)
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return err
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if len(summary.Diffs) > 0 {
-				return fmt.Errorf(
-					"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
-					summary.MissingInDestination,
-					summary.MissingInSource,
-					summary.CountMismatches,
+				return WithExitCode(
+					ExitCodeDiff,
+					fmt.Errorf(
+						"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
+						summary.MissingInDestination,
+						summary.MissingInSource,
+						summary.CountMismatches,
+					),
 				)
 			}
 			return nil
@@ -140,17 +146,20 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				SampleSize:       opts.SampleSize,
 			})
 			if err != nil {
-				return fmt.Errorf("data verification failed: %w", err)
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return err
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if len(summary.Diffs) > 0 {
-				return fmt.Errorf(
-					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-					summary.MissingInDestination,
-					summary.MissingInSource,
-					summary.HashMismatches,
+				return WithExitCode(
+					ExitCodeDiff,
+					fmt.Errorf(
+						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+						summary.MissingInDestination,
+						summary.MissingInSource,
+						summary.HashMismatches,
+					),
 				)
 			}
 			return nil
@@ -161,17 +170,20 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				SampleSize:       opts.SampleSize,
 			})
 			if err != nil {
-				return fmt.Errorf("data verification failed: %w", err)
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return err
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if len(summary.Diffs) > 0 {
-				return fmt.Errorf(
-					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-					summary.MissingInDestination,
-					summary.MissingInSource,
-					summary.HashMismatches,
+				return WithExitCode(
+					ExitCodeDiff,
+					fmt.Errorf(
+						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+						summary.MissingInDestination,
+						summary.MissingInSource,
+						summary.HashMismatches,
+					),
 				)
 			}
 			return nil
@@ -182,25 +194,28 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				SampleSize:       opts.SampleSize,
 			})
 			if err != nil {
-				return fmt.Errorf("data verification failed: %w", err)
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return err
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if len(summary.Diffs) > 0 {
-				return fmt.Errorf(
-					"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-					summary.MissingInDestination,
-					summary.MissingInSource,
-					summary.HashMismatches,
+				return WithExitCode(
+					ExitCodeDiff,
+					fmt.Errorf(
+						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+						summary.MissingInDestination,
+						summary.MissingInSource,
+						summary.HashMismatches,
+					),
 				)
 			}
 			return nil
 		default:
-			return fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample, full-hash", opts.DataMode)
+			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample, full-hash", opts.DataMode))
 		}
 	default:
-		return fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel)
+		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel))
 	}
 }
 

@@ -205,8 +205,8 @@ func TestRunVerifyInvalidLevel(t *testing.T) {
 		"--verify-level", "invalid",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 4 {
+		t.Fatalf("expected exit code 4, got %d output=%s", code, out.String())
 	}
 }
 
@@ -219,8 +219,8 @@ func TestRunVerifyInvalidDataMode(t *testing.T) {
 		"--data-mode", "approx",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 4 {
+		t.Fatalf("expected exit code 4, got %d output=%s", code, out.String())
 	}
 }
 
@@ -282,8 +282,8 @@ func TestRunVerifyInvalidSampleSize(t *testing.T) {
 		"--sample-size", "0",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 4 {
+		t.Fatalf("expected exit code 4, got %d output=%s", code, out.String())
 	}
 }
 
@@ -368,8 +368,8 @@ func TestRunReportFailsByDefaultOnConflict(t *testing.T) {
 		"--json",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
 	}
 }
 
