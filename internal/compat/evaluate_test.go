@@ -122,6 +122,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPair(t *testing.T)
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_validation_required") {
 		t.Fatalf("expected cross_engine_matrix_candidate_validation_required finding, got %#v", report.Findings)
 	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_partial_scope_recommended") {
+		t.Fatalf("expected cross_engine_matrix_candidate_partial_scope_recommended finding, got %#v", report.Findings)
+	}
 	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
 		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
 	}
@@ -140,8 +143,26 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPairReverse(t *tes
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_validation_required") {
 		t.Fatalf("expected cross_engine_matrix_candidate_validation_required finding, got %#v", report.Findings)
 	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_partial_scope_recommended") {
+		t.Fatalf("expected cross_engine_matrix_candidate_partial_scope_recommended finding, got %#v", report.Findings)
+	}
 	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
 		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineMaxCompatCandidateWithPartialScopePilot(t *testing.T) {
+	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	dest := ParseInstance("11.8.2-MariaDB")
+	report := Evaluate(source, dest, []string{"pilot_db"}, "max-compat")
+	if !report.Compatible {
+		t.Fatalf("expected max-compat cross-engine candidate path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_partial_scope_active") {
+		t.Fatalf("expected cross_engine_matrix_candidate_partial_scope_active finding, got %#v", report.Findings)
+	}
+	if hasFinding(report.Findings, "cross_engine_matrix_candidate_partial_scope_recommended") {
+		t.Fatalf("did not expect cross_engine_matrix_candidate_partial_scope_recommended with partial scope, findings=%#v", report.Findings)
 	}
 }
 
