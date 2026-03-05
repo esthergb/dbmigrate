@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/trigger-cdc-flags-phase33` pushed to origin.
+  - Branch: `codex/feat/start-from-phase34` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -26,7 +26,8 @@ Last updated: 2026-03-05
   - PR #32 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
   - PR #33 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/33 (command-specific exit code semantics).
   - PR #34 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/34 (replication-mode fail-fast surface).
-  - PR #35 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/35 (trigger-CDC flag fail-fast surface).
+  - PR #35 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/35 (trigger-CDC flag fail-fast surface).
+  - PR #36 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/36 (`--start-from` validation surface).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -38,7 +39,7 @@ Last updated: 2026-03-05
   - Manual CI validated on PR #32 head via `make ci-manual` (`workflow_dispatch` run `22729367637`, success).
   - Manual CI validated on PR #33 head via `make ci-manual` (`workflow_dispatch` runs `22729731271`, `22729775133`, success).
   - Automatic `validate` checks on PR #34 passed (`22730086420`, `22730103030`).
-  - Manual CI validated on PR #35 head via `make ci-manual` (`workflow_dispatch` run `22730464468`, success).
+  - Manual CI validated on PR #35 head via `make ci-manual` (`workflow_dispatch` runs `22730464468`, `22730510964`, success).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
@@ -165,19 +166,27 @@ Last updated: 2026-03-05
     - CLI and command tests expanded for replication-mode parsing and fail-fast behavior.
     - README replication examples and mode notes updated.
     - local full test suite passes (`go test ./... -count=1`).
-  - Phase 33 opened (PR #35):
+  - Phase 33 merged (PR #35):
     - `replicate` adds trigger-CDC flag surface: `--enable-trigger-cdc`, `--teardown-cdc`.
     - trigger-CDC flags now fail fast outside dry-run with explicit "not implemented yet" guidance.
     - parse/CLI tests expanded for trigger-CDC options and unsupported runtime behavior.
     - README replication mode section updated with trigger-CDC flag status.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 34 opened (PR #36):
+    - `replicate` adds `--start-from={auto,binlog-file:pos,gtid}` surface (default `auto`).
+    - `--start-from=binlog-file:pos` validation enforces `--resume=false` and explicit `--start-file`.
+    - `--start-from=gtid` now fails fast with explicit "not implemented yet" guidance.
+    - replicate dry-run/success outputs include selected `start_from`.
+    - parse/CLI tests expanded for start-from validation and runtime fail-fast paths.
+    - README replication section updated with start-from usage.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #35 review/merge.
+  - Wait for PR #36 review/merge.
 - Next:
-  - Merge PR #35.
+  - Merge PR #36.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
