@@ -32,6 +32,7 @@ Last updated: 2026-03-05
   - PR #38 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/38 (`--idempotent` conflict-policy guard).
   - PR #39 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/39 (`--max-lag-seconds` fail-fast guard).
   - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
+  - PR #41 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -223,13 +224,18 @@ Last updated: 2026-03-05
     - tests expanded across command/CLI/load/run paths for lag validation and runtime lag behavior.
     - README updated with active max-lag semantics.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 39 opened (PR #41):
+    - `replicate` feature-gated incompatibility paths now return explicit `ExitCodeDiff` (`2`) instead of generic runtime failure.
+    - command + CLI tests now validate exit-code semantics for unsupported mode/start-from/trigger-CDC paths.
+    - README exit-code contract updated to include `replicate` feature-gated incompatibility behavior.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Push Phase 39 branch and open PR with CI.
+  - Wait for PR #41 CI/review/merge.
 - Next:
-  - Merge Phase 39 PR once CI is green.
+  - Merge PR #41 once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
