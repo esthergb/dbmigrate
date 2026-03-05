@@ -100,6 +100,24 @@ Replication checkpoint safety behavior:
 - On replication failure, a detailed JSON report is written to `--state-dir/replication-conflict-report.json`.
 - Conflict reports include `failure_type` categorization, `sql_error_code` (when available), key/value context (`value_sample`), and row-level context (`old_row_sample`, `new_row_sample`, `row_diff_sample`) for debugging.
 
+## Report command (state artifacts)
+
+```bash
+# JSON-first detailed operator report from --state-dir artifacts
+dbmigrate report --state-dir ./state --json
+```
+
+Current report behavior:
+- Reads local state artifacts when present:
+  - `data-baseline-checkpoint.json`
+  - `replication-checkpoint.json`
+  - `replication-conflict-report.json`
+- Emits status:
+  - `ok` when no conflict report failure is present
+  - `attention_required` when a replication conflict failure is present
+  - `empty` when no known state artifacts are found
+- Includes remediation proposals from conflict reports in the `proposals` section.
+
 ## Verification modes
 
 ```bash

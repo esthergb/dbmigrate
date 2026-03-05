@@ -16,11 +16,17 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/row-diff-sample-phase25` (PR #27 branch), synced with latest `main`.
+  - Branch: `codex/feat/report-state-phase26` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
-  - PR #27 is open: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
-  - Current work item is merge-conflict resolution against `main` (`CONTINUITY.md`).
-  - Phase 25 implementation is committed/pushed; local full test suite passed before conflict sync.
+  - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
+  - PR #28 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
+  - `Instructions.md` is present and tracked on `main`.
+  - Phase 26 implementation is committed/pushed; local full tests pass.
+  - CI checks for PR #28 are not being created (`gh pr checks 28` and `gh run list --branch` both return none).
+  - Probe branch test (`codex/ci-probe-phase26`) also produced no workflow runs, then branch was deleted.
+  - GitHub Actions permissions/workflow state report as enabled/active, so trigger issue is external to code changes.
+  - Added `workflow_dispatch` trigger to `.github/workflows/ci.yml`, but manual dispatch via CLI returned GitHub HTTP 500.
+  - Close/reopen cycle on PR #28 did not create checks either.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -102,17 +108,23 @@ Last updated: 2026-03-05
   - Phase 24 opened (PR #26):
     - README process/status refresh with current and pending milestones.
     - `Instructions.md` introduced as tracked project documentation.
-  - Phase 25 opened (PR #27):
+  - Phase 25 merged (PR #27):
     - conflict reports now include `row_diff_sample` for compact old->new field changes.
     - replication apply failures now emit key sample + old/new row samples + diff hints.
     - tests updated for row-diff generation and conflict report persistence.
+  - Phase 26 implemented locally (pending PR):
+    - `report` command now emits structured state-based output (JSON/text) from `--state-dir` artifacts.
+    - report includes artifact presence, checkpoint summaries, conflict context, and remediation `proposals`.
+    - report status semantics added: `ok`, `attention_required`, `empty`.
+    - report unit tests added and local full suite passed.
 - Now:
-  - Finalize and push merge-conflict resolution for PR #27.
+  - Decide unblock path for PR #28 while GitHub is not creating check suites.
 - Next:
-  - Wait for PR #27 CI/review and merge.
-  - Continue with next implementation branch after row-diff report ergonomics update.
+  - Either bypass merge requirements for PR #28 or temporarily relax required status checks on `main`.
+  - Restore normal CI-gated flow once check-suite creation is working again.
+  - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `Instructions.md`, `README.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `.github/workflows/ci.yml`, `internal/commands/report.go`, `internal/commands/report_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `gh workflow run`, `gh pr checks`.
