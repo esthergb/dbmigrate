@@ -23,6 +23,9 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 	if opts.MaxEvents != 0 {
 		t.Fatalf("expected default max-events 0, got %d", opts.MaxEvents)
 	}
+	if opts.Idempotent {
+		t.Fatal("expected default idempotent=false")
+	}
 	if opts.ApplyDDL != "warn" {
 		t.Fatalf("expected default apply-ddl warn, got %q", opts.ApplyDDL)
 	}
@@ -48,6 +51,7 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 		"--replication-mode=binlog",
 		"--start-from=binlog-file:pos",
 		"--max-events=250",
+		"--idempotent",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
 		"--enable-trigger-cdc",
@@ -66,6 +70,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	}
 	if opts.MaxEvents != 250 {
 		t.Fatalf("expected max-events 250, got %d", opts.MaxEvents)
+	}
+	if !opts.Idempotent {
+		t.Fatal("expected idempotent=true")
 	}
 	if opts.ApplyDDL != "ignore" {
 		t.Fatalf("expected apply-ddl ignore, got %q", opts.ApplyDDL)
@@ -112,6 +119,13 @@ func TestParseReplicateOptionsInvalidMaxEvents(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--max-events=-1"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid max-events")
+	}
+}
+
+func TestParseReplicateOptionsIdempotentRequiresNonFailConflictPolicy(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--idempotent"})
+	if err == nil {
+		t.Fatal("expected parse error for idempotent with fail conflict policy")
 	}
 }
 

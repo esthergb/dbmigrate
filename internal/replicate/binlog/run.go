@@ -18,6 +18,7 @@ type Options struct {
 	ApplyDDL       string
 	ConflictPolicy string
 	MaxEvents      uint64
+	Idempotent     bool
 	Resume         bool
 	StartFile      string
 	StartPos       uint32
