@@ -312,8 +312,8 @@ func TestRunReplicateUnsupportedMode(t *testing.T) {
 		"--replication-mode", "capture-triggers",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
 	}
 }
 
@@ -326,8 +326,8 @@ func TestRunReplicateUnsupportedStartFromGTID(t *testing.T) {
 		"--start-from", "gtid",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
 	}
 }
 
@@ -397,8 +397,8 @@ func TestRunReplicateEnableTriggerCDCUnsupported(t *testing.T) {
 		"--enable-trigger-cdc",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
 	}
 }
 
@@ -411,8 +411,8 @@ func TestRunReplicateTeardownCDCUnsupported(t *testing.T) {
 		"--teardown-cdc",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
 	}
 }
 

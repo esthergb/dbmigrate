@@ -236,7 +236,7 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 
 - `0`: success
 - `1`: usage/configuration error (invalid flags or global config)
-- `2`: command completed but detected incompatibilities/differences (`plan` incompatible, `verify` diffs, `report` attention_required with fail-fast enabled)
+- `2`: command completed but detected incompatibilities/differences (`plan` incompatible, `verify` diffs, `report` attention_required with fail-fast enabled, or `replicate` blocked by unsupported feature-gated modes/options)
 - `3`: command runtime failure (`migrate`/`replicate`/other command execution error)
 - `4`: `verify` runtime/tooling failure (verification could not be completed)
 
