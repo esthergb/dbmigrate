@@ -16,25 +16,24 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/cross-engine-matrix-phase29` pushed to origin.
+  - Branch: `codex/feat/command-status-phase30` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
   - PR #29 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
   - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
-  - PR #31 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
+  - PR #31 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
+  - PR #32 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 29 implementation committed/pushed; local tests pass.
-  - Investigation result (2026-03-05): Actions are enabled, workflow `ci` is active and valid, but GitHub is not creating new `workflow_runs`/`check_suites` for new commits.
-  - Cleanup applied: removed stale required status-check context `validate` from `main` branch protection (`required_status_checks.contexts=[]`).
-  - After cleanup, PR #29 was merged with review policy (status checks temporarily not required).
-  - Additional mitigation (2026-03-05): workflow `ci` was reset (disable/enable). Manual `workflow_dispatch` now works and creates successful check suites.
-  - Remaining issue: automatic `push`/`pull_request` triggers still do not create runs; only manual dispatch is reliable for now.
+  - Phase 30 implementation committed/pushed; local tests pass.
+  - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
+  - Branch protection restored: required status check `validate` is re-enabled on `main`.
   - Manual CI workaround was executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
   - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
   - Manual CI validated again on PR #29 head via `make ci-manual` (`workflow_dispatch` run `22728538011`, success).
   - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` runs `22728867046`, `22728920003`, success).
   - Manual CI validated on PR #31 head via `make ci-manual` (`workflow_dispatch` run `22729122875`, success).
+  - Manual CI validated on PR #32 head via `make ci-manual` (`workflow_dispatch` run `22729367637`, success).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -136,24 +135,26 @@ Last updated: 2026-03-05
     - new compatibility findings added for matrix out-of-range/mismatch/match outcomes.
     - tests extended for profile-matrix enforcement and allowed paths.
     - README/operators guide matrix sections expanded with exact ranges per engine/profile.
-  - Phase 29 implemented locally (pending PR):
+  - Phase 29 merged (PR #31):
     - strict-lts cross-engine checks now use explicit matrix pairs (line-to-line mapping).
     - cross-engine paths under `same-major` and `adjacent-minor` now fail with `profile_same_engine_only`.
     - max-compat cross-engine paths now emit mapped/unmapped matrix guidance findings.
     - compat tests expanded for cross-engine strict match/mismatch, profile blocking, and max-compat warnings.
     - README/operators guide updated with strict-lts cross-engine matrix and profile-scope notes.
+  - Phase 30 opened (PR #32):
+    - command scaffold output status is being normalized away from legacy `phase1-scaffold`.
+    - dry-run command outputs are being standardized with explicit `dry-run` status.
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #31 review and merge.
+  - Wait for PR #32 review and merge.
 - Next:
-  - Merge PR #31.
-  - Use manual workflow dispatch as temporary CI workaround until automatic triggers recover.
-  - Re-enable required status checks on `main` once GitHub check-suite creation is healthy again.
+  - Merge PR #32.
+  - Keep `make ci-manual` as fallback if automatic triggers regress.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `internal/commands/output.go`, `internal/commands/output_test.go`, `internal/commands/migrate.go`, `internal/commands/replicate.go`, `internal/commands/plan.go`, `internal/commands/verify.go`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.

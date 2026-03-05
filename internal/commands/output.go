@@ -18,10 +18,10 @@ type commandResult struct {
 	Version   string    `json:"version"`
 }
 
-func writeResult(out io.Writer, cfg config.RuntimeConfig, command, message string) error {
+func writeResult(out io.Writer, cfg config.RuntimeConfig, command, status, message string) error {
 	result := commandResult{
 		Command:   command,
-		Status:    "phase1-scaffold",
+		Status:    status,
 		Message:   message,
 		Timestamp: time.Now().UTC(),
 		Version:   version.Version,
@@ -33,7 +33,7 @@ func writeResult(out io.Writer, cfg config.RuntimeConfig, command, message strin
 		return enc.Encode(result)
 	}
 
-	_, err := fmt.Fprintf(out, "[%s] %s\n", command, message)
+	_, err := fmt.Fprintf(out, "[%s] status=%s %s\n", command, status, message)
 	return err
 }
 
