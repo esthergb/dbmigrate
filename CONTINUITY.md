@@ -43,6 +43,8 @@ Last updated: 2026-03-05
   - Automatic `validate` checks on PR #34 passed (`22730086420`, `22730103030`).
   - Manual CI validated on PR #35 head via `make ci-manual` (`workflow_dispatch` runs `22730464468`, `22730510964`, success).
   - Manual CI validated on PR #36 head via `make ci-manual` (`workflow_dispatch` run `22730771170`, success).
+  - Manual CI validated on PR #38 head via `make ci-manual` (`workflow_dispatch` run `22731435161`, success).
+  - Automatic `validate` checks on PR #38 passed (`22731436421`, `22731450686`).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
