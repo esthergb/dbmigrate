@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 )
 
@@ -86,5 +87,34 @@ func TestWriteMigrateDryRunSandboxReportText(t *testing.T) {
 	}
 	if !strings.Contains(text, "detail=validation failed") {
 		t.Fatalf("expected detail line in report text, got %q", text)
+	}
+}
+
+func TestWriteMigratePrecheckReportText(t *testing.T) {
+	report := zeroDateDefaultsPrecheckReport{
+		Name:                "zero-date-defaults",
+		Incompatible:        true,
+		DestinationSQLMode:  "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE",
+		DestinationEnforced: true,
+		IssueCount:          1,
+		Findings: []compat.Finding{
+			{
+				Code:     "zero_date_default_column",
+				Severity: "error",
+				Message:  "test message",
+				Proposal: "test proposal",
+			},
+		},
+	}
+	var out bytes.Buffer
+	if err := writeMigratePrecheckReport(&out, config.RuntimeConfig{}, report); err != nil {
+		t.Fatalf("write text report: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "status=incompatible") || !strings.Contains(text, "precheck=zero-date-defaults") {
+		t.Fatalf("unexpected report text: %q", text)
+	}
+	if !strings.Contains(text, "code=zero_date_default_column") {
+		t.Fatalf("expected finding line in report text: %q", text)
 	}
 }
