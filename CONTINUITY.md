@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/report-ignore-stale-conflict-phase41`.
+  - Branch: `codex/feat/report-stale-timestamp-fallback-phase42`.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -34,7 +34,8 @@ Last updated: 2026-03-05
   - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
   - PR #41 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
   - PR #42 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
-  - PR #43 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/43 (`report` stale conflict artifact handling).
+  - PR #43 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/43 (`report` stale conflict artifact handling).
+  - PR #44 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/44 (`report` stale conflict timestamp fallback).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -53,11 +54,11 @@ Last updated: 2026-03-05
   - Automatic `validate` checks on PR #39 passed (`22732073481`, `22732075309`).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
   - Local note: `datasets/` must remain untracked.
-  - Phase 41 local implementation complete; pending push + PR:
-    - `report` now marks conflict artifacts as stale when checkpoint position is ahead of report `applied_end_*`.
-    - stale conflict artifacts no longer force `attention_required`/fail-fast by default.
-    - command + CLI tests added for stale conflict + advanced checkpoint scenarios.
-    - README report behavior updated with stale conflict auto-ignore note.
+  - Phase 42 local implementation complete; pending push + PR:
+    - `report` stale-conflict detection now falls back to checkpoint/conflict timestamps for legacy artifacts without `applied_end_*`.
+    - active conflicts remain fail-fast when conflict `generated_at` is newer than checkpoint `updated_at`.
+    - command + CLI tests added for stale timestamp fallback and non-stale newer-conflict guard.
+    - README report behavior updated with timestamp fallback semantics.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -237,19 +238,25 @@ Last updated: 2026-03-05
     - regression test added to assert stale conflict-report cleanup on successful apply.
     - README replication notes updated with cleanup semantics.
     - local full test suite passes (`go test ./... -count=1`).
-  - Phase 41 opened (PR #43):
+  - Phase 41 merged (PR #43):
     - `report` now marks conflict artifacts as stale when replication checkpoint has advanced beyond conflict `applied_end_*`.
     - stale conflict artifacts no longer trigger `attention_required` / fail-fast by default.
     - command and CLI tests added for stale conflict-report scenarios.
     - README report behavior updated with stale conflict auto-ignore note.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 42 opened (PR #44):
+    - `report` stale-conflict detection now falls back to checkpoint `updated_at` vs conflict `generated_at` for legacy artifacts without `applied_end_*`.
+    - positional stale detection remains preferred when `applied_end_*` exists.
+    - command + CLI tests added for stale timestamp fallback and non-stale newer-conflict guard.
+    - README report behavior updated with timestamp fallback semantics.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #43 CI/review/merge.
+  - Wait for PR #44 CI/review/merge.
 - Next:
-  - Merge PR #43 once CI is green.
+  - Merge PR #44 once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
