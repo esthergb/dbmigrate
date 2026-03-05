@@ -21,8 +21,9 @@ Last updated: 2026-03-05
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
   - PR #29 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
+  - PR #30 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 28 implementation is in progress locally; PR not opened yet.
+  - Phase 28 implementation committed/pushed; local tests pass.
   - Investigation result (2026-03-05): Actions are enabled, workflow `ci` is active and valid, but GitHub is not creating new `workflow_runs`/`check_suites` for new commits.
   - Cleanup applied: removed stale required status-check context `validate` from `main` branch protection (`required_status_checks.contexts=[]`).
   - After cleanup, PR #29 was merged with review policy (status checks temporarily not required).
@@ -31,6 +32,7 @@ Last updated: 2026-03-05
   - Manual CI workaround was executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
   - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
   - Manual CI validated again on PR #29 head via `make ci-manual` (`workflow_dispatch` run `22728538011`, success).
+  - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` run `22728867046`, success).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -127,7 +129,7 @@ Last updated: 2026-03-05
     - command now always prints report payload first, then returns error when fail-fast is active.
     - tests expanded across `internal/commands/report_test.go` and `internal/cli/cli_test.go`.
     - docs updated in README/operators guide for fail-fast + override behavior.
-  - Phase 28 implemented locally (pending PR):
+  - Phase 28 opened (PR #30):
     - explicit same-engine matrix ranges added for `same-major` and `adjacent-minor` profiles.
     - new compatibility findings added for matrix out-of-range/mismatch/match outcomes.
     - tests extended for profile-matrix enforcement and allowed paths.
@@ -136,9 +138,9 @@ Last updated: 2026-03-05
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Finish Phase 28 validation (tests), then commit/push and open PR.
+  - Wait for PR #30 review and merge.
 - Next:
-  - Merge PR for Phase 28.
+  - Merge PR #30.
   - Use manual workflow dispatch as temporary CI workaround until automatic triggers recover.
   - Re-enable required status checks on `main` once GitHub check-suite creation is healthy again.
   - Continue with next phase branch.
