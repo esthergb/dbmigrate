@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/max-lag-runtime-phase38` pushed to origin.
+  - Branch: `codex/feat/replicate-incompat-exitcode-phase39`.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -31,7 +31,7 @@ Last updated: 2026-03-05
   - PR #37 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/37 (`--max-events` transactional apply cap).
   - PR #38 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/38 (`--idempotent` conflict-policy guard).
   - PR #39 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/39 (`--max-lag-seconds` fail-fast guard).
-  - PR #40 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
+  - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -50,6 +50,10 @@ Last updated: 2026-03-05
   - Automatic `validate` checks on PR #39 passed (`22732073481`, `22732075309`).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
   - Local note: `datasets/` must remain untracked.
+  - Phase 39 local implementation complete; pending push + PR:
+    - `replicate` feature-gated incompatibility paths now return explicit `ExitCodeDiff` (`2`) instead of generic runtime failure.
+    - command + CLI tests updated to assert new exit code behavior.
+    - README exit-code contract updated for replicate incompatibility paths.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -211,7 +215,7 @@ Last updated: 2026-03-05
     - command/CLI tests expanded for max-lag-seconds parse and unsupported-runtime behavior.
     - README replication section updated with max-lag-seconds status.
     - local full test suite passes (`go test ./... -count=1`).
-  - Phase 38 opened (PR #40):
+  - Phase 38 merged (PR #40):
     - `--max-lag-seconds` now enforced in binlog apply runtime using transaction-end event timestamps.
     - apply blocks when lag exceeds threshold before commit (`lag_limit_exceeded`).
     - lag checks preserve checkpoint safety and transaction boundaries.
@@ -223,13 +227,13 @@ Last updated: 2026-03-05
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #40 review/merge.
+  - Push Phase 39 branch and open PR with CI.
 - Next:
-  - Merge PR #40.
+  - Merge Phase 39 PR once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `README.md`, `internal/commands/replicate.go`, `internal/commands/replicate_test.go`, `internal/cli/cli_test.go`, `configs/mysql84-to-mariadb114.yaml` (untracked/local).
+  - Files: `CONTINUITY.md`, `README.md`, `internal/commands/replicate.go`, `internal/commands/replicate_test.go`, `internal/cli/cli_test.go`, `configs/mysql84-to-mariadb114.yaml` (untracked/local), `datasets/` (untracked/local).
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.

@@ -183,6 +183,10 @@ func TestRunReplicateUnsupportedModeFailsFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported replication mode error")
 	}
+	code, ok := ResolveExitCode(err)
+	if !ok || code != ExitCodeDiff {
+		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
+	}
 	if !strings.Contains(err.Error(), "not implemented yet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -197,6 +201,10 @@ func TestRunReplicateTriggerCDCFlagsFailFast(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected trigger cdc unsupported error")
 	}
+	code, ok := ResolveExitCode(err)
+	if !ok || code != ExitCodeDiff {
+		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
+	}
 	if !strings.Contains(err.Error(), "trigger CDC mode is not implemented yet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,6 +218,10 @@ func TestRunReplicateStartFromGTIDFailsFast(t *testing.T) {
 	}, []string{"--start-from=gtid"}, &out)
 	if err == nil {
 		t.Fatal("expected start-from gtid unsupported error")
+	}
+	code, ok := ResolveExitCode(err)
+	if !ok || code != ExitCodeDiff {
+		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
 	}
 	if !strings.Contains(err.Error(), "start-from gtid is not implemented yet") {
 		t.Fatalf("unexpected error: %v", err)

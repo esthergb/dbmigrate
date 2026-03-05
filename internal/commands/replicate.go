@@ -59,15 +59,24 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		)
 	}
 	if opts.EnableTriggerCDC || opts.TeardownCDC {
-		return errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication")
+		return WithExitCode(
+			ExitCodeDiff,
+			errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication"),
+		)
 	}
 	if opts.StartFrom == "gtid" {
-		return errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos")
+		return WithExitCode(
+			ExitCodeDiff,
+			errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos"),
+		)
 	}
 	if opts.ReplicationMode != "binlog" {
-		return fmt.Errorf(
-			"replication-mode %q is not implemented yet; currently supported mode is binlog (planned: capture-triggers, hybrid)",
-			opts.ReplicationMode,
+		return WithExitCode(
+			ExitCodeDiff,
+			fmt.Errorf(
+				"replication-mode %q is not implemented yet; currently supported mode is binlog (planned: capture-triggers, hybrid)",
+				opts.ReplicationMode,
+			),
 		)
 	}
 
