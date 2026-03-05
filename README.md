@@ -6,7 +6,7 @@
 
 This repository is in phased development.
 
-Completed milestones (merged through Phase 23):
+Completed milestones (merged through Phase 47):
 - Phase 0: research and operator risk docs
 - Phase 1: foundation scaffold + CI baseline
 - Phase 2: runtime config, DSN validation, config file support
@@ -18,6 +18,10 @@ Completed milestones (merged through Phase 23):
 - Phase 19-21: conflict report enrichment (`value_sample`, `old_row_sample`, `new_row_sample`)
 - Phase 22: selectable downgrade profiles (`strict-lts`, `same-major`, `adjacent-minor`, `max-compat`)
 - Phase 23: explicit strict-lts downgrade matrix hardening
+- Phase 24-30: report fail-fast default + CI manual-dispatch helper + command status normalization
+- Phase 31-39: command exit-code semantics and replication runtime fail-fast guards (`replication-mode`, trigger flags, start-point checks, max-events, idempotent policy, max-lag, unsupported-gate exit code 2)
+- Phase 40-42: stale conflict-report lifecycle hardening (cleanup/ignore/timestamp fallback)
+- Phase 43-47: Option B compatibility matrix enforcement + active-LTS candidate signaling for `MySQL 8.4.x <-> MariaDB 11.8.x`
 
 Current process:
 - Delivery is phase-based via small PRs from `codex/*` branches.
@@ -25,7 +29,7 @@ Current process:
 
 Pending next milestones:
 - Continue replication/report ergonomics hardening and operator-facing diagnostics.
-- Expand strict compatibility matrices where needed with explicit version/range policies.
+- Promote active-LTS cross-engine candidates into strict-lts only after repeated staged validation evidence.
 - Keep documentation and runbooks synchronized with merged phases.
 
 ## Supported migration priorities
@@ -210,10 +214,10 @@ make lint
 make vulncheck
 ```
 
-## Temporary CI workaround (review later)
+## CI operations note
 
-- Current repository issue: automatic GitHub Actions triggers (`push`/`pull_request`) may not fire reliably.
-- Temporary workaround: run CI manually for the current branch:
+- Automatic GitHub Actions checks are the default validation path.
+- Manual dispatch helper remains available for incidents where auto triggers are unavailable:
 
 ```bash
 make ci-manual
@@ -225,7 +229,7 @@ make ci-manual
 make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 ```
 
-- TODO: once automatic triggers are stable again, restore required status checks on `main` and remove this workaround section.
+- Keep this helper documented for contingency use; review periodically.
 
 ## Safety notes
 
