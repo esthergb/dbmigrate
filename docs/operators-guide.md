@@ -31,6 +31,7 @@ Compatibility profile selection:
   - `same-major` and `adjacent-minor` are same-engine only.
   - Use `strict-lts` for explicit cross-engine matrix validation, or `max-compat` for permissive paths with full verification.
   - `max-compat` emits explicit warnings when source/destination uses legacy lines (for example MySQL 8.0.x or MariaDB 10.6.x).
+  - `max-compat` also flags `MySQL 8.4.x <-> MariaDB 11.8.x` as an active-LTS candidate pair pending strict-lts validation.
 
 ## Baseline migration execution
 

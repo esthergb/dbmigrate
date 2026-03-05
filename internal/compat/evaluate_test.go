@@ -109,6 +109,18 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnmappedPair(t *testing.T) {
 	}
 }
 
+func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPair(t *testing.T) {
+	source := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	dest := ParseInstance("11.8.2-MariaDB")
+	report := Evaluate(source, dest, nil, "max-compat")
+	if !report.Compatible {
+		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
+		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
+	}
+}
+
 func TestEvaluatePartialScopeInfoFinding(t *testing.T) {
 	source := ParseInstance("10.11.7-MariaDB")
 	dest := ParseInstance("10.11.5-MariaDB")

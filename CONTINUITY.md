@@ -1,41 +1,34 @@
 Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
-  - Deliver `dbmigrate` in phased PRs with safe migration/replication and explicit compatibility policy.
-  - Success: each phase merged to `main` with green CI, tests updated, and operator docs aligned.
+  - Deliver dbmigrate in phased PRs with green CI and explicit compatibility policy.
+  - Keep fail-fast defaults and detailed remediation guidance.
 - Constraints/Assumptions:
-  - License: MIT.
-  - Docs in English.
-  - JSON-first output.
-  - `--apply-ddl` values fixed to `ignore|apply|warn`.
-  - Default fail-fast on incompatibilities; auto-fix remains future work.
+  - MIT license, docs in English, JSON-first output.
+  - `--apply-ddl` fixed to `ignore|apply|warn`.
   - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
   - Keep `datasets/` untracked.
 - Key decisions:
-  - Work via small branches `codex/*` and PRs to `main`.
-  - Profiles remain: `strict-lts`, `same-major`, `adjacent-minor`, `max-compat`.
-  - User confirmed Option B for downgrade matrix hardening (active-LTS-first policy).
+  - Delivery via small `codex/*` branches and PRs to `main`.
+  - User selected Option B for downgrade matrix hardening.
 - State:
-  - Current branch: `codex/feat/compat-matrix-optionb-phase43`.
-  - `main` includes PR #44 merged.
-  - PR #45 is open: https://github.com/esthergb/dbmigrate/pull/45
-  - PR #45 currently required merge update was being resolved via `merge main` into branch.
+  - Current branch: `codex/feat/compat-unconfirmed-pair-signal-phase46`.
+  - `main` includes PR #44 and PR #45 merged.
 - Done:
-  - Phases 0-44 merged (latest merged: PR #44 report stale-conflict timestamp fallback).
-  - Phase 43 implementation completed and pushed in PR #45:
-    - `strict-lts` same-engine matrix now active-LTS-first: MySQL 8.4, MariaDB 10.11/11.4/11.8.
-    - `strict-lts` cross-engine matrix keeps explicit validated pair `MySQL 8.4 <-> MariaDB 11.4`.
-    - `same-major` and `adjacent-minor` remove legacy lines (MySQL 8.0, MariaDB 10.6).
-    - `max-compat` adds explicit warnings for legacy lines (MySQL 8.0, MariaDB 10.6).
-    - tests updated in `internal/compat/evaluate_test.go`; docs updated in `README.md` and `docs/operators-guide.md`.
-    - local tests passing: `/tmp/go-toolchain/go/bin/go test ./... -count=1`.
+  - Phases 0-45 merged.
+  - Phase 46 local implementation complete (pending push + PR):
+    - `max-compat` cross-engine now emits `cross_engine_matrix_candidate_unconfirmed` for `MySQL 8.4.x <-> MariaDB 11.8.x`.
+    - Existing mapped/unmapped cross-engine behavior remains unchanged for other pairs.
+    - Compat tests expanded for the unconfirmed active-LTS candidate pair.
+    - README and operators guide updated with candidate-pair semantics.
+    - Local full suite passes (`go test ./... -count=1`).
 - Now:
-  - Finish merge resolution on branch and push updated PR #45.
+  - Commit, push, and open PR for Phase 46.
 - Next:
-  - Merge PR #45 after CI.
-  - Continue next phase from updated `main`.
+  - Merge Phase 46 PR after CI.
+  - Continue from updated main.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether to add `MySQL 8.4 <-> MariaDB 11.8` as `strict-lts` cross-engine pair or keep it only under `max-compat` until validated.
+  - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into `strict-lts` after validation evidence.
 - Working set (files/ids/commands):
   - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git merge main`, `git commit`, `git push`, `gh pr checks`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
