@@ -184,7 +184,7 @@ func Evaluate(source Instance, dest Instance, selectedDatabases []string, downgr
 				Proposal: "Use strict-lts for explicit cross-engine matrix validation or max-compat after risk review.",
 			})
 		case ProfileMaxCompat:
-			applyCrossEngineRiskWarnings(&report)
+			applyCrossEngineRiskWarnings(&report, selectedDatabases)
 		}
 		if report.Compatible && !report.Downgrade {
 			report.Findings = append(report.Findings, Finding{
@@ -337,7 +337,7 @@ func applyCrossEngineStrictChecks(report *Report) {
 	})
 }
 
-func applyCrossEngineRiskWarnings(report *Report) {
+func applyCrossEngineRiskWarnings(report *Report, selectedDatabases []string) {
 	source := report.Source
 	dest := report.Dest
 	sourceLine, sourceKnown := strictLTSLine(source)
@@ -355,6 +355,21 @@ func applyCrossEngineRiskWarnings(report *Report) {
 			Message:  fmt.Sprintf("Promotion criteria required for candidate pair %s -> %s before strict-lts adoption.", sourceLine, destLine),
 			Proposal: "Collect at least 3 successful staged runs per direction (partial-scope pilot then full scope) with clean count/hash/sample/full-hash verification and attach evidence to the matrix change request.",
 		})
+		if len(selectedDatabases) == 0 {
+			report.Findings = append(report.Findings, Finding{
+				Code:     "cross_engine_matrix_candidate_partial_scope_recommended",
+				Severity: "info",
+				Message:  "Full-scope run selected for an unconfirmed candidate pair.",
+				Proposal: "Start with --databases partial-scope pilot runs, validate repeatability, then execute full-scope staged cutovers for promotion evidence.",
+			})
+		} else {
+			report.Findings = append(report.Findings, Finding{
+				Code:     "cross_engine_matrix_candidate_partial_scope_active",
+				Severity: "info",
+				Message:  fmt.Sprintf("Partial-scope pilot is active for %d database(s) on an unconfirmed candidate pair.", len(selectedDatabases)),
+				Proposal: "Repeat pilot runs until verification is consistently clean, then run full scope with the same verify/report gates.",
+			})
+		}
 		return
 	}
 	if !sourceKnown || !destKnown || !strictLTSCrossEngineAllowed(sourceLine, destLine) {
