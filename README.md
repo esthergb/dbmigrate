@@ -139,6 +139,7 @@ Replication checkpoint safety behavior:
 - Conflict policy is explicit via `--conflict-policy={fail,source-wins,dest-wins}` (default: `fail`).
 - DDL safety in `--apply-ddl=apply` mode allows only low-risk DDL; risky DDL fails with remediation guidance.
 - On replication failure, a detailed JSON report is written to `--state-dir/replication-conflict-report.json`.
+- On replication success, stale `--state-dir/replication-conflict-report.json` from previous failed runs is removed.
 - Conflict reports include `failure_type` categorization, `sql_error_code` (when available), key/value context (`value_sample`), and row-level context (`old_row_sample`, `new_row_sample`, `row_diff_sample`) for debugging.
 
 ## Report command (state artifacts)

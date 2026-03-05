@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -410,6 +411,60 @@ func TestRunWritesConflictReportOnApplyFailure(t *testing.T) {
 	}
 	if report.SourceEndPos != 460 {
 		t.Fatalf("unexpected source end pos: %d", report.SourceEndPos)
+	}
+}
+
+func TestRunClearsStaleConflictReportOnSuccess(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	checkSourcePreflightFn = func(_ context.Context, _ *sql.DB) (preflightResult, error) {
+		return preflightResult{
+			LogBinEnabled:  true,
+			BinlogFormat:   "ROW",
+			BinlogRowImage: "FULL",
+		}, nil
+	}
+
+	queryCalls := 0
+	queryBinlogPositionFn = func(_ context.Context, _ *sql.DB) (string, uint32, error) {
+		queryCalls++
+		if queryCalls == 1 {
+			return "mysql-bin.000100", 400, nil
+		}
+		return "mysql-bin.000100", 480, nil
+	}
+
+	applyWindowFn = func(_ context.Context, _ *sql.DB, _ *sql.DB, _ applyWindow, _ Options) (applyResult, error) {
+		return applyResult{
+			File:          "mysql-bin.000100",
+			Pos:           460,
+			AppliedEvents: 2,
+		}, nil
+	}
+
+	tmp := t.TempDir()
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+	staleReport := state.NewReplicationConflictReport()
+	staleReport.FailureType = "schema_drift"
+	staleReport.Message = "stale failure from previous run"
+	if err := state.SaveReplicationConflictReport(conflictPath, staleReport); err != nil {
+		t.Fatalf("save stale conflict report: %v", err)
+	}
+
+	summary, err := Run(context.Background(), &sql.DB{}, &sql.DB{}, tmp, Options{
+		ApplyDDL:       "warn",
+		ConflictPolicy: "fail",
+		Resume:         false,
+	})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if summary.EndPos != 460 || summary.AppliedEvents != 2 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+	if _, err := os.Stat(conflictPath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale conflict report to be removed, stat err=%v", err)
 	}
 }
 
@@ -876,6 +931,7 @@ func stubRunHooks(t *testing.T) func() {
 	origApply := applyWindowFn
 	origNow := timeNowFn
 	origSaveReport := saveConflictReportFn
+	origRemoveReport := removeConflictReportFn
 
 	return func() {
 		checkSourcePreflightFn = origPreflight
@@ -885,6 +941,7 @@ func stubRunHooks(t *testing.T) func() {
 		applyWindowFn = origApply
 		timeNowFn = origNow
 		saveConflictReportFn = origSaveReport
+		removeConflictReportFn = origRemoveReport
 	}
 }
 
