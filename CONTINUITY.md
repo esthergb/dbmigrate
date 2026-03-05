@@ -27,6 +27,8 @@ Last updated: 2026-03-05
   - Investigation result (2026-03-05): Actions are enabled, workflow `ci` is active and valid, but GitHub is not creating new `workflow_runs`/`check_suites` for new commits.
   - Cleanup applied: removed stale required status-check context `validate` from `main` branch protection (`required_status_checks.contexts=[]`).
   - After cleanup, PR #29 remains mergeable and blocked only by review policy (no status checks required).
+  - Additional mitigation (2026-03-05): workflow `ci` was reset (disable/enable). Manual `workflow_dispatch` now works and creates successful check suites.
+  - Remaining issue: automatic `push`/`pull_request` triggers still do not create runs; only manual dispatch is reliable for now.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -127,6 +129,7 @@ Last updated: 2026-03-05
   - Wait for PR #29 review and merge.
 - Next:
   - Merge PR #29.
+  - Use manual workflow dispatch as temporary CI workaround until automatic triggers recover.
   - Re-enable required status checks on `main` once GitHub check-suite creation is healthy again.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
