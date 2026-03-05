@@ -317,6 +317,20 @@ func TestRunReplicateUnsupportedMode(t *testing.T) {
 	}
 }
 
+func TestRunReplicateUnsupportedStartFromGTID(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{
+		"replicate",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--start-from", "gtid",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunReplicateEnableTriggerCDCUnsupported(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
