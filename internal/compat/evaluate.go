@@ -342,6 +342,15 @@ func applyCrossEngineRiskWarnings(report *Report) {
 	dest := report.Dest
 	sourceLine, sourceKnown := strictLTSLine(source)
 	destLine, destKnown := strictLTSLine(dest)
+	if sourceKnown && destKnown && isUnconfirmedActiveLTSPair(sourceLine, destLine) {
+		report.Findings = append(report.Findings, Finding{
+			Code:     "cross_engine_matrix_candidate_unconfirmed",
+			Severity: "warn",
+			Message:  fmt.Sprintf("Cross-engine path %s -> %s uses active LTS lines but is not yet validated in strict-lts matrix.", sourceLine, destLine),
+			Proposal: "Keep max-compat, run full verify modes and staged cutover, then promote to strict-lts matrix only after validation evidence.",
+		})
+		return
+	}
 	if !sourceKnown || !destKnown || !strictLTSCrossEngineAllowed(sourceLine, destLine) {
 		report.Findings = append(report.Findings, Finding{
 			Code:     "cross_engine_matrix_unmapped",
@@ -358,6 +367,11 @@ func applyCrossEngineRiskWarnings(report *Report) {
 		Message:  fmt.Sprintf("Cross-engine path maps to strict-lts matrix pair: %s -> %s.", sourceLine, destLine),
 		Proposal: "Still run full verify/report gates because max-compat remains permissive.",
 	})
+}
+
+func isUnconfirmedActiveLTSPair(sourceLine string, destLine string) bool {
+	return (sourceLine == "MySQL 8.4.x" && destLine == "MariaDB 11.8.x") ||
+		(sourceLine == "MariaDB 11.8.x" && destLine == "MySQL 8.4.x")
 }
 
 func strictLTSLine(instance Instance) (string, bool) {
