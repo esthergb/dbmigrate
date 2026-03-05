@@ -105,6 +105,9 @@ Replication checkpoint safety behavior:
 ```bash
 # JSON-first detailed operator report from --state-dir artifacts
 dbmigrate report --state-dir ./state --json
+
+# Override fail-fast behavior to emit report without non-zero exit
+dbmigrate report --state-dir ./state --json --fail-on-conflict=false
 ```
 
 Current report behavior:
@@ -117,6 +120,7 @@ Current report behavior:
   - `attention_required` when a replication conflict failure is present
   - `empty` when no known state artifacts are found
 - Includes remediation proposals from conflict reports in the `proposals` section.
+- Fails by default (`exit 3`) when report status is `attention_required` (active replication conflict report). Use `--fail-on-conflict=false` to emit report without failing.
 
 ## Verification modes
 

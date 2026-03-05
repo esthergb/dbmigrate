@@ -52,11 +52,15 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runReport(context.Background(), config.RuntimeConfig{
+	err := runReport(context.Background(), config.RuntimeConfig{
 		StateDir: tmp,
 		JSON:     true,
-	}, nil, &out); err != nil {
-		t.Fatalf("run report: %v", err)
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected report to fail by default when conflict report requires attention")
+	}
+	if !strings.Contains(err.Error(), "unresolved replication conflicts") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
 	var payload reportResult
@@ -86,6 +90,35 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	}
 	if len(payload.Proposals) != 1 {
 		t.Fatalf("unexpected proposals length: %d", len(payload.Proposals))
+	}
+}
+
+func TestRunReportJSONConflictOverrideDoesNotFail(t *testing.T) {
+	tmp := t.TempDir()
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+
+	conflictReport := state.NewReplicationConflictReport()
+	conflictReport.GeneratedAt = time.Date(2026, 3, 5, 12, 6, 0, 0, time.UTC)
+	conflictReport.FailureType = "schema_drift"
+	conflictReport.Message = "apply event failed"
+	if err := state.SaveReplicationConflictReport(conflictPath, conflictReport); err != nil {
+		t.Fatalf("save conflict report: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, []string{"--fail-on-conflict=false"}, &out); err != nil {
+		t.Fatalf("expected report override to succeed, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
 	}
 }
 

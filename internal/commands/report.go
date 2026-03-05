@@ -3,6 +3,8 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -54,7 +56,16 @@ type replicationCheckpointSummary struct {
 	UpdatedAt  time.Time `json:"updated_at,omitempty"`
 }
 
-func runReport(_ context.Context, cfg config.RuntimeConfig, _ []string, out io.Writer) error {
+type reportOptions struct {
+	FailOnConflict bool
+}
+
+func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
+	opts, err := parseReportOptions(args)
+	if err != nil {
+		return err
+	}
+
 	summary, proposals, err := loadReportSummary(cfg.StateDir)
 	if err != nil {
 		return err
@@ -80,9 +91,33 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 	if cfg.JSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
+		if err := enc.Encode(payload); err != nil {
+			return err
+		}
+	} else {
+		if err := writeReportText(out, payload); err != nil {
+			return err
+		}
 	}
-	return writeReportText(out, payload)
+
+	if status == "attention_required" && opts.FailOnConflict {
+		return errors.New("report detected unresolved replication conflicts (use --fail-on-conflict=false to report without failing)")
+	}
+	return nil
+}
+
+func parseReportOptions(args []string) (reportOptions, error) {
+	opts := reportOptions{
+		FailOnConflict: true,
+	}
+
+	fs := flag.NewFlagSet("report", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.BoolVar(&opts.FailOnConflict, "fail-on-conflict", true, "fail with non-zero exit when replication conflict report requires attention")
+	if err := fs.Parse(args); err != nil {
+		return reportOptions{}, err
+	}
+	return opts, nil
 }
 
 func loadReportSummary(stateDir string) (reportSummary, []string, error) {

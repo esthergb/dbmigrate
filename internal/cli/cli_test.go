@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -327,5 +328,68 @@ func TestRunReplicateInvalidConflictPolicy(t *testing.T) {
 	code := Run(context.Background(), args, &out, &out)
 	if code != 3 {
 		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunReportNoArtifacts(t *testing.T) {
+	var out bytes.Buffer
+	tmp := t.TempDir()
+	args := []string{
+		"report",
+		"--state-dir", tmp,
+		"--json",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if payload["status"] != "empty" {
+		t.Fatalf("expected status empty, got %#v", payload["status"])
+	}
+}
+
+func TestRunReportFailsByDefaultOnConflict(t *testing.T) {
+	var out bytes.Buffer
+	tmp := t.TempDir()
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+	raw := []byte(`{"version":1,"failure_type":"schema_drift","message":"apply failed"}`)
+	if err := os.WriteFile(conflictPath, raw, 0o600); err != nil {
+		t.Fatalf("write conflict report: %v", err)
+	}
+
+	args := []string{
+		"report",
+		"--state-dir", tmp,
+		"--json",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+	}
+}
+
+func TestRunReportConflictOverride(t *testing.T) {
+	var out bytes.Buffer
+	tmp := t.TempDir()
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+	raw := []byte(`{"version":1,"failure_type":"schema_drift","message":"apply failed"}`)
+	if err := os.WriteFile(conflictPath, raw, 0o600); err != nil {
+		t.Fatalf("write conflict report: %v", err)
+	}
+
+	args := []string{
+		"report",
+		"--state-dir", tmp,
+		"--json",
+		"--fail-on-conflict=false",
+	}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
 	}
 }

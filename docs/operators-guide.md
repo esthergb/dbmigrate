@@ -73,6 +73,9 @@ Replication checkpoint behavior:
 
 - Generate machine-readable report from state artifacts:
   - `dbmigrate report --state-dir ./state --json`
+- Default behavior is fail-fast when conflicts are present (`status=attention_required`), returning non-zero exit.
+- Optional override to keep reporting but not fail the command:
+  - `dbmigrate report --state-dir ./state --json --fail-on-conflict=false`
 - Report scans these files when present:
   - `data-baseline-checkpoint.json`
   - `replication-checkpoint.json`
