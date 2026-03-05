@@ -78,6 +78,21 @@ func TestEvaluateSameMajorProfileAllowsSameMajorDowngrade(t *testing.T) {
 	if !report.Compatible {
 		t.Fatalf("expected compatible same-major downgrade, findings=%#v", report.Findings)
 	}
+	if !hasFinding(report.Findings, "same_major_matrix_match") {
+		t.Fatalf("expected same_major_matrix_match finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateSameMajorProfileRejectsOutOfMatrixRange(t *testing.T) {
+	source := ParseInstance("8.6.2 MySQL Community Server - GPL")
+	dest := ParseInstance("8.5.1 MySQL Community Server - GPL")
+	report := Evaluate(source, dest, nil, "same-major")
+	if report.Compatible {
+		t.Fatalf("expected same-major out-of-range downgrade to be incompatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "same_major_matrix_out_of_range") {
+		t.Fatalf("expected same_major_matrix_out_of_range finding, got %#v", report.Findings)
+	}
 }
 
 func TestEvaluateAdjacentMinorProfileRejectsNonAdjacentDowngrade(t *testing.T) {
@@ -89,6 +104,30 @@ func TestEvaluateAdjacentMinorProfileRejectsNonAdjacentDowngrade(t *testing.T) {
 	}
 	if !hasFinding(report.Findings, "downgrade_minor_gap") {
 		t.Fatalf("expected downgrade_minor_gap finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateAdjacentMinorProfileAllowsAdjacentStepInsideMatrix(t *testing.T) {
+	source := ParseInstance("10.11.8-MariaDB")
+	dest := ParseInstance("10.10.9-MariaDB")
+	report := Evaluate(source, dest, nil, "adjacent-minor")
+	if !report.Compatible {
+		t.Fatalf("expected adjacent-minor downgrade to be compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "adjacent_minor_matrix_match") {
+		t.Fatalf("expected adjacent_minor_matrix_match finding, got %#v", report.Findings)
+	}
+}
+
+func TestEvaluateAdjacentMinorProfileRejectsOutOfMatrixRange(t *testing.T) {
+	source := ParseInstance("8.6.2 MySQL Community Server - GPL")
+	dest := ParseInstance("8.5.1 MySQL Community Server - GPL")
+	report := Evaluate(source, dest, nil, "adjacent-minor")
+	if report.Compatible {
+		t.Fatalf("expected adjacent-minor out-of-range downgrade to be incompatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "adjacent_minor_matrix_out_of_range") {
+		t.Fatalf("expected adjacent_minor_matrix_out_of_range finding, got %#v", report.Findings)
 	}
 }
 
