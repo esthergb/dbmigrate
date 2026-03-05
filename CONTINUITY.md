@@ -14,15 +14,16 @@ Last updated: 2026-03-05
 - State:
   - Current branch: `codex/feat/compat-candidate-scope-phase50`.
   - `main` includes PR #49 merged.
+  - PR #50 is open: https://github.com/esthergb/dbmigrate/pull/50
 - Done:
   - Phases 0-49 merged.
   - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
   - Phase 48 synchronized README/continuity status with merged reality.
   - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
 - Now:
-  - Phase 50: add candidate-pair findings that are explicit about partial-scope pilot recommendation vs active pilot mode.
+  - Wait for PR #50 checks/review/merge.
 - Next:
-  - Open PR for phase 50 and merge after checks.
+  - Merge PR #50 after checks.
   - Continue with next compatibility hardening milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
