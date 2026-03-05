@@ -117,6 +117,7 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string) {
 		"key-file":          {},
 		"state-dir":         {},
 		"downgrade-profile": {},
+		"dry-run-mode":      {},
 	}
 	globalBoolFlags := map[string]struct{}{
 		"dry-run": {},

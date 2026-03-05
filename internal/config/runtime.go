@@ -20,6 +20,11 @@ var validDowngradeProfiles = map[string]struct{}{
 	"max-compat":     {},
 }
 
+var validDryRunModes = map[string]struct{}{
+	"plan":    {},
+	"sandbox": {},
+}
+
 // RuntimeConfig holds global options shared by all subcommands.
 type RuntimeConfig struct {
 	Source           string
@@ -30,6 +35,7 @@ type RuntimeConfig struct {
 	IncludeObjects   []string
 	Concurrency      int
 	DryRun           bool
+	DryRunMode       string
 	Verbose          bool
 	JSON             bool
 	TLSMode          string
@@ -54,6 +60,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.includeObjectsRaw, "include-objects", "tables,views,routines,triggers,events", "comma-separated object types")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "worker concurrency")
 	fs.BoolVar(&cfg.DryRun, "dry-run", false, "plan actions without applying changes")
+	fs.StringVar(&cfg.DryRunMode, "dry-run-mode", "plan", "dry-run behavior: plan, sandbox")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "verbose logs")
 	fs.BoolVar(&cfg.JSON, "json", false, "JSON output mode")
 	fs.StringVar(&cfg.TLSMode, "tls-mode", "preferred", "TLS mode: disabled, preferred, required")
@@ -97,6 +104,9 @@ func (c RuntimeConfig) ValidateBasic() error {
 	}
 	if _, ok := validDowngradeProfiles[c.DowngradeProfile]; !ok {
 		return fmt.Errorf("invalid downgrade-profile %q", c.DowngradeProfile)
+	}
+	if _, ok := validDryRunModes[c.DryRunMode]; !ok {
+		return fmt.Errorf("invalid dry-run-mode %q", c.DryRunMode)
 	}
 	if c.Source != "" && !strings.Contains(c.Source, "://") {
 		return errors.New("source must be a DSN URI")

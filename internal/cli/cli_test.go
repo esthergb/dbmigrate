@@ -49,6 +49,15 @@ func TestRunPlanInvalidDowngradeProfile(t *testing.T) {
 	}
 }
 
+func TestRunPlanInvalidDryRunMode(t *testing.T) {
+	var out bytes.Buffer
+	args := []string{"plan", "--source", "mysql://src", "--dest", "mysql://dst", "--dry-run-mode", "invalid", "--dry-run"}
+	code := Run(context.Background(), args, &out, &out)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d output=%s", code, out.String())
+	}
+}
+
 func TestRunPlanWithConfigFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "dbmigrate.yaml")
@@ -125,6 +134,7 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 		"--source", "mysql://src",
 		"--dest=mysql://dst",
 		"--downgrade-profile", "max-compat",
+		"--dry-run-mode", "sandbox",
 		"--schema-only",
 		"--force",
 		"--json",
@@ -146,6 +156,16 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	}
 	if !foundProfile {
 		t.Fatalf("expected downgrade-profile in global args, got %v", global)
+	}
+	foundDryRunMode := false
+	for i := 0; i < len(global)-1; i++ {
+		if global[i] == "--dry-run-mode" && global[i+1] == "sandbox" {
+			foundDryRunMode = true
+			break
+		}
+	}
+	if !foundDryRunMode {
+		t.Fatalf("expected dry-run-mode in global args, got %v", global)
 	}
 }
 

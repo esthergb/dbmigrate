@@ -24,3 +24,10 @@ func TestQuoteIdentifierEscapesBackticks(t *testing.T) {
 		t.Fatalf("unexpected quoted identifier: %s", out)
 	}
 }
+
+func TestCountPlaceholders(t *testing.T) {
+	insertSQL := "INSERT INTO `app`.`users` (`id`, `name`, `email`) VALUES (?, ?, ?)"
+	if got := countPlaceholders(insertSQL); got != 3 {
+		t.Fatalf("expected 3 placeholders, got %d", got)
+	}
+}
