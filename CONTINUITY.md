@@ -16,12 +16,14 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/report-fail-default-phase27` from `main@d2f8bb3`.
+  - Branch: `codex/feat/report-fail-default-phase27` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
+  - PR #29 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 27 implementation is complete locally; full tests pass; PR not opened yet.
+  - Phase 27 implementation committed/pushed; local full tests pass.
+  - CI checks for PR #29 are currently not reported (`gh pr checks 29` returned none).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -119,9 +121,9 @@ Last updated: 2026-03-05
     - tests expanded across `internal/commands/report_test.go` and `internal/cli/cli_test.go`.
     - docs updated in README/operators guide for fail-fast + override behavior.
 - Now:
-  - Commit/push Phase 27 and open PR.
+  - Wait for PR #29 CI/check status and merge.
 - Next:
-  - Merge PR for Phase 27.
+  - Merge PR #29.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
