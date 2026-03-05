@@ -119,6 +119,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPair(t *testing.T)
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
 		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
 	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_validation_required") {
+		t.Fatalf("expected cross_engine_matrix_candidate_validation_required finding, got %#v", report.Findings)
+	}
 	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
 		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
 	}
@@ -133,6 +136,9 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPairReverse(t *tes
 	}
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
 		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_validation_required") {
+		t.Fatalf("expected cross_engine_matrix_candidate_validation_required finding, got %#v", report.Findings)
 	}
 	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
 		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
