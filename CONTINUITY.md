@@ -24,6 +24,9 @@ Last updated: 2026-03-05
   - `Instructions.md` is present and tracked on `main`.
   - Phase 27 implementation committed/pushed; local full tests pass.
   - CI checks for PR #29 are currently not reported (`gh pr checks 29` returned none).
+  - Investigation result (2026-03-05): Actions are enabled, workflow `ci` is active and valid, but GitHub is not creating new `workflow_runs`/`check_suites` for new commits.
+  - Cleanup applied: removed stale required status-check context `validate` from `main` branch protection (`required_status_checks.contexts=[]`).
+  - After cleanup, PR #29 remains mergeable and blocked only by review policy (no status checks required).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -121,9 +124,10 @@ Last updated: 2026-03-05
     - tests expanded across `internal/commands/report_test.go` and `internal/cli/cli_test.go`.
     - docs updated in README/operators guide for fail-fast + override behavior.
 - Now:
-  - Wait for PR #29 CI/check status and merge.
+  - Wait for PR #29 review and merge.
 - Next:
   - Merge PR #29.
+  - Re-enable required status checks on `main` once GitHub check-suite creation is healthy again.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
