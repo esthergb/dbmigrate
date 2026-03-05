@@ -1,24 +1,31 @@
 Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
-  - Deliver dbmigrate in phased PRs with green CI and explicit compatibility policy.
-  - Keep docs synchronized with merged phases and current operational process.
+  - Complete Phase 56 branch deliverables and open PR:
+    - ignore local `reports/` artifacts in git,
+    - investigate and simulate `Error 1067 Invalid default value`-class issues in compatibility probes/tests,
+    - update root/operator docs with current process and detailed testing summary.
+  - Keep dbmigrate delivered in phased PRs with green CI and explicit compatibility policy.
 - Constraints/Assumptions:
   - MIT license, docs in English, JSON-first.
   - `--apply-ddl` fixed to `ignore|apply|warn`.
   - User confirmed `docker-compose.yml`, `configs/`, `datasets/`, and `scripts/` must be included in a dedicated PR after validation/fixes.
   - User confirmed command standard is `docker compose` (not `docker-compose`).
+  - `Instructions.md` is tracked in `main` and must remain tracked.
 - Key decisions:
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
+  - Compatibility probes are the execution surface for reproducible engine/version behavior deltas.
 - State:
-  - Current branch: `codex/feat/testing-assets-phase54`.
-  - `main` includes PR #53 merged.
-  - PR #54 is open: https://github.com/esthergb/dbmigrate/pull/54
-  - Phase 54 assets committed and pushed (`docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, `MIGRATION_TESTING.md`).
-  - Asset validation completed: compose syntax OK, script syntax OK, all config dry-run checks OK.
+  - Current branch: `codex/feat/compat-probes-phase56`.
+  - Phase 56 PR opened: `#55` (<https://github.com/esthergb/dbmigrate/pull/55>).
+  - `main` includes PR #54 merged (testing assets + docs).
+  - Local `reports/` directory exists as local run artifacts and should remain ignored/untracked.
+  - `Instructions.md` remains tracked in `main` (confirmed by user).
   - FK dependency ordering fix implemented for both schema DDL apply and baseline data copy.
-  - Sample E2E scenarios now pass after FK ordering fix (`mariadb10 -> mariadb11`, `mysql80 -> mysql84`).
+  - Full exhaustive matrix execution completed with 20/20 scenarios passing on Apple Silicon (`arm64`).
+  - Compatibility probe suite implemented and integrated into scenario runner.
+  - Real-world migration test reported schema apply failure: `Error 1067 Invalid default value for 'comment_date'` on MySQL 8.0 -> 8.4 path.
 - Done:
   - Phases 0-51 merged.
   - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
@@ -37,15 +44,55 @@ Last updated: 2026-03-05
     - `bash scripts/test-mariadb10-to-mariadb11.sh`
     - `bash scripts/test-mysql80-to-mysql84.sh`
   - PR #53 merged (FK ordering fix).
+  - PR #54 merged (testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, `MIGRATION_TESTING.md`).
+  - Full matrix run completed with detailed evidence generated under `reports/matrix/20260305T213638Z/`.
+  - Official compatibility research completed and documented in `docs/version-compatibility-research.md` with source links.
+  - Added compatibility probe runner `scripts/run-compat-probes.sh` (12 SQL probes covering engine/version differences).
+  - Integrated probes into `scripts/run-migration-test.sh` (step `[4/7]`) with per-scenario artifacts:
+    - `state/<scenario>/compat-probes-source.json`
+    - `state/<scenario>/compat-probes-dest.json`
+  - Updated testing docs (`MIGRATION_TESTING.md`, `scripts/README.md`, `README.md`) to include probe workflow and references.
+  - Re-ran full matrix with probes enabled and generated detailed report:
+    - `reports/matrix-probes/20260305T222006Z/REPORT.md`
+    - `reports/matrix-probes/20260305T222006Z/summary.tsv`
+    - `reports/matrix-probes/20260305T222006Z/probe-matrix.tsv`
+    - `reports/matrix-probes/20260305T222006Z/logs/*.log`
+  - Incident analysis completed for real dump failure:
+    - dump schema includes zero-datetime defaults (`'0000-00-00 00:00:00'`) in multiple table definitions.
+    - destination MySQL sql_mode includes `NO_ZERO_DATE` + strict mode, causing DDL apply failure (`1067`).
+    - reproduced on MySQL 8.4; confirmed DDL succeeds only when session `sql_mode=''`.
+  - Added zero-date/zero-in-date strict-mode probe coverage in `scripts/run-compat-probes.sh` and compatibility research doc:
+    - `zero_datetime_default_strict`
+    - `zero_timestamp_default_strict`
+    - `zero_date_default_strict`
+    - `zero_in_date_default_strict`
+  - Added further `ERROR 1067`-family probe coverage:
+    - `session_sql_mode`
+    - `invalid_calendar_date_default`
+    - `invalid_calendar_datetime_default`
+    - `timestamp_out_of_range_default`
+  - Added `/reports/` to `.gitignore`.
+  - Revalidated compatibility probes across all services:
+    - `mariadb10` (`10.6.25`): `ok=9`, `failed=11`
+    - `mariadb11` (`11.0.6`): `ok=9`, `failed=11`
+    - `mariadb12` (`12.0.2`): `ok=10`, `failed=10`
+    - `mysql80` (`8.0.45`): `ok=10`, `failed=10`
+    - `mysql84` (`8.4.8`): `ok=8`, `failed=12`
+  - Ran full scenario matrix with expanded probe pack:
+    - `reports/matrix-phase56/20260305T224136Z/summary.tsv`
+    - result `20/20` scenarios passed.
+  - Updated docs and runbooks with current process + detailed testing summary:
+    - `README.md`
+    - `MIGRATION_TESTING.md`
+    - `scripts/README.md`
+    - `docs/version-compatibility-research.md`
 - Now:
-  - Wait for PR #54 checks/review/merge.
+  - Wait for user review/merge of PR #55.
 - Next:
-  - Merge PR #54 after checks.
-  - Run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
+  - After merge confirmation from user: implement `dbmigrate` precheck to detect zero-date defaults and fail with detailed report + auto-fix proposal.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
   - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
-  - UNCONFIRMED: scope of transactional `--dry-run` requirement across commands (`migrate` only vs wider command set).
+  - UNCONFIRMED: timeline/priority order between strict-lts promotion and additional precheck/autofix hardening.
 - Working set (files/ids/commands):
-  - Files: `internal/schema/copy.go`, `internal/schema/copy_test.go`, `internal/data/copy.go`, `internal/data/copy_test.go`, `CONTINUITY.md` (plus untracked testing assets kept pending).
-  - Commands: `go test ./internal/schema ./internal/data ./internal/commands -count=1`, `go test ./... -count=1`, `bash scripts/test-mariadb10-to-mariadb11.sh`, `bash scripts/test-mysql80-to-mysql84.sh`.
+  - Files: `CONTINUITY.md`, `.gitignore`, `scripts/run-compat-probes.sh`, `scripts/run-migration-test.sh`, `README.md`, `MIGRATION_TESTING.md`, `scripts/README.md`, `docs/version-compatibility-research.md`.
+  - Commands: `scripts/run-compat-probes.sh` per service, `scripts/test-*.sh` full matrix loop, commit `298049c`, PR #55.

@@ -6,7 +6,7 @@
 
 This repository is in phased development.
 
-Completed milestones (merged through Phase 47):
+Completed milestones (merged through Phase 54):
 - Phase 0: research and operator risk docs
 - Phase 1: foundation scaffold + CI baseline
 - Phase 2: runtime config, DSN validation, config file support
@@ -26,11 +26,40 @@ Completed milestones (merged through Phase 47):
 Current process:
 - Delivery is phase-based via small PRs from `codex/*` branches.
 - Each phase runs local full tests and required CI checks before merge.
+- Matrix test scripts include compatibility probes that exercise version/engine-specific SQL behavior differences.
 
 Pending next milestones:
 - Continue replication/report ergonomics hardening and operator-facing diagnostics.
 - Promote active-LTS cross-engine candidates into strict-lts only after repeated staged validation evidence.
 - Keep documentation and runbooks synchronized with merged phases.
+- Add schema precheck for temporal invalid defaults (zero-date and invalid calendar defaults) with detailed fail report and auto-fix proposals.
+
+## Latest validation snapshot (2026-03-05)
+
+Detailed local execution evidence (Apple Silicon, `docker compose`):
+
+- Full migration matrix (20 scenarios): `reports/matrix-phase56/20260305T224136Z/summary.tsv`
+  - Result: `20/20` scenarios successful (all exit code `0`).
+- Compatibility probe sweep (5 services): `state/probe-validation/*.json`
+  - Probe pack size: `20` probes per service.
+  - Service results:
+    - `mariadb10` (`10.6.25`): `ok=9`, `failed=11`
+    - `mariadb11` (`11.0.6`): `ok=9`, `failed=11`
+    - `mariadb12` (`12.0.2`): `ok=10`, `failed=10`
+    - `mysql80` (`8.0.45`): `ok=10`, `failed=10`
+    - `mysql84` (`8.4.8`): `ok=8`, `failed=12`
+- Added and validated `1067 Invalid default value` simulation probes:
+  - `zero_datetime_default_strict`
+  - `zero_timestamp_default_strict`
+  - `zero_date_default_strict`
+  - `zero_in_date_default_strict`
+  - `invalid_calendar_date_default`
+  - `invalid_calendar_datetime_default`
+  - `timestamp_out_of_range_default`
+- Observed behavior:
+  - MariaDB defaults (`10.6/11.0/12.0`) accept zero-date defaults in current `sql_mode`.
+  - MySQL defaults (`8.0/8.4`) reject zero-date/zero-in-date defaults in strict mode (`NO_ZERO_DATE`, `NO_ZERO_IN_DATE`).
+  - Invalid calendar defaults and out-of-range timestamp defaults fail across both engines (same `1067` family).
 
 ## Supported migration priorities
 
@@ -253,5 +282,6 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 - [Known migration problems](docs/known-problems.md)
 - [Operator risk checklist](docs/risk-checklist.md)
 - [Operators guide](docs/operators-guide.md)
+- [Version compatibility research](docs/version-compatibility-research.md)
 - [Security notes](docs/security.md)
 - [Project implementation instructions](Instructions.md)
