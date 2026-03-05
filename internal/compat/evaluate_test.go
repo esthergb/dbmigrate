@@ -119,6 +119,24 @@ func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPair(t *testing.T)
 	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
 		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
 	}
+	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
+		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
+	}
+}
+
+func TestEvaluateCrossEngineMaxCompatWarnsUnconfirmedActiveLTSPairReverse(t *testing.T) {
+	source := ParseInstance("11.8.2-MariaDB")
+	dest := ParseInstance("8.4.2 MySQL Community Server - GPL")
+	report := Evaluate(source, dest, nil, "max-compat")
+	if !report.Compatible {
+		t.Fatalf("expected max-compat cross-engine path to remain compatible, findings=%#v", report.Findings)
+	}
+	if !hasFinding(report.Findings, "cross_engine_matrix_candidate_unconfirmed") {
+		t.Fatalf("expected cross_engine_matrix_candidate_unconfirmed finding, got %#v", report.Findings)
+	}
+	if hasFinding(report.Findings, "cross_engine_matrix_unmapped") {
+		t.Fatalf("did not expect cross_engine_matrix_unmapped for active-LTS candidate pair, findings=%#v", report.Findings)
+	}
 }
 
 func TestEvaluatePartialScopeInfoFinding(t *testing.T) {
