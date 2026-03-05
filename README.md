@@ -99,16 +99,21 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 
 ```bash
 # Replication run with preflight + checkpoint safety tracking
-dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mode binlog --resume --apply-ddl warn --conflict-policy fail
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mode binlog --start-from auto --resume --apply-ddl warn --conflict-policy fail
 
 # Start from explicit binlog file/position when no checkpoint exists
-dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mode binlog --resume=false --start-file mysql-bin.000001 --start-pos 4 --conflict-policy fail
+dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mode binlog --start-from binlog-file:pos --resume=false --start-file mysql-bin.000001 --start-pos 4 --conflict-policy fail
 ```
 
 Replication mode selection:
 - `--replication-mode=binlog` is the currently implemented mode.
 - `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are accepted values but currently fail fast with an explicit "not implemented yet" error.
 - `--enable-trigger-cdc` and `--teardown-cdc` are accepted flags for upcoming trigger CDC workflows and currently fail fast with explicit "not implemented yet" guidance.
+
+Replication start selection:
+- `--start-from=auto` (default) uses checkpoint/resume behavior.
+- `--start-from=binlog-file:pos` requires `--resume=false` plus explicit `--start-file` and `--start-pos`.
+- `--start-from=gtid` is reserved and currently fails fast with explicit guidance.
 
 Replication preflight requirements:
 - source `log_bin` must be enabled

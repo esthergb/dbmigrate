@@ -14,6 +14,7 @@ import (
 
 type replicateOptions struct {
 	ReplicationMode  string
+	StartFrom        string
 	ApplyDDL         string
 	ConflictPolicy   string
 	EnableTriggerCDC bool
@@ -38,8 +39,9 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s start_from=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
+				opts.StartFrom,
 				opts.EnableTriggerCDC,
 				opts.TeardownCDC,
 				opts.Resume,
@@ -52,6 +54,9 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	}
 	if opts.EnableTriggerCDC || opts.TeardownCDC {
 		return errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication")
+	}
+	if opts.StartFrom == "gtid" {
+		return errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos")
 	}
 	if opts.ReplicationMode != "binlog" {
 		return fmt.Errorf(
@@ -94,7 +99,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -106,6 +111,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			summary.EndPos,
 			summary.AppliedEvents,
 			opts.ReplicationMode,
+			opts.StartFrom,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
 			summary.CheckpointFile,
@@ -116,6 +122,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 func parseReplicateOptions(args []string) (replicateOptions, error) {
 	opts := replicateOptions{
 		ReplicationMode: "binlog",
+		StartFrom:       "auto",
 		ApplyDDL:        "warn",
 		ConflictPolicy:  "fail",
 		Resume:          true,
@@ -125,6 +132,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs := flag.NewFlagSet("replicate", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.ReplicationMode, "replication-mode", "binlog", "replication mode (binlog|capture-triggers|hybrid)")
+	fs.StringVar(&opts.StartFrom, "start-from", "auto", "replication start reference (auto|binlog-file:pos|gtid)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
 	fs.BoolVar(&opts.EnableTriggerCDC, "enable-trigger-cdc", false, "enable trigger-based CDC setup (planned for capture-triggers/hybrid modes)")
@@ -141,6 +149,20 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		// valid
 	default:
 		return replicateOptions{}, fmt.Errorf("invalid --replication-mode value %q (expected binlog, capture-triggers, or hybrid)", opts.ReplicationMode)
+	}
+	switch opts.StartFrom {
+	case "auto", "binlog-file:pos", "gtid":
+		// valid
+	default:
+		return replicateOptions{}, fmt.Errorf("invalid --start-from value %q (expected auto, binlog-file:pos, or gtid)", opts.StartFrom)
+	}
+	if opts.StartFrom == "binlog-file:pos" {
+		if opts.Resume {
+			return replicateOptions{}, errors.New("--resume must be false when --start-from=binlog-file:pos")
+		}
+		if opts.StartFile == "" {
+			return replicateOptions{}, errors.New("--start-file is required when --start-from=binlog-file:pos")
+		}
 	}
 	switch opts.ApplyDDL {
 	case "ignore", "apply", "warn":
