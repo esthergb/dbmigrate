@@ -1,0 +1,25 @@
+# Migration config: MariaDB 10.6 container -> MySQL 8.4 container
+source: mariadb://root:rootpass123@127.0.0.1:13306/?tls=preferred
+dest: mysql://root:rootpass123@127.0.0.1:23307/?tls=preferred
+
+databases: []
+exclude-databases:
+  - information_schema
+  - performance_schema
+  - sys
+  - mysql
+include-objects:
+  - tables
+  - views
+  - routines
+  - triggers
+  - events
+
+concurrency: 4
+verbose: true
+json: false
+
+tls-mode: preferred
+state-dir: ./state/mariadb10-to-mysql84
+
+downgrade-profile: max-compat

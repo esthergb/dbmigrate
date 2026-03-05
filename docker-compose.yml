@@ -1,0 +1,99 @@
+services:
+  mariadb10:
+    image: mariadb:10.6
+    container_name: mariadb10
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "13306:3306"
+    volumes:
+      - mariadb10_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb11:
+    image: mariadb:11.0
+    container_name: mariadb11
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "13307:3306"
+    volumes:
+      - mariadb11_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb12:
+    image: mariadb:12.0
+    container_name: mariadb12
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "13308:3306"
+    volumes:
+      - mariadb12_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mysql80:
+    image: mysql:8.0
+    container_name: mysql80
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "23306:3306"
+    volumes:
+      - mysql80_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mysql84:
+    image: mysql:8.4
+    container_name: mysql84
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "23307:3306"
+    volumes:
+      - mysql84_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+volumes:
+  mariadb10_data:
+    driver: local
+  mariadb11_data:
+    driver: local
+  mariadb12_data:
+    driver: local
+  mysql80_data:
+    driver: local
+  mysql84_data:
+    driver: local
+
+networks:
+  dbmigrate_network:
+    driver: bridge
