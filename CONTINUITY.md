@@ -13,23 +13,22 @@ Last updated: 2026-03-05
   - Option B matrix is adopted (active-LTS-first).
 - State:
   - Current branch: `codex/feat/compat-unconfirmed-pair-signal-phase46`.
-  - `main` includes PR #44 and PR #45 merged.
+  - `main` includes PR #44, PR #45, and PR #46 merged.
+  - PR #47 is open: https://github.com/esthergb/dbmigrate/pull/47
 - Done:
-  - Phases 0-45 merged.
-  - Phase 46 local implementation complete (pending push + PR):
-    - `max-compat` emits dedicated warning `cross_engine_matrix_candidate_unconfirmed` for both directions:
-      - MySQL 8.4.x -> MariaDB 11.8.x
-      - MariaDB 11.8.x -> MySQL 8.4.x
-    - proposal text tightened with concrete validation gates.
-    - tests expanded for both directions and to ensure no fallback `cross_engine_matrix_unmapped` in candidate case.
+  - Phases 0-46 merged.
+  - Phase 47 implementation opened in PR #47:
+    - Candidate unconfirmed pair warning now explicitly covered in both directions.
+    - tests ensure candidate path does not degrade to generic unmapped warning.
+    - proposal text tightened with concrete validation guidance.
     - local full suite passes (`go test ./... -count=1`).
 - Now:
-  - Commit, push, and open PR for Phase 46.
+  - Wait for PR #47 checks/review/merge.
 - Next:
-  - Merge PR #46 after CI.
+  - Merge PR #47.
   - Continue from updated main.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
 - Working set (files/ids/commands):
-  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
+  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `CONTINUITY.md`.
+  - Commands: `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr checks`.
