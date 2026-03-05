@@ -34,6 +34,7 @@ Last updated: 2026-03-05
   - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
   - PR #41 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
   - PR #42 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
+  - PR #43 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/43 (`report` stale conflict artifact handling).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -236,13 +237,19 @@ Last updated: 2026-03-05
     - regression test added to assert stale conflict-report cleanup on successful apply.
     - README replication notes updated with cleanup semantics.
     - local full test suite passes (`go test ./... -count=1`).
+  - Phase 41 opened (PR #43):
+    - `report` now marks conflict artifacts as stale when replication checkpoint has advanced beyond conflict `applied_end_*`.
+    - stale conflict artifacts no longer trigger `attention_required` / fail-fast by default.
+    - command and CLI tests added for stale conflict-report scenarios.
+    - README report behavior updated with stale conflict auto-ignore note.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Push Phase 41 branch and open PR with CI.
+  - Wait for PR #43 CI/review/merge.
 - Next:
-  - Merge PR for Phase 41 once CI is green.
+  - Merge PR #43 once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
