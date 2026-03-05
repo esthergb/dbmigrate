@@ -69,6 +69,20 @@ Replication checkpoint behavior:
 - Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.
 - Conflict report JSON includes categorized `failure_type` values (for example `schema_drift`, `conflict_duplicate_key`), `sql_error_code` when surfaced by the destination engine, and contextual samples: `value_sample`, `old_row_sample`, `new_row_sample`, `row_diff_sample`.
 
+## Report generation
+
+- Generate machine-readable report from state artifacts:
+  - `dbmigrate report --state-dir ./state --json`
+- Report scans these files when present:
+  - `data-baseline-checkpoint.json`
+  - `replication-checkpoint.json`
+  - `replication-conflict-report.json`
+- Report status values:
+  - `ok`: no conflict failure reported.
+  - `attention_required`: replication conflict report contains a failure.
+  - `empty`: no known artifacts found in `--state-dir`.
+- `proposals` includes remediation guidance from the conflict report to help triage and rerun planning.
+
 ## Safety defaults
 
 - Fail fast on known incompatible features.
