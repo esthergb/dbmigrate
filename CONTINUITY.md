@@ -12,10 +12,10 @@ Last updated: 2026-03-05
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
 - State:
-  - Current branch: `codex/fix/fk-order-migrate-phase55`.
-  - `main` includes PR #52 merged.
-  - PR #53 is open: https://github.com/esthergb/dbmigrate/pull/53
-  - Local workspace contains untracked testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, plus `MIGRATION_TESTING.md`.
+  - Current branch: `codex/feat/testing-assets-phase54`.
+  - `main` includes PR #53 merged.
+  - PR #54 is open: https://github.com/esthergb/dbmigrate/pull/54
+  - Phase 54 assets committed and pushed (`docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, `MIGRATION_TESTING.md`).
   - Asset validation completed: compose syntax OK, script syntax OK, all config dry-run checks OK.
   - FK dependency ordering fix implemented for both schema DDL apply and baseline data copy.
   - Sample E2E scenarios now pass after FK ordering fix (`mariadb10 -> mariadb11`, `mysql80 -> mysql84`).
@@ -36,11 +36,11 @@ Last updated: 2026-03-05
     - `go test ./... -count=1`
     - `bash scripts/test-mariadb10-to-mariadb11.sh`
     - `bash scripts/test-mysql80-to-mysql84.sh`
+  - PR #53 merged (FK ordering fix).
 - Now:
-  - Wait for PR #53 checks/review/merge.
+  - Wait for PR #54 checks/review/merge.
 - Next:
-  - Merge PR #53 after checks.
-  - Resume phase 54 testing-assets PR after FK ordering fix is merged.
+  - Merge PR #54 after checks.
   - Run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
