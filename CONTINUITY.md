@@ -16,11 +16,13 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/report-state-phase26` from `main@db8724c`.
+  - Branch: `codex/feat/report-state-phase26` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
+  - PR #28 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 26 implementation is complete locally; tests pass; PR not opened yet.
+  - Phase 26 implementation is committed/pushed; local full tests pass.
+  - CI checks for PR #28 were not reported yet at time of last check (`gh pr checks 28` returned none).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -112,9 +114,9 @@ Last updated: 2026-03-05
     - report status semantics added: `ok`, `attention_required`, `empty`.
     - report unit tests added and local full suite passed.
 - Now:
-  - Commit/push Phase 26 and open PR.
+  - Wait for PR #28 CI/check status and merge.
 - Next:
-  - Merge PR for Phase 26 after CI.
+  - Merge PR #28 after CI.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
