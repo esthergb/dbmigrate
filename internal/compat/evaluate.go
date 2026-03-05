@@ -349,6 +349,12 @@ func applyCrossEngineRiskWarnings(report *Report) {
 			Message:  fmt.Sprintf("Cross-engine path %s -> %s uses active LTS lines but is not yet validated in strict-lts matrix.", sourceLine, destLine),
 			Proposal: "Keep max-compat, run full verify modes (count/hash/sample/full-hash), capture report evidence, and promote to strict-lts only after repeated successful staged cutovers.",
 		})
+		report.Findings = append(report.Findings, Finding{
+			Code:     "cross_engine_matrix_candidate_validation_required",
+			Severity: "warn",
+			Message:  fmt.Sprintf("Promotion criteria required for candidate pair %s -> %s before strict-lts adoption.", sourceLine, destLine),
+			Proposal: "Collect at least 3 successful staged runs per direction (partial-scope pilot then full scope) with clean count/hash/sample/full-hash verification and attach evidence to the matrix change request.",
+		})
 		return
 	}
 	if !sourceKnown || !destKnown || !strictLTSCrossEngineAllowed(sourceLine, destLine) {
