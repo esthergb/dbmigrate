@@ -23,6 +23,9 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 	if opts.MaxEvents != 0 {
 		t.Fatalf("expected default max-events 0, got %d", opts.MaxEvents)
 	}
+	if opts.MaxLagSeconds != 0 {
+		t.Fatalf("expected default max-lag-seconds 0, got %d", opts.MaxLagSeconds)
+	}
 	if opts.Idempotent {
 		t.Fatal("expected default idempotent=false")
 	}
@@ -51,6 +54,7 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 		"--replication-mode=binlog",
 		"--start-from=binlog-file:pos",
 		"--max-events=250",
+		"--max-lag-seconds=90",
 		"--idempotent",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
@@ -70,6 +74,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	}
 	if opts.MaxEvents != 250 {
 		t.Fatalf("expected max-events 250, got %d", opts.MaxEvents)
+	}
+	if opts.MaxLagSeconds != 90 {
+		t.Fatalf("expected max-lag-seconds 90, got %d", opts.MaxLagSeconds)
 	}
 	if !opts.Idempotent {
 		t.Fatal("expected idempotent=true")
@@ -119,6 +126,13 @@ func TestParseReplicateOptionsInvalidMaxEvents(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--max-events=-1"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid max-events")
+	}
+}
+
+func TestParseReplicateOptionsInvalidMaxLagSeconds(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--max-lag-seconds=-1"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid max-lag-seconds")
 	}
 }
 
@@ -198,6 +212,20 @@ func TestRunReplicateStartFromGTIDFailsFast(t *testing.T) {
 		t.Fatal("expected start-from gtid unsupported error")
 	}
 	if !strings.Contains(err.Error(), "start-from gtid is not implemented yet") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunReplicateMaxLagSecondsFailsFast(t *testing.T) {
+	var out bytes.Buffer
+	err := runReplicate(context.Background(), config.RuntimeConfig{
+		Source: "mysql://src",
+		Dest:   "mysql://dst",
+	}, []string{"--max-lag-seconds=30"}, &out)
+	if err == nil {
+		t.Fatal("expected max-lag-seconds unsupported error")
+	}
+	if !strings.Contains(err.Error(), "max-lag-seconds is not implemented yet") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

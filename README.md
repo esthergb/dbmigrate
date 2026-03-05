@@ -119,6 +119,7 @@ Replication window control:
 - `--max-events=0` (default) applies all available events in the selected window.
 - `--max-events=N` limits apply work by transaction boundaries (never checkpoints partial transactions).
 - If the first transaction already exceeds `N`, replicate fails fast with guidance to increase the limit.
+- `--max-lag-seconds` is reserved and currently fails fast with explicit guidance (runtime lag-estimation support pending).
 
 Idempotent replay guard:
 - `--idempotent` enables replay-safety guardrails and requires `--conflict-policy=source-wins` or `--conflict-policy=dest-wins`.
