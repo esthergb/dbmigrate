@@ -72,6 +72,18 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		cfg.Databases,
 		cfg.DowngradeProfile,
 	)
+
+	precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+	if err != nil {
+		return fmt.Errorf("schema precheck failed: %w", err)
+	}
+	if len(precheckReport.Findings) > 0 {
+		report.Findings = append(report.Findings, precheckReport.Findings...)
+	}
+	if precheckReport.Incompatible {
+		report.Compatible = false
+	}
+
 	if err := writePlanReport(out, cfg, report); err != nil {
 		return err
 	}

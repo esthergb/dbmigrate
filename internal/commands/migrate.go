@@ -89,6 +89,22 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		_ = destDB.Close()
 	}()
 
+	if runSchema {
+		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("schema precheck failed: %w", err)
+		}
+		if precheckReport.Incompatible {
+			if err := writeMigratePrecheckReport(out, cfg, precheckReport); err != nil {
+				return err
+			}
+			return WithExitCode(
+				ExitCodeDiff,
+				errors.New("schema precheck failed; zero-date defaults are incompatible with destination sql_mode"),
+			)
+		}
+	}
+
 	schemaSummary := schema.CopySummary{}
 	if runSchema {
 		schemaOptions := schema.CopyOptions{

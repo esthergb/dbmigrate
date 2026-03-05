@@ -414,3 +414,33 @@ INSERT INTO inventory_transactions (product_id, transaction_type, quantity_chang
 (8, 'adjustment', 5, NULL, NULL, 'Stock adjustment');
 
 COMMIT;
+
+-- ============================================================================
+-- OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)
+-- Uncomment this block only when validating zero-date precheck behavior.
+-- Note: MySQL strict sql_mode may reject these statements unless temporarily relaxed.
+-- ============================================================================
+
+-- CREATE DATABASE IF NOT EXISTS legacy_zero_date_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE legacy_zero_date_db;
+--
+-- CREATE TABLE zero_date_examples (
+--   id INT AUTO_INCREMENT PRIMARY KEY,
+--   legacy_date DATE NOT NULL DEFAULT '0000-00-00',
+--   legacy_datetime DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
+--   legacy_timestamp TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+--   partial_zero_date DATE NOT NULL DEFAULT '2024-00-15',
+--   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+--
+-- INSERT INTO zero_date_examples (
+--   legacy_date,
+--   legacy_datetime,
+--   legacy_timestamp,
+--   partial_zero_date
+-- ) VALUES (
+--   '0000-00-00',
+--   '0000-00-00 00:00:00',
+--   '1970-01-01 00:00:01',
+--   '2024-00-15'
+-- );

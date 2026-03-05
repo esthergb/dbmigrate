@@ -1,10 +1,10 @@
-Last updated: 2026-03-05
+Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Complete Phase 56 branch deliverables and open PR:
-    - ignore local `reports/` artifacts in git,
-    - investigate and simulate `Error 1067 Invalid default value`-class issues in compatibility probes/tests,
-    - update root/operator docs with current process and detailed testing summary.
+  - Implement Phase 57 precheck hardening:
+    - detect zero-date temporal defaults before schema apply,
+    - fail fast with detailed findings and automatic fix proposals,
+    - enforce the precheck in `plan` and `migrate`.
   - Keep dbmigrate delivered in phased PRs with green CI and explicit compatibility policy.
 - Constraints/Assumptions:
   - MIT license, docs in English, JSON-first.
@@ -17,8 +17,9 @@ Last updated: 2026-03-05
   - Option B matrix is adopted (active-LTS-first).
   - Compatibility probes are the execution surface for reproducible engine/version behavior deltas.
 - State:
-  - Current branch: `codex/feat/compat-probes-phase56`.
-  - Phase 56 PR opened: `#55` (<https://github.com/esthergb/dbmigrate/pull/55>).
+  - Current branch: `codex/feat/precheck-zero-date-phase57`.
+  - Phase 56 PR `#55` merged by user.
+  - Phase 57 PR opened: `#56` (<https://github.com/esthergb/dbmigrate/pull/56>).
   - `main` includes PR #54 merged (testing assets + docs).
   - Local `reports/` directory exists as local run artifacts and should remain ignored/untracked.
   - `Instructions.md` remains tracked in `main` (confirmed by user).
@@ -86,13 +87,32 @@ Last updated: 2026-03-05
     - `MIGRATION_TESTING.md`
     - `scripts/README.md`
     - `docs/version-compatibility-research.md`
+  - Implemented zero-date temporal-default precheck with fail-fast behavior and auto-fix proposals:
+    - new helper module: `internal/commands/temporal_precheck.go`
+    - wired into `plan` (`internal/commands/plan.go`)
+    - wired into `migrate` (`internal/commands/migrate.go`)
+  - Added tests:
+    - `internal/commands/temporal_precheck_test.go`
+    - `internal/commands/migrate_test.go` precheck output coverage
+  - Validation completed:
+    - `go test ./internal/commands -count=1`
+    - `go test ./... -count=1`
+    - end-to-end manual reproduction with `mariadb11 -> mysql84` and a real zero-date default table:
+      - `plan` exit code: `2` with detailed findings + auto-fix SQL
+      - `migrate` exit code: `2` with detailed precheck report + auto-fix SQL
+  - Documentation updated for operators:
+    - `README.md` (new precheck section + safety note)
+    - `docs/operators-guide.md` (workflow + safety defaults)
+  - Before merge of PR #56, datasets were updated to include optional zero-date examples (disabled by default):
+    - appended `OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)` block to all `datasets/populate_*.sql`
+    - updated `datasets/README.md` with enablement guidance and strict `sql_mode` notes
 - Now:
-  - Wait for user review/merge of PR #55.
+  - Wait for user review/merge of updated PR #56.
 - Next:
-  - After merge confirmation from user: implement `dbmigrate` precheck to detect zero-date defaults and fail with detailed report + auto-fix proposal.
+  - After merge confirmation from user, continue next planned phase.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
   - UNCONFIRMED: timeline/priority order between strict-lts promotion and additional precheck/autofix hardening.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `.gitignore`, `scripts/run-compat-probes.sh`, `scripts/run-migration-test.sh`, `README.md`, `MIGRATION_TESTING.md`, `scripts/README.md`, `docs/version-compatibility-research.md`.
-  - Commands: `scripts/run-compat-probes.sh` per service, `scripts/test-*.sh` full matrix loop, commit `298049c`, PR #55.
+  - Files: `datasets/populate_mariadb10.sql`, `datasets/populate_mariadb11.sql`, `datasets/populate_mariadb12.sql`, `datasets/populate_mysql80.sql`, `datasets/populate_mysql84.sql`, `datasets/README.md`, `CONTINUITY.md`.
+  - Commands: dataset tail/grep validation + commit/push to PR #56.

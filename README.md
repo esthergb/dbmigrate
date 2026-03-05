@@ -32,7 +32,6 @@ Pending next milestones:
 - Continue replication/report ergonomics hardening and operator-facing diagnostics.
 - Promote active-LTS cross-engine candidates into strict-lts only after repeated staged validation evidence.
 - Keep documentation and runbooks synchronized with merged phases.
-- Add schema precheck for temporal invalid defaults (zero-date and invalid calendar defaults) with detailed fail report and auto-fix proposals.
 
 ## Latest validation snapshot (2026-03-05)
 
@@ -128,6 +127,14 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --data-only --chun
 # Full baseline (schema + data)
 dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 ```
+
+## Schema precheck: zero-date defaults
+
+- `plan` and `migrate` now run a schema precheck that scans source temporal defaults (`DATE`, `DATETIME`, `TIMESTAMP`) for zero-date patterns (`0000-00-00`, `0000-00-00 00:00:00`, `YYYY-00-DD`, `YYYY-MM-00`).
+- When destination `sql_mode` enforces strict zero-date validation (`STRICT_*` + `NO_ZERO_DATE`/`NO_ZERO_IN_DATE`), the command fails fast with:
+  - detailed findings per affected column
+  - auto-fix SQL proposals (`ALTER TABLE ... ALTER COLUMN ... SET DEFAULT ...`)
+- This precheck returns incompatibility exit semantics (`exit 2`) rather than runtime crash semantics.
 
 ## Incremental replication baseline
 
@@ -265,6 +272,7 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 
 - Incompatible features are designed to fail fast.
 - Downgrade incompatibilities fail with non-zero exit code and include remediation proposals in plan/report output.
+- Zero-date temporal defaults incompatible with destination strict `sql_mode` are blocked in `plan` and `migrate` with per-column auto-fix proposals.
 - DDL application policy is controlled only by `--apply-ddl={ignore,apply,warn}`.
 - Detailed migration risks and mitigations are documented in [docs/known-problems.md](docs/known-problems.md).
 

@@ -24,3 +24,27 @@ Each dataset is intended to stress migration behavior with realistic structures:
 
 The matrix runner loads the dataset into the **source** database service before each scenario run.
 Destination services are left empty to validate baseline migration behavior.
+
+## Optional Zero-Date Examples
+
+All `populate_*.sql` files now include a commented block named:
+
+- `OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)`
+
+This block contains sample legacy defaults such as:
+
+- `DATE DEFAULT '0000-00-00'`
+- `DATETIME DEFAULT '0000-00-00 00:00:00'`
+- `TIMESTAMP DEFAULT '0000-00-00 00:00:00'`
+- `DATE DEFAULT 'YYYY-00-DD'`
+
+How to use:
+
+1. Open the dataset file you want to run.
+2. Uncomment the optional block.
+3. Run the dataset load as usual.
+
+Notes:
+
+- The block is commented by default to keep baseline matrix runs stable.
+- MySQL strict `sql_mode` can reject these defaults; this is expected and useful for validating precheck behavior.

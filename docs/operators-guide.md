@@ -34,6 +34,12 @@ Compatibility profile selection:
   - `max-compat` also flags `MySQL 8.4.x <-> MariaDB 11.8.x` as an active-LTS candidate pair pending strict-lts validation.
   - Active-LTS candidate paths surface `report.requires_evidence=true`; treat it as a promotion gate that requires repeated staged-run evidence before requesting strict-lts matrix inclusion.
 
+Zero-date default precheck:
+- `plan` and `migrate` execute a temporal-default precheck before schema apply.
+- If destination `sql_mode` enforces strict zero-date rules (`STRICT_*` + `NO_ZERO_DATE`/`NO_ZERO_IN_DATE`), zero-date defaults in source schema fail fast.
+- Findings include per-column auto-fix SQL proposals:
+  - `ALTER TABLE <db>.<table> ALTER COLUMN <column> SET DEFAULT '<safe-value>';`
+
 ## Baseline migration execution
 
 - Schema-only:
@@ -107,6 +113,7 @@ Replication checkpoint behavior:
 
 - Fail fast on known incompatible features.
 - Downgrade incompatibilities must fail with detailed remediation proposals.
+- Zero-date temporal defaults incompatible with destination strict `sql_mode` fail precheck with explicit auto-fix proposals.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
 
