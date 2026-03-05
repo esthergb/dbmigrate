@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/exit-code-semantics-phase31` with local phase changes in progress.
+  - Branch: `codex/feat/exit-code-semantics-phase31` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -24,6 +24,7 @@ Last updated: 2026-03-05
   - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
   - PR #31 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
   - PR #32 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
+  - PR #33 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/33 (command-specific exit code semantics).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -33,6 +34,7 @@ Last updated: 2026-03-05
   - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` runs `22728867046`, `22728920003`, success).
   - Manual CI validated on PR #31 head via `make ci-manual` (`workflow_dispatch` run `22729122875`, success).
   - Manual CI validated on PR #32 head via `make ci-manual` (`workflow_dispatch` run `22729367637`, success).
+  - Manual CI validated on PR #33 head via `make ci-manual` (`workflow_dispatch` run `22729731271`, success).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -155,10 +157,10 @@ Last updated: 2026-03-05
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Commit/push Phase 31 changes and open PR.
+  - Wait for PR #33 review/merge.
 - Next:
-  - Validate CI for Phase 31 PR (`validate`; fallback `make ci-manual` if needed).
-  - Merge PR and continue with next phase branch.
+  - Merge PR #33.
+  - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
