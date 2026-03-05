@@ -29,6 +29,7 @@ Last updated: 2026-03-05
   - After cleanup, PR #29 remains mergeable and blocked only by review policy (no status checks required).
   - Additional mitigation (2026-03-05): workflow `ci` was reset (disable/enable). Manual `workflow_dispatch` now works and creates successful check suites.
   - Remaining issue: automatic `push`/`pull_request` triggers still do not create runs; only manual dispatch is reliable for now.
+  - Manual CI workaround executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
