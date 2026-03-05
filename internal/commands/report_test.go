@@ -122,6 +122,54 @@ func TestRunReportJSONConflictOverrideDoesNotFail(t *testing.T) {
 	}
 }
 
+func TestRunReportJSONIgnoresStaleConflictWhenCheckpointAdvanced(t *testing.T) {
+	tmp := t.TempDir()
+	replicationPath := filepath.Join(tmp, "replication-checkpoint.json")
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+
+	replicationCheckpoint := state.NewReplicationCheckpoint()
+	replicationCheckpoint.BinlogFile = "mysql-bin.000200"
+	replicationCheckpoint.BinlogPos = 900
+	replicationCheckpoint.ApplyDDL = "warn"
+	replicationCheckpoint.UpdatedAt = time.Date(2026, 3, 5, 13, 0, 0, 0, time.UTC)
+	if err := state.SaveReplicationCheckpoint(replicationPath, replicationCheckpoint); err != nil {
+		t.Fatalf("save replication checkpoint: %v", err)
+	}
+
+	conflictReport := state.NewReplicationConflictReport()
+	conflictReport.GeneratedAt = time.Date(2026, 3, 5, 12, 30, 0, 0, time.UTC)
+	conflictReport.FailureType = "schema_drift"
+	conflictReport.Message = "apply event failed"
+	conflictReport.Remediation = "run migrate --schema-only to align schema, then rerun replicate"
+	conflictReport.AppliedEndFile = "mysql-bin.000200"
+	conflictReport.AppliedEndPos = 800
+	if err := state.SaveReplicationConflictReport(conflictPath, conflictReport); err != nil {
+		t.Fatalf("save conflict report: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out); err != nil {
+		t.Fatalf("expected stale conflict report to be ignored, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "ok" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if !payload.Summary.ReplicationConflictStale {
+		t.Fatal("expected replication conflict report to be marked stale")
+	}
+	if len(payload.Proposals) != 0 {
+		t.Fatalf("expected no proposals for stale conflict report, got %#v", payload.Proposals)
+	}
+}
+
 func TestRunReportTextNoArtifacts(t *testing.T) {
 	tmp := t.TempDir()
 
