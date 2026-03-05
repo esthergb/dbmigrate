@@ -13,11 +13,12 @@ import (
 )
 
 type replicateOptions struct {
-	ApplyDDL       string
-	ConflictPolicy string
-	Resume         bool
-	StartFile      string
-	StartPos       uint
+	ReplicationMode string
+	ApplyDDL        string
+	ConflictPolicy  string
+	Resume          bool
+	StartFile       string
+	StartPos        uint
 }
 
 func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -35,13 +36,20 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				opts.ReplicationMode,
 				opts.Resume,
 				opts.ApplyDDL,
 				opts.ConflictPolicy,
 				opts.StartFile,
 				opts.StartPos,
 			),
+		)
+	}
+	if opts.ReplicationMode != "binlog" {
+		return fmt.Errorf(
+			"replication-mode %q is not implemented yet; currently supported mode is binlog (planned: capture-triggers, hybrid)",
+			opts.ReplicationMode,
 		)
 	}
 
@@ -79,7 +87,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -90,6 +98,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			summary.EndFile,
 			summary.EndPos,
 			summary.AppliedEvents,
+			opts.ReplicationMode,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
 			summary.CheckpointFile,
@@ -99,14 +108,16 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 
 func parseReplicateOptions(args []string) (replicateOptions, error) {
 	opts := replicateOptions{
-		ApplyDDL:       "warn",
-		ConflictPolicy: "fail",
-		Resume:         true,
-		StartPos:       4,
+		ReplicationMode: "binlog",
+		ApplyDDL:        "warn",
+		ConflictPolicy:  "fail",
+		Resume:          true,
+		StartPos:        4,
 	}
 
 	fs := flag.NewFlagSet("replicate", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	fs.StringVar(&opts.ReplicationMode, "replication-mode", "binlog", "replication mode (binlog|capture-triggers|hybrid)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
 	fs.BoolVar(&opts.Resume, "resume", true, "resume from replication checkpoint in --state-dir")
@@ -115,6 +126,12 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return replicateOptions{}, err
+	}
+	switch opts.ReplicationMode {
+	case "binlog", "capture-triggers", "hybrid":
+		// valid
+	default:
+		return replicateOptions{}, fmt.Errorf("invalid --replication-mode value %q (expected binlog, capture-triggers, or hybrid)", opts.ReplicationMode)
 	}
 	switch opts.ApplyDDL {
 	case "ignore", "apply", "warn":
