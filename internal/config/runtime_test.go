@@ -6,7 +6,7 @@ import (
 )
 
 func TestRuntimeConfigValidation(t *testing.T) {
-	cfg := RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts"}
+	cfg := RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan"}
 	if err := cfg.ValidateBasic(); err != nil {
 		t.Fatalf("expected valid config, got error: %v", err)
 	}
@@ -16,9 +16,14 @@ func TestRuntimeConfigValidation(t *testing.T) {
 		t.Fatal("expected concurrency validation error")
 	}
 
-	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "invalid"}
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "invalid", DryRunMode: "plan"}
 	if err := cfg.ValidateBasic(); err == nil {
 		t.Fatal("expected downgrade-profile validation error")
+	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "unknown"}
+	if err := cfg.ValidateBasic(); err == nil {
+		t.Fatal("expected dry-run-mode validation error")
 	}
 }
 
@@ -46,6 +51,9 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 	}
 	if cfg.DowngradeProfile != "strict-lts" {
 		t.Fatalf("expected default downgrade-profile strict-lts, got %q", cfg.DowngradeProfile)
+	}
+	if cfg.DryRunMode != "plan" {
+		t.Fatalf("expected default dry-run-mode plan, got %q", cfg.DryRunMode)
 	}
 	if len(cfg.ExcludeDatabases) == 0 {
 		t.Fatal("expected default excluded databases")

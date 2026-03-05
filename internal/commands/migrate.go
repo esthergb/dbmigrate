@@ -2,15 +2,23 @@ package commands
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/data"
 	"github.com/esthergb/dbmigrate/internal/db"
 	"github.com/esthergb/dbmigrate/internal/schema"
+	"github.com/esthergb/dbmigrate/internal/version"
 )
 
 type migrateOptions struct {
@@ -20,6 +28,18 @@ type migrateOptions struct {
 	Force             bool
 	ChunkSize         int
 	Resume            bool
+}
+
+type migrateDryRunSandboxResult struct {
+	Command       string    `json:"command"`
+	Status        string    `json:"status"`
+	DryRunMode    string    `json:"dry_run_mode"`
+	Validated     int       `json:"validated"`
+	Failed        int       `json:"failed"`
+	CleanupStatus string    `json:"cleanup_status"`
+	Message       string    `json:"message,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+	Version       string    `json:"version"`
 }
 
 func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -36,8 +56,13 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 
 	runSchema := opts.SchemaOnly || (!opts.SchemaOnly && !opts.DataOnly)
 	runData := opts.DataOnly || (!opts.SchemaOnly && !opts.DataOnly)
+	includeTables := hasObject(cfg.IncludeObjects, "tables")
+	includeViews := hasObject(cfg.IncludeObjects, "views")
 
 	if cfg.DryRun {
+		if cfg.DryRunMode == "sandbox" {
+			return runMigrateDryRunSandbox(ctx, cfg, runSchema, runData, includeTables, includeViews, opts, out)
+		}
 		message := fmt.Sprintf(
 			"dry-run: migrate plan ready (schema=%v data=%v chunk_size=%d resume=%v)",
 			runSchema,
@@ -69,8 +94,8 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		schemaOptions := schema.CopyOptions{
 			IncludeDatabases:  cfg.Databases,
 			ExcludeDatabases:  cfg.ExcludeDatabases,
-			IncludeTables:     hasObject(cfg.IncludeObjects, "tables"),
-			IncludeViews:      hasObject(cfg.IncludeObjects, "views"),
+			IncludeTables:     includeTables,
+			IncludeViews:      includeViews,
 			DestEmptyRequired: opts.DestEmptyRequired && !opts.Force,
 		}
 		if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews {
@@ -143,6 +168,213 @@ func parseMigrateOptions(args []string) (migrateOptions, error) {
 	return opts, nil
 }
 
+func runMigrateDryRunSandbox(
+	ctx context.Context,
+	cfg config.RuntimeConfig,
+	runSchema bool,
+	runData bool,
+	includeTables bool,
+	includeViews bool,
+	opts migrateOptions,
+	out io.Writer,
+) error {
+	if runSchema && !includeTables && !includeViews {
+		return errors.New("schema migration currently supports tables/views in --include-objects")
+	}
+	if runData && !includeTables {
+		return errors.New("data migration requires tables in --include-objects")
+	}
+
+	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
+	if err != nil {
+		return fmt.Errorf("connect source: %w", err)
+	}
+	defer func() {
+		_ = sourceDB.Close()
+	}()
+
+	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
+	if err != nil {
+		return fmt.Errorf("connect destination: %w", err)
+	}
+	defer func() {
+		_ = destDB.Close()
+	}()
+
+	runID := strconvBase36(time.Now().UTC().UnixNano())
+	mapDatabase := func(sourceDBName string) string {
+		return sandboxDatabaseName(runID, sourceDBName)
+	}
+
+	report := migrateDryRunSandboxResult{
+		Command:       "migrate",
+		Status:        "dry-run",
+		DryRunMode:    "sandbox",
+		CleanupStatus: "skipped",
+		Timestamp:     time.Now().UTC(),
+		Version:       version.Version,
+	}
+
+	sandboxCreated := make([]string, 0, 8)
+	var validationErr error
+
+	// Sandbox schema bootstrap is required for schema checks and for DML rollback validation.
+	if runSchema || runData {
+		schemaSummary, err := schema.ValidateSchemaInSandbox(ctx, sourceDB, destDB, schema.DryRunSandboxOptions{
+			IncludeDatabases: cfg.Databases,
+			ExcludeDatabases: cfg.ExcludeDatabases,
+			IncludeTables:    includeTables,
+			IncludeViews:     runSchema && includeViews,
+			MapDatabase:      mapDatabase,
+		})
+		report.Validated += schemaSummary.Validated
+		report.Failed += schemaSummary.Failed
+		sandboxCreated = append(sandboxCreated, schemaSummary.CreatedDatabases...)
+		if err != nil {
+			validationErr = fmt.Errorf("schema dry-run validation failed: %w", err)
+		}
+	}
+
+	if validationErr == nil && runData {
+		dataSummary, err := data.ValidateBaselineDataDryRun(ctx, sourceDB, destDB, data.DryRunValidationOptions{
+			IncludeDatabases: cfg.Databases,
+			ExcludeDatabases: cfg.ExcludeDatabases,
+			ChunkSize:        opts.ChunkSize,
+			MapDatabase:      mapDatabase,
+		})
+		report.Validated += dataSummary.Validated
+		report.Failed += dataSummary.Failed
+		if err != nil {
+			validationErr = fmt.Errorf("data dry-run validation failed: %w", err)
+		}
+	}
+
+	cleanupErr := cleanupSandboxDatabases(ctx, destDB, sandboxCreated)
+	if cleanupErr != nil {
+		report.CleanupStatus = "failed"
+	} else if len(sandboxCreated) > 0 {
+		report.CleanupStatus = "ok"
+	}
+
+	if validationErr != nil {
+		report.Message = validationErr.Error()
+	}
+	if cleanupErr != nil {
+		if report.Message != "" {
+			report.Message += "; "
+		}
+		report.Message += fmt.Sprintf("sandbox cleanup failed: %v", cleanupErr)
+	}
+
+	if err := writeMigrateDryRunSandboxReport(out, cfg, report); err != nil {
+		return err
+	}
+	if validationErr != nil {
+		return validationErr
+	}
+	if cleanupErr != nil {
+		return cleanupErr
+	}
+	return nil
+}
+
+func writeMigrateDryRunSandboxReport(out io.Writer, cfg config.RuntimeConfig, report migrateDryRunSandboxResult) error {
+	if cfg.JSON {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
+	}
+	if _, err := fmt.Fprintf(
+		out,
+		"[migrate] status=%s dry_run_mode=%s validated=%d failed=%d cleanup_status=%s\n",
+		report.Status,
+		report.DryRunMode,
+		report.Validated,
+		report.Failed,
+		report.CleanupStatus,
+	); err != nil {
+		return err
+	}
+	if strings.TrimSpace(report.Message) != "" {
+		if _, err := fmt.Fprintf(out, "[migrate] detail=%s\n", report.Message); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupSandboxDatabases(ctx context.Context, dest *sql.DB, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		normalized := strings.TrimSpace(name)
+		if normalized == "" {
+			continue
+		}
+		unique[normalized] = struct{}{}
+	}
+	toDrop := make([]string, 0, len(unique))
+	for name := range unique {
+		toDrop = append(toDrop, name)
+	}
+	sort.Strings(toDrop)
+	var firstErr error
+	for _, name := range toDrop {
+		query := fmt.Sprintf("DROP DATABASE IF EXISTS %s", quoteIdentifier(name))
+		if _, err := dest.ExecContext(ctx, query); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func sandboxDatabaseName(runID string, sourceDatabase string) string {
+	const maxLen = 64
+	const prefix = "dbmigrate_dr_"
+	normalized := normalizeIdentifier(sourceDatabase)
+	if normalized == "" {
+		normalized = "db"
+	}
+	name := fmt.Sprintf("%s%s_%s", prefix, runID, normalized)
+	if len(name) <= maxLen {
+		return name
+	}
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(sourceDatabase))
+	suffix := fmt.Sprintf("_%08x", hash.Sum32())
+	maxBase := maxLen - len(prefix) - len(runID) - 1 - len(suffix)
+	if maxBase < 1 {
+		maxBase = 1
+	}
+	if len(normalized) > maxBase {
+		normalized = normalized[:maxBase]
+	}
+	return fmt.Sprintf("%s%s_%s%s", prefix, runID, normalized, suffix)
+}
+
+func normalizeIdentifier(in string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(in))
+	if trimmed == "" {
+		return ""
+	}
+	builder := strings.Builder{}
+	builder.Grow(len(trimmed))
+	for _, r := range trimmed {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			builder.WriteRune(r)
+			continue
+		}
+		builder.WriteByte('_')
+	}
+	return strings.Trim(builder.String(), "_")
+}
+
+func strconvBase36(v int64) string {
+	return strings.ToLower(strconv.FormatInt(v, 36))
+}
+
 func hasObject(objects []string, target string) bool {
 	for _, object := range objects {
 		if object == target {
@@ -150,4 +382,8 @@ func hasObject(objects []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func quoteIdentifier(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }

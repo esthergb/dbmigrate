@@ -34,6 +34,20 @@ type CopySummary struct {
 	CheckpointFile string
 }
 
+// DryRunValidationOptions controls DML dry-run validation in sandbox schemas.
+type DryRunValidationOptions struct {
+	IncludeDatabases []string
+	ExcludeDatabases []string
+	ChunkSize        int
+	MapDatabase      func(sourceDatabase string) string
+}
+
+// DryRunValidationSummary reports validated and failed DML statements in dry-run mode.
+type DryRunValidationSummary struct {
+	Validated int
+	Failed    int
+}
+
 // CopyBaselineData copies table rows in batches with checkpoint/resume support.
 func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts CopyOptions) (CopySummary, error) {
 	if source == nil || dest == nil {
@@ -152,6 +166,53 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 				return summary, err
 			}
 			summary.Completed++
+		}
+	}
+
+	return summary, nil
+}
+
+// ValidateBaselineDataDryRun executes inserts inside transactions and always rolls them back.
+func ValidateBaselineDataDryRun(ctx context.Context, source *sql.DB, dest *sql.DB, opts DryRunValidationOptions) (DryRunValidationSummary, error) {
+	if source == nil || dest == nil {
+		return DryRunValidationSummary{}, errors.New("source and destination connections are required")
+	}
+	if opts.ChunkSize < 1 {
+		return DryRunValidationSummary{}, errors.New("chunk size must be >= 1")
+	}
+	if opts.MapDatabase == nil {
+		return DryRunValidationSummary{}, errors.New("MapDatabase is required")
+	}
+
+	databases, err := listDatabases(ctx, source)
+	if err != nil {
+		return DryRunValidationSummary{}, fmt.Errorf("list source databases: %w", err)
+	}
+	selected := schema.SelectDatabases(databases, opts.IncludeDatabases, opts.ExcludeDatabases)
+
+	summary := DryRunValidationSummary{}
+	for _, sourceDatabase := range selected {
+		destDatabase := strings.TrimSpace(opts.MapDatabase(sourceDatabase))
+		if destDatabase == "" {
+			return summary, fmt.Errorf("sandbox database mapping is empty for source %q", sourceDatabase)
+		}
+		tableNames, err := listBaseTables(ctx, source, sourceDatabase)
+		if err != nil {
+			return summary, fmt.Errorf("list source tables for %s: %w", sourceDatabase, err)
+		}
+		for _, tableName := range tableNames {
+			columns, err := listTableColumns(ctx, source, sourceDatabase, tableName)
+			if err != nil {
+				return summary, fmt.Errorf("list columns for %s.%s: %w", sourceDatabase, tableName, err)
+			}
+			if len(columns) == 0 {
+				continue
+			}
+			selectSQL := buildSelectSQL(sourceDatabase, tableName, columns)
+			insertSQL := buildInsertSQL(destDatabase, tableName, columns)
+			if err := validateTableBatchWithRollback(ctx, source, dest, selectSQL, insertSQL, opts.ChunkSize, &summary); err != nil {
+				return summary, err
+			}
 		}
 	}
 
@@ -319,6 +380,55 @@ func applyBatch(ctx context.Context, db *sql.DB, insertSQL string, batch [][]any
 		return err
 	}
 	return nil
+}
+
+func validateTableBatchWithRollback(
+	ctx context.Context,
+	source *sql.DB,
+	dest *sql.DB,
+	selectSQL string,
+	insertSQL string,
+	chunkSize int,
+	summary *DryRunValidationSummary,
+) error {
+	tx, err := dest.BeginTx(ctx, nil)
+	if err != nil {
+		summary.Failed++
+		return err
+	}
+	offset := int64(0)
+	for {
+		batch, err := fetchBatch(ctx, source, selectSQL, chunkSize, offset, countPlaceholders(insertSQL))
+		if err != nil {
+			_ = tx.Rollback()
+			summary.Failed++
+			return err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, row := range batch {
+			if _, err := tx.ExecContext(ctx, insertSQL, row...); err != nil {
+				_ = tx.Rollback()
+				summary.Failed++
+				return err
+			}
+			summary.Validated++
+		}
+		offset += int64(len(batch))
+		if len(batch) < chunkSize {
+			break
+		}
+	}
+	if err := tx.Rollback(); err != nil {
+		summary.Failed++
+		return err
+	}
+	return nil
+}
+
+func countPlaceholders(insertSQL string) int {
+	return strings.Count(insertSQL, "?")
 }
 
 func ensureDestinationTablesAreEmpty(ctx context.Context, db *sql.DB, databaseName string, tableNames []string) error {

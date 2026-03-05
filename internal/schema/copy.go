@@ -33,6 +33,22 @@ type CopySummary struct {
 	Statements int
 }
 
+// DryRunSandboxOptions controls sandbox schema validation behavior.
+type DryRunSandboxOptions struct {
+	IncludeDatabases []string
+	ExcludeDatabases []string
+	IncludeTables    bool
+	IncludeViews     bool
+	MapDatabase      func(sourceDatabase string) string
+}
+
+// DryRunSandboxSummary reports validated and failed sandbox DDL statements.
+type DryRunSandboxSummary struct {
+	Validated        int
+	Failed           int
+	CreatedDatabases []string
+}
+
 // CopySchema extracts schema DDL from source and applies it to destination.
 func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOptions) (CopySummary, error) {
 	if source == nil || dest == nil {
@@ -75,6 +91,83 @@ func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOpti
 		summary.Tables += tableCount
 		summary.Views += viewCount
 		summary.Statements += len(statements)
+	}
+
+	return summary, nil
+}
+
+// ValidateSchemaInSandbox executes source DDL against mapped sandbox databases to validate compatibility.
+func ValidateSchemaInSandbox(ctx context.Context, source *sql.DB, dest *sql.DB, opts DryRunSandboxOptions) (DryRunSandboxSummary, error) {
+	if source == nil || dest == nil {
+		return DryRunSandboxSummary{}, errors.New("source and destination connections are required")
+	}
+	if opts.MapDatabase == nil {
+		return DryRunSandboxSummary{}, errors.New("MapDatabase is required")
+	}
+	if !opts.IncludeTables && !opts.IncludeViews {
+		return DryRunSandboxSummary{}, errors.New("at least one schema object type must be enabled (tables or views)")
+	}
+
+	allDatabases, err := listDatabases(ctx, source)
+	if err != nil {
+		return DryRunSandboxSummary{}, fmt.Errorf("list source databases: %w", err)
+	}
+	selectedDatabases := SelectDatabases(allDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
+	summary := DryRunSandboxSummary{
+		CreatedDatabases: make([]string, 0, len(selectedDatabases)),
+	}
+
+	seenCreated := map[string]struct{}{}
+	for _, sourceDatabase := range selectedDatabases {
+		sandboxDatabase := strings.TrimSpace(opts.MapDatabase(sourceDatabase))
+		if sandboxDatabase == "" {
+			return summary, fmt.Errorf("sandbox database mapping is empty for source %q", sourceDatabase)
+		}
+
+		statements, _, _, err := extractCreateStatements(ctx, source, sourceDatabase, opts.IncludeTables, opts.IncludeViews)
+		if err != nil {
+			return summary, fmt.Errorf("extract schema for %s: %w", sourceDatabase, err)
+		}
+		if len(statements) == 0 {
+			continue
+		}
+
+		conn, err := dest.Conn(ctx)
+		if err != nil {
+			return summary, err
+		}
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", quoteIdentifier(sandboxDatabase))); err != nil {
+			_ = conn.Close()
+			summary.Failed++
+			return summary, err
+		}
+		summary.Validated++
+
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", quoteIdentifier(sandboxDatabase))); err != nil {
+			_ = conn.Close()
+			summary.Failed++
+			return summary, err
+		}
+		summary.Validated++
+
+		if _, ok := seenCreated[sandboxDatabase]; !ok {
+			seenCreated[sandboxDatabase] = struct{}{}
+			summary.CreatedDatabases = append(summary.CreatedDatabases, sandboxDatabase)
+		}
+
+		for _, statement := range statements {
+			rewritten := rewriteSchemaStatementForSandbox(statement, sourceDatabase, sandboxDatabase)
+			if _, err := conn.ExecContext(ctx, rewritten); err != nil {
+				_ = conn.Close()
+				summary.Failed++
+				return summary, err
+			}
+			summary.Validated++
+		}
+		if err := conn.Close(); err != nil {
+			summary.Failed++
+			return summary, err
+		}
 	}
 
 	return summary, nil
@@ -308,4 +401,13 @@ func isExcludedSchema(name string, excluded map[string]struct{}) bool {
 
 func quoteIdentifier(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+}
+
+func rewriteSchemaStatementForSandbox(statement string, sourceDatabase string, sandboxDatabase string) string {
+	if strings.TrimSpace(statement) == "" {
+		return statement
+	}
+	sourceQualified := quoteIdentifier(sourceDatabase) + "."
+	sandboxQualified := quoteIdentifier(sandboxDatabase) + "."
+	return strings.ReplaceAll(statement, sourceQualified, sandboxQualified)
 }

@@ -20,6 +20,7 @@ type FileConfig struct {
 	IncludeObjects   []string `json:"include_objects" yaml:"include-objects"`
 	Concurrency      *int     `json:"concurrency" yaml:"concurrency"`
 	DryRun           *bool    `json:"dry_run" yaml:"dry-run"`
+	DryRunMode       *string  `json:"dry_run_mode" yaml:"dry-run-mode"`
 	Verbose          *bool    `json:"verbose" yaml:"verbose"`
 	JSON             *bool    `json:"json" yaml:"json"`
 	TLSMode          *string  `json:"tls_mode" yaml:"tls-mode"`
@@ -87,6 +88,9 @@ func MergeFileConfig(target *RuntimeConfig, fileCfg FileConfig, explicit map[str
 	}
 	if _, ok := explicit["dry-run"]; !ok && fileCfg.DryRun != nil {
 		target.DryRun = *fileCfg.DryRun
+	}
+	if _, ok := explicit["dry-run-mode"]; !ok && fileCfg.DryRunMode != nil {
+		target.DryRunMode = *fileCfg.DryRunMode
 	}
 	if _, ok := explicit["verbose"]; !ok && fileCfg.Verbose != nil {
 		target.Verbose = *fileCfg.Verbose

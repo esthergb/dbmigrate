@@ -44,12 +44,30 @@ func TestLoadFileConfigDowngradeProfile(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfigDryRunMode(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.yaml")
+	content := []byte("dry-run-mode: sandbox\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("expected load success: %v", err)
+	}
+	if cfg.DryRunMode == nil || *cfg.DryRunMode != "sandbox" {
+		t.Fatalf("unexpected dry-run-mode: %#v", cfg.DryRunMode)
+	}
+}
+
 func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	source := "mysql://from-file"
 	concurrency := 9
 	profile := "max-compat"
-	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency, DowngradeProfile: &profile}
-	target := RuntimeConfig{Source: "mysql://from-flag", Concurrency: 2, DowngradeProfile: "strict-lts"}
+	dryRunMode := "sandbox"
+	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency, DowngradeProfile: &profile, DryRunMode: &dryRunMode}
+	target := RuntimeConfig{Source: "mysql://from-flag", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan"}
 	explicit := map[string]struct{}{"source": {}}
 
 	MergeFileConfig(&target, fileCfg, explicit)
@@ -62,6 +80,9 @@ func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	}
 	if target.DowngradeProfile != "max-compat" {
 		t.Fatalf("file config should apply downgrade profile, got %q", target.DowngradeProfile)
+	}
+	if target.DryRunMode != "sandbox" {
+		t.Fatalf("file config should apply dry-run-mode, got %q", target.DryRunMode)
 	}
 }
 

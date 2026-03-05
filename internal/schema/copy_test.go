@@ -32,3 +32,11 @@ func TestQuoteIdentifierEscapesBackticks(t *testing.T) {
 		t.Fatalf("unexpected quoted identifier: %s", out)
 	}
 }
+
+func TestRewriteSchemaStatementForSandbox(t *testing.T) {
+	in := "CREATE VIEW `srcdb`.`v1` AS SELECT * FROM `srcdb`.`t1`"
+	out := rewriteSchemaStatementForSandbox(in, "srcdb", "dryrun_srcdb")
+	if out != "CREATE VIEW `dryrun_srcdb`.`v1` AS SELECT * FROM `dryrun_srcdb`.`t1`" {
+		t.Fatalf("unexpected rewritten statement: %q", out)
+	}
+}

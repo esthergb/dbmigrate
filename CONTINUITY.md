@@ -6,28 +6,34 @@ Last updated: 2026-03-05
 - Constraints/Assumptions:
   - MIT license, docs in English, JSON-first.
   - `--apply-ddl` fixed to `ignore|apply|warn`.
-  - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
-  - Keep `datasets/` untracked.
+  - User confirmed `docker-compose.yml`, `configs/`, `datasets/`, and `scripts/` must be included in a dedicated PR after validation/fixes.
+  - User confirmed command standard is `docker compose` (not `docker-compose`).
 - Key decisions:
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
 - State:
-  - Current branch: `codex/feat/compat-evidence-flag-phase51`.
-  - `main` includes PR #50 merged.
-  - PR #51 is open: https://github.com/esthergb/dbmigrate/pull/51
+  - Current branch: `codex/feat/dry-run-sandbox-phase53`.
+  - `main` includes PR #51 merged.
+  - PR #52 is open: https://github.com/esthergb/dbmigrate/pull/52
+  - Local workspace contains untracked testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, plus `MIGRATION_TESTING.md`.
+  - One end-to-end script run (`mariadb10 -> mariadb11`) failed waiting for `mariadb11` health within current timeout.
 - Done:
-  - Phases 0-50 merged.
+  - Phases 0-51 merged.
   - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
   - Phase 48 synchronized README/continuity status with merged reality.
   - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
   - Phase 50 added scope-aware candidate findings for full-scope vs partial-scope pilot.
 - Now:
-  - Wait for PR #51 checks/review/merge.
+  - Wait for PR #52 checks/review/merge.
 - Next:
-  - Merge PR #51 after checks.
-  - Continue with next compatibility hardening milestone.
+  - Merge PR #52 after checks.
+  - Open PR for phase 52 testing assets and merge after checks.
+  - Phase 53: run matrix execution (minimum subset first, then full local exhaustive run) and publish detailed report.
+  - Add dry-run sandbox behavior to operator docs and run it in matrix validation workflow.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
+  - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
+  - UNCONFIRMED: scope of transactional `--dry-run` requirement across commands (`migrate` only vs wider command set).
 - Working set (files/ids/commands):
-  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `internal/commands/plan.go`, `internal/commands/plan_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: `go test ./internal/compat ./internal/commands -count=1`, `go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `gh pr checks 51`.
+  - Files: `internal/config/runtime.go`, `internal/config/file.go`, `internal/cli/cli.go`, `internal/commands/migrate.go`, `internal/schema/copy.go`, `internal/data/copy.go`, related tests, plus phase52 assets.
+  - Commands: `go test ./internal/config ./internal/cli ./internal/commands ./internal/schema ./internal/data -count=1`, `go test ./... -count=1`.
