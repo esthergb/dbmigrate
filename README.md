@@ -211,6 +211,14 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 - DDL application policy is controlled only by `--apply-ddl={ignore,apply,warn}`.
 - Detailed migration risks and mitigations are documented in [docs/known-problems.md](docs/known-problems.md).
 
+## Exit codes
+
+- `0`: success
+- `1`: usage/configuration error (invalid flags or global config)
+- `2`: command completed but detected incompatibilities/differences (`plan` incompatible, `verify` diffs, `report` attention_required with fail-fast enabled)
+- `3`: command runtime failure (`migrate`/`replicate`/other command execution error)
+- `4`: `verify` runtime/tooling failure (verification could not be completed)
+
 ## Documentation
 
 - [Development plan](docs/development-plan.md)

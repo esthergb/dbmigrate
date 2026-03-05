@@ -76,7 +76,10 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		return err
 	}
 	if !report.Compatible {
-		return errors.New("compatibility check failed; see detailed report with remediation proposals")
+		return WithExitCode(
+			ExitCodeDiff,
+			errors.New("compatibility check failed; see detailed report with remediation proposals"),
+		)
 	}
 	return nil
 }

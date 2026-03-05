@@ -16,16 +16,15 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/command-status-phase30` pushed to origin.
+  - Branch: `codex/feat/exit-code-semantics-phase31` with local phase changes in progress.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
   - PR #29 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
   - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
   - PR #31 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
-  - PR #32 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
+  - PR #32 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/32 (command output status normalization).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 30 implementation committed/pushed; local tests pass.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
   - Manual CI workaround was executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
@@ -141,20 +140,28 @@ Last updated: 2026-03-05
     - max-compat cross-engine paths now emit mapped/unmapped matrix guidance findings.
     - compat tests expanded for cross-engine strict match/mismatch, profile blocking, and max-compat warnings.
     - README/operators guide updated with strict-lts cross-engine matrix and profile-scope notes.
-  - Phase 30 opened (PR #32):
-    - command scaffold output status is being normalized away from legacy `phase1-scaffold`.
-    - dry-run command outputs are being standardized with explicit `dry-run` status.
+  - Phase 30 merged (PR #32):
+    - command scaffold output status normalized away from legacy `phase1-scaffold`.
+    - dry-run command outputs standardized with explicit `dry-run` status.
+  - Phase 31 in progress (local branch only):
+    - added typed command errors carrying explicit exit codes.
+    - `plan` incompatibility now exits with code `2`.
+    - `verify` diffs now exit with code `2`; verify runtime/tool failures exit with code `4`.
+    - `report` `attention_required` fail-fast path now exits with code `2`.
+    - CLI tests and command tests updated for new exit-code semantics.
+    - README documents current exit-code contract.
+    - local full test suite passes (`go test ./... -count=1`).
   - CI workaround docs updated:
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #32 review and merge.
+  - Commit/push Phase 31 changes and open PR.
 - Next:
-  - Merge PR #32.
+  - Validate CI for Phase 31 PR (`validate`; fallback `make ci-manual` if needed).
+  - Merge PR and continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
-  - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/output.go`, `internal/commands/output_test.go`, `internal/commands/migrate.go`, `internal/commands/replicate.go`, `internal/commands/plan.go`, `internal/commands/verify.go`.
+  - Files: `CONTINUITY.md`, `README.md`, `internal/cli/cli.go`, `internal/cli/cli_test.go`, `internal/commands/exit_error.go`, `internal/commands/exit_error_test.go`, `internal/commands/plan.go`, `internal/commands/report.go`, `internal/commands/verify.go`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.
