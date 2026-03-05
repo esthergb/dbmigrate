@@ -16,14 +16,15 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/cross-engine-matrix-phase29` from `main@115b3d9`.
+  - Branch: `codex/feat/cross-engine-matrix-phase29` pushed to origin.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
   - PR #29 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/29 (report fail-fast default + override flag).
   - PR #30 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/30 (explicit profile matrix ranges for same-major/adjacent-minor).
+  - PR #31 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/31 (explicit cross-engine profile policy matrix).
   - `Instructions.md` is present and tracked on `main`.
-  - Phase 29 implementation is complete locally; PR not opened yet.
+  - Phase 29 implementation committed/pushed; local tests pass.
   - Investigation result (2026-03-05): Actions are enabled, workflow `ci` is active and valid, but GitHub is not creating new `workflow_runs`/`check_suites` for new commits.
   - Cleanup applied: removed stale required status-check context `validate` from `main` branch protection (`required_status_checks.contexts=[]`).
   - After cleanup, PR #29 was merged with review policy (status checks temporarily not required).
@@ -33,6 +34,7 @@ Last updated: 2026-03-05
   - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
   - Manual CI validated again on PR #29 head via `make ci-manual` (`workflow_dispatch` run `22728538011`, success).
   - Manual CI validated on PR #30 head via `make ci-manual` (`workflow_dispatch` runs `22728867046`, `22728920003`, success).
+  - Manual CI validated on PR #31 head via `make ci-manual` (`workflow_dispatch` run `22729122875`, success).
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -144,9 +146,9 @@ Last updated: 2026-03-05
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Commit/push Phase 29 and open PR.
+  - Wait for PR #31 review and merge.
 - Next:
-  - Merge PR for Phase 29.
+  - Merge PR #31.
   - Use manual workflow dispatch as temporary CI workaround until automatic triggers recover.
   - Re-enable required status checks on `main` once GitHub check-suite creation is healthy again.
   - Continue with next phase branch.
