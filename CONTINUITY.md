@@ -14,6 +14,7 @@ Last updated: 2026-03-05
 - State:
   - Current branch: `codex/feat/compat-evidence-flag-phase51`.
   - `main` includes PR #50 merged.
+  - PR #51 is open: https://github.com/esthergb/dbmigrate/pull/51
 - Done:
   - Phases 0-50 merged.
   - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
@@ -21,12 +22,12 @@ Last updated: 2026-03-05
   - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
   - Phase 50 added scope-aware candidate findings for full-scope vs partial-scope pilot.
 - Now:
-  - Phase 51: expose candidate-pair evidence requirement as a machine-readable report/plan signal.
+  - Wait for PR #51 checks/review/merge.
 - Next:
-  - Open PR for phase 51 and merge after checks.
+  - Merge PR #51 after checks.
   - Continue with next compatibility hardening milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
 - Working set (files/ids/commands):
-  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `internal/commands/plan.go`, `internal/commands/plan_test.go`, `CONTINUITY.md`.
+  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `internal/commands/plan.go`, `internal/commands/plan_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
   - Commands: `go test ./internal/compat ./internal/commands -count=1`, `go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `gh pr checks 51`.
