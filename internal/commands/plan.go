@@ -116,7 +116,7 @@ func writePlanReport(out io.Writer, cfg config.RuntimeConfig, report compat.Repo
 
 	if _, err := fmt.Fprintf(
 		out,
-		"[plan] status=%s profile=%s source=%s/%s dest=%s/%s downgrade=%v findings=%d\n",
+		"[plan] status=%s profile=%s source=%s/%s dest=%s/%s downgrade=%v requires_evidence=%v findings=%d\n",
 		status,
 		report.DowngradeProfile,
 		report.Source.Engine,
@@ -124,6 +124,7 @@ func writePlanReport(out io.Writer, cfg config.RuntimeConfig, report compat.Repo
 		report.Dest.Engine,
 		report.Dest.Version,
 		report.Downgrade,
+		report.RequiresEvidence,
 		len(report.Findings),
 	); err != nil {
 		return err
