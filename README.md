@@ -167,6 +167,23 @@ make lint
 make vulncheck
 ```
 
+## Temporary CI workaround (review later)
+
+- Current repository issue: automatic GitHub Actions triggers (`push`/`pull_request`) may not fire reliably.
+- Temporary workaround: run CI manually for the current branch:
+
+```bash
+make ci-manual
+```
+
+- Optional explicit branch:
+
+```bash
+make ci-manual BRANCH=codex/feat/report-fail-default-phase27
+```
+
+- TODO: once automatic triggers are stable again, restore required status checks on `main` and remove this workaround section.
+
 ## Safety notes
 
 - Incompatible features are designed to fail fast.

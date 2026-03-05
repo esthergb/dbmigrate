@@ -30,6 +30,7 @@ Last updated: 2026-03-05
   - Additional mitigation (2026-03-05): workflow `ci` was reset (disable/enable). Manual `workflow_dispatch` now works and creates successful check suites.
   - Remaining issue: automatic `push`/`pull_request` triggers still do not create runs; only manual dispatch is reliable for now.
   - Manual CI workaround executed on PR #29 head (`workflow_dispatch` run `22728122930`), creating check suite for latest branch commit.
+  - Local helper added: `scripts/ci_manual.sh` + `make ci-manual` to dispatch/watch CI manually per branch.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -126,6 +127,9 @@ Last updated: 2026-03-05
     - command now always prints report payload first, then returns error when fail-fast is active.
     - tests expanded across `internal/commands/report_test.go` and `internal/cli/cli_test.go`.
     - docs updated in README/operators guide for fail-fast + override behavior.
+  - CI workaround docs updated:
+    - README now includes "Temporary CI workaround (review later)" section.
+    - operators guide now includes temporary CI operations note + review reminder.
 - Now:
   - Wait for PR #29 review and merge.
 - Next:
@@ -136,5 +140,5 @@ Last updated: 2026-03-05
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/report.go`, `internal/commands/report_test.go`, `internal/cli/cli_test.go`, `README.md`, `docs/operators-guide.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `Makefile`, `scripts/ci_manual.sh`, `README.md`, `docs/operators-guide.md`, `internal/commands/report.go`, `internal/commands/report_test.go`, `internal/cli/cli_test.go`.
+  - Commands: `make ci-manual`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh workflow run`.

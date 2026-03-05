@@ -1,4 +1,4 @@
-.PHONY: fmt lint test build vulncheck ci
+.PHONY: fmt lint test build vulncheck ci ci-manual
 
 fmt:
 	gofmt -w ./cmd ./internal
@@ -16,3 +16,6 @@ vulncheck:
 	govulncheck ./...
 
 ci: fmt lint test vulncheck
+
+ci-manual:
+	./scripts/ci_manual.sh "$(or $(BRANCH),$(shell git branch --show-current))"
