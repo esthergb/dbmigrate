@@ -16,7 +16,7 @@ Last updated: 2026-03-05
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/replicate-clear-stale-conflict-phase40`.
+  - Branch: `codex/feat/report-ignore-stale-conflict-phase41`.
   - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
   - PR #28 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/28 (structured `report` command from state artifacts).
@@ -33,7 +33,7 @@ Last updated: 2026-03-05
   - PR #39 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/39 (`--max-lag-seconds` fail-fast guard).
   - PR #40 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/40 (`--max-lag-seconds` runtime enforcement).
   - PR #41 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/41 (`replicate` incompatibility exit-code normalization).
-  - PR #42 opened on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
+  - PR #42 merged on 2026-03-05: https://github.com/esthergb/dbmigrate/pull/42 (`replicate` stale conflict-report cleanup on success).
   - `Instructions.md` is present and tracked on `main`.
   - CI trigger status improved: automatic `push`/`pull_request` runs are now being created again after workflow reset.
   - Branch protection restored: required status check `validate` is re-enabled on `main`.
@@ -52,10 +52,11 @@ Last updated: 2026-03-05
   - Automatic `validate` checks on PR #39 passed (`22732073481`, `22732075309`).
   - Local note: `configs/mysql84-to-mariadb114.yaml` must remain untracked.
   - Local note: `datasets/` must remain untracked.
-  - Phase 40 local implementation complete; pending push + PR:
-    - successful `replicate` runs now remove stale `replication-conflict-report.json` from previous failed runs.
-    - regression test added to guarantee stale conflict-report cleanup behavior.
-    - README replication notes updated with cleanup semantics.
+  - Phase 41 local implementation complete; pending push + PR:
+    - `report` now marks conflict artifacts as stale when checkpoint position is ahead of report `applied_end_*`.
+    - stale conflict artifacts no longer force `attention_required`/fail-fast by default.
+    - command + CLI tests added for stale conflict + advanced checkpoint scenarios.
+    - README report behavior updated with stale conflict auto-ignore note.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -230,7 +231,7 @@ Last updated: 2026-03-05
     - command + CLI tests now validate exit-code semantics for unsupported mode/start-from/trigger-CDC paths.
     - README exit-code contract updated to include `replicate` feature-gated incompatibility behavior.
     - local full test suite passes (`go test ./... -count=1`).
-  - Phase 40 opened (PR #42):
+  - Phase 40 merged (PR #42):
     - successful `replicate` runs now remove stale `replication-conflict-report.json` from previous failed runs.
     - regression test added to assert stale conflict-report cleanup on successful apply.
     - README replication notes updated with cleanup semantics.
@@ -239,13 +240,13 @@ Last updated: 2026-03-05
     - README now includes "Temporary CI workaround (review later)" section.
     - operators guide now includes temporary CI operations note + review reminder.
 - Now:
-  - Wait for PR #42 CI/review/merge.
+  - Push Phase 41 branch and open PR with CI.
 - Next:
-  - Merge PR #42 once CI is green.
+  - Merge PR for Phase 41 once CI is green.
   - Continue with next phase branch.
   - Keep `make ci-manual` as fallback if automatic triggers regress.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `README.md`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `configs/mysql84-to-mariadb114.yaml` (untracked/local), `datasets/` (untracked/local).
+  - Files: `CONTINUITY.md`, `README.md`, `internal/commands/report.go`, `internal/commands/report_test.go`, `internal/cli/cli_test.go`, `configs/mysql84-to-mariadb114.yaml` (untracked/local), `datasets/` (untracked/local).
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `make ci-manual`.

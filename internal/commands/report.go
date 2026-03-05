@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/esthergb/dbmigrate/internal/config"
@@ -32,6 +34,7 @@ type reportSummary struct {
 	ReplicationCheckpoint       *replicationCheckpointSummary    `json:"replication_checkpoint,omitempty"`
 	ReplicationConflictReport   *state.ReplicationConflictReport `json:"replication_conflict_report,omitempty"`
 	ReplicationConflictFilePath string                           `json:"replication_conflict_file,omitempty"`
+	ReplicationConflictStale    bool                             `json:"replication_conflict_stale,omitempty"`
 }
 
 type reportArtifacts struct {
@@ -72,7 +75,7 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	}
 
 	status := "ok"
-	if summary.ReplicationConflictReport != nil && summary.ReplicationConflictReport.FailureType != "" {
+	if summary.ReplicationConflictReport != nil && summary.ReplicationConflictReport.FailureType != "" && !summary.ReplicationConflictStale {
 		status = "attention_required"
 	}
 	if !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
@@ -178,15 +181,73 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 		summary.Artifacts.ReplicationConflictReport = true
 		summary.ReplicationConflictReport = &report
 		summary.ReplicationConflictFilePath = conflictReportPath
-		if report.Remediation != "" {
+		summary.ReplicationConflictStale = isStaleConflictReport(report, summary.ReplicationCheckpoint)
+		if !summary.ReplicationConflictStale && report.Remediation != "" {
 			proposals = append(proposals, report.Remediation)
 		}
 	}
 
-	if len(proposals) == 0 && summary.Artifacts.ReplicationConflictReport {
+	if len(proposals) == 0 && summary.Artifacts.ReplicationConflictReport && !summary.ReplicationConflictStale {
 		proposals = append(proposals, "review replication-conflict-report.json and resolve destination drift before rerun")
 	}
 	return summary, proposals, nil
+}
+
+func isStaleConflictReport(report state.ReplicationConflictReport, checkpoint *replicationCheckpointSummary) bool {
+	if checkpoint == nil {
+		return false
+	}
+	if strings.TrimSpace(report.FailureType) == "" {
+		return false
+	}
+	if strings.TrimSpace(report.AppliedEndFile) == "" || report.AppliedEndPos == 0 {
+		return false
+	}
+	if strings.TrimSpace(checkpoint.BinlogFile) == "" || checkpoint.BinlogPos == 0 {
+		return false
+	}
+	return positionAfter(checkpoint.BinlogFile, checkpoint.BinlogPos, report.AppliedEndFile, report.AppliedEndPos)
+}
+
+func positionAfter(file string, pos uint32, targetFile string, targetPos uint32) bool {
+	cmp := compareBinlogFile(file, targetFile)
+	if cmp > 0 {
+		return true
+	}
+	if cmp < 0 {
+		return false
+	}
+	return pos > targetPos
+}
+
+func compareBinlogFile(left string, right string) int {
+	if left == right {
+		return 0
+	}
+
+	leftPrefix, leftNum, leftOK := splitBinlogFile(left)
+	rightPrefix, rightNum, rightOK := splitBinlogFile(right)
+	if leftOK && rightOK && leftPrefix == rightPrefix {
+		if leftNum < rightNum {
+			return -1
+		}
+		return 1
+	}
+	return strings.Compare(left, right)
+}
+
+func splitBinlogFile(name string) (string, uint64, bool) {
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 || dot >= len(name)-1 {
+		return "", 0, false
+	}
+	prefix := name[:dot]
+	suffix := name[dot+1:]
+	number, err := strconv.ParseUint(suffix, 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return prefix, number, true
 }
 
 func summarizeDataCheckpoint(cp state.DataCheckpoint) (int, int, int64, time.Time) {
@@ -264,9 +325,10 @@ func writeReportText(out io.Writer, payload reportResult) error {
 		report := payload.Summary.ReplicationConflictReport
 		if _, err := fmt.Fprintf(
 			out,
-			"[report] replication_conflict file=%s failure_type=%s table=%s operation=%s message=%s\n",
+			"[report] replication_conflict file=%s failure_type=%s stale=%v table=%s operation=%s message=%s\n",
 			payload.Summary.ReplicationConflictFilePath,
 			report.FailureType,
+			payload.Summary.ReplicationConflictStale,
 			report.TableName,
 			report.Operation,
 			report.Message,
