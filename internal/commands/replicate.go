@@ -15,6 +15,7 @@ import (
 type replicateOptions struct {
 	ReplicationMode  string
 	StartFrom        string
+	MaxEvents        uint64
 	ApplyDDL         string
 	ConflictPolicy   string
 	EnableTriggerCDC bool
@@ -39,9 +40,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s start_from=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
 				opts.StartFrom,
+				opts.MaxEvents,
 				opts.EnableTriggerCDC,
 				opts.TeardownCDC,
 				opts.Resume,
@@ -84,6 +86,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
 		ApplyDDL:       opts.ApplyDDL,
 		ConflictPolicy: opts.ConflictPolicy,
+		MaxEvents:      opts.MaxEvents,
 		Resume:         opts.Resume,
 		StartFile:      opts.StartFile,
 		StartPos:       uint32(opts.StartPos),
@@ -99,7 +102,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s max_events=%d apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -112,6 +115,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			summary.AppliedEvents,
 			opts.ReplicationMode,
 			opts.StartFrom,
+			opts.MaxEvents,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
 			summary.CheckpointFile,
@@ -123,6 +127,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	opts := replicateOptions{
 		ReplicationMode: "binlog",
 		StartFrom:       "auto",
+		MaxEvents:       0,
 		ApplyDDL:        "warn",
 		ConflictPolicy:  "fail",
 		Resume:          true,
@@ -133,6 +138,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.ReplicationMode, "replication-mode", "binlog", "replication mode (binlog|capture-triggers|hybrid)")
 	fs.StringVar(&opts.StartFrom, "start-from", "auto", "replication start reference (auto|binlog-file:pos|gtid)")
+	fs.Uint64Var(&opts.MaxEvents, "max-events", 0, "max apply events per run (0 means no explicit limit)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
 	fs.BoolVar(&opts.EnableTriggerCDC, "enable-trigger-cdc", false, "enable trigger-based CDC setup (planned for capture-triggers/hybrid modes)")

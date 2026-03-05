@@ -560,6 +560,87 @@ func TestApplyWindowTransactionalAdvancesOnCommit(t *testing.T) {
 	}
 }
 
+func TestApplyWindowTransactionalRespectsMaxEventsLimit(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000011",
+				EndPos:  110,
+				Events:  []applyEvent{{Query: "INSERT INTO t VALUES (?)", Args: []any{1}}},
+			},
+			{
+				EndFile: "mysql-bin.000011",
+				EndPos:  160,
+				Events: []applyEvent{
+					{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}},
+					{Query: "DELETE FROM t WHERE id=?", Args: []any{3}},
+				},
+			},
+		}, nil
+	}
+
+	tx := &fakeTx{}
+	beginCalls := 0
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		beginCalls++
+		return tx, nil
+	}
+
+	result, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000011",
+		StartPos:  100,
+		EndFile:   "mysql-bin.000011",
+		EndPos:    160,
+	}, Options{ApplyDDL: "warn", MaxEvents: 2})
+	if err != nil {
+		t.Fatalf("applyWindowTransactional: %v", err)
+	}
+	if result.File != "mysql-bin.000011" || result.Pos != 110 || result.AppliedEvents != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if beginCalls != 1 {
+		t.Fatalf("expected single transaction to execute, got begin calls=%d", beginCalls)
+	}
+}
+
+func TestApplyWindowTransactionalFailsWhenMaxEventsBelowFirstTransaction(t *testing.T) {
+	restore := stubRunHooks(t)
+	defer restore()
+
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return []applyBatch{
+			{
+				EndFile: "mysql-bin.000011",
+				EndPos:  160,
+				Events: []applyEvent{
+					{Query: "UPDATE t SET c=? WHERE id=?", Args: []any{2, 1}},
+					{Query: "DELETE FROM t WHERE id=?", Args: []any{3}},
+				},
+			},
+		}, nil
+	}
+	beginDestinationTxFn = func(_ context.Context, _ *sql.DB) (txRunner, error) {
+		t.Fatal("begin transaction should not be called when max-events is below first transaction size")
+		return nil, nil
+	}
+
+	_, err := applyWindowTransactional(context.Background(), nil, nil, applyWindow{
+		StartFile: "mysql-bin.000011",
+		StartPos:  100,
+		EndFile:   "mysql-bin.000011",
+		EndPos:    160,
+	}, Options{ApplyDDL: "warn", MaxEvents: 1})
+	if err == nil {
+		t.Fatal("expected max-events limit error")
+	}
+	if !strings.Contains(err.Error(), "exceeds --max-events=1") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestApplyWindowTransactionalExecErrorRollsBack(t *testing.T) {
 	restore := stubRunHooks(t)
 	defer restore()

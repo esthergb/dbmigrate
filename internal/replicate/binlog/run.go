@@ -17,6 +17,7 @@ import (
 type Options struct {
 	ApplyDDL       string
 	ConflictPolicy string
+	MaxEvents      uint64
 	Resume         bool
 	StartFile      string
 	StartPos       uint32
@@ -447,6 +448,28 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 	for _, batch := range batches {
 		if len(batch.Events) == 0 {
 			continue
+		}
+		if opts.MaxEvents > 0 {
+			batchEvents := uint64(len(batch.Events))
+			if batchEvents > opts.MaxEvents && appliedEvents == 0 {
+				return applyResult{}, &applyFailure{
+					FailureType: "max_events_limit_too_low",
+					File:        batch.EndFile,
+					Pos:         batch.EndPos,
+					Operation:   "apply_batch",
+					Message: fmt.Sprintf(
+						"first transaction has %d events which exceeds --max-events=%d",
+						batchEvents,
+						opts.MaxEvents,
+					),
+					Remediation: fmt.Sprintf("increase --max-events to at least %d or rerun without --max-events limit", batchEvents),
+					AppliedFile: lastFile,
+					AppliedPos:  lastPos,
+				}
+			}
+			if appliedEvents+batchEvents > opts.MaxEvents {
+				break
+			}
 		}
 		if batch.EndFile == "" {
 			return applyResult{}, &applyFailure{
