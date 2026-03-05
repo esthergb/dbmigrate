@@ -45,7 +45,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 			opts.ChunkSize,
 			opts.Resume,
 		)
-		return writeResult(out, cfg, "migrate", message)
+		return writeResult(out, cfg, "migrate", "dry-run", message)
 	}
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
@@ -116,7 +116,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		dataSummary.Restarted,
 		dataSummary.CheckpointFile,
 	)
-	return writeResult(out, cfg, "migrate", message)
+	return writeResult(out, cfg, "migrate", "ok", message)
 }
 
 func parseMigrateOptions(args []string) (migrateOptions, error) {

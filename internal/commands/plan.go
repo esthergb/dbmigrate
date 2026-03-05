@@ -38,7 +38,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 	}
 
 	if cfg.DryRun {
-		return writeResult(out, cfg, "plan", "dry-run: compatibility precheck requires connectivity and is skipped")
+		return writeResult(out, cfg, "plan", "dry-run", "dry-run: compatibility precheck requires connectivity and is skipped")
 	}
 
 	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)

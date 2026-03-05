@@ -55,6 +55,7 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			out,
 			cfg,
 			"verify",
+			"dry-run",
 			fmt.Sprintf("dry-run: verify plan ready (verify_level=%s data_mode=%s sample_size=%d)", opts.VerifyLevel, opts.DataMode, opts.SampleSize),
 		)
 	}
