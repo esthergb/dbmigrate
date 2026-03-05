@@ -62,6 +62,16 @@ Supported profiles:
 - `MariaDB 10.11.x -> MariaDB 10.11.x`
 - `MariaDB 11.4.x -> MariaDB 11.4.x`
 
+`same-major` explicit same-engine matrix ranges:
+- `MySQL 8.0-8.4 -> MySQL 8.0-8.4` (same major required)
+- `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11` (same major required)
+- `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4` (same major required)
+
+`adjacent-minor` explicit same-engine matrix ranges:
+- `MySQL 8.0-8.4 -> MySQL 8.0-8.4` (same major + one minor step max)
+- `MariaDB 10.6-10.11 -> MariaDB 10.6-10.11` (same major + one minor step max)
+- `MariaDB 11.0-11.4 -> MariaDB 11.0-11.4` (same major + one minor step max)
+
 ## Baseline migration modes
 
 ```bash

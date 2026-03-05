@@ -25,11 +25,31 @@ type strictLTSMatrixEntry struct {
 	Label  string
 }
 
+type profileMatrixRange struct {
+	Engine   Engine
+	Major    int
+	MinMinor int
+	MaxMinor int
+	Label    string
+}
+
 var strictLTSMatrix = []strictLTSMatrixEntry{
 	{Engine: EngineMySQL, Major: 8, Minor: 0, Label: "MySQL 8.0.x"},
 	{Engine: EngineMySQL, Major: 8, Minor: 4, Label: "MySQL 8.4.x"},
 	{Engine: EngineMariaDB, Major: 10, Minor: 11, Label: "MariaDB 10.11.x"},
 	{Engine: EngineMariaDB, Major: 11, Minor: 4, Label: "MariaDB 11.4.x"},
+}
+
+var sameMajorMatrix = []profileMatrixRange{
+	{Engine: EngineMySQL, Major: 8, MinMinor: 0, MaxMinor: 4, Label: "MySQL 8.0-8.4"},
+	{Engine: EngineMariaDB, Major: 10, MinMinor: 6, MaxMinor: 11, Label: "MariaDB 10.6-10.11"},
+	{Engine: EngineMariaDB, Major: 11, MinMinor: 0, MaxMinor: 4, Label: "MariaDB 11.0-11.4"},
+}
+
+var adjacentMinorMatrix = []profileMatrixRange{
+	{Engine: EngineMySQL, Major: 8, MinMinor: 0, MaxMinor: 4, Label: "MySQL 8.0-8.4"},
+	{Engine: EngineMariaDB, Major: 10, MinMinor: 6, MaxMinor: 11, Label: "MariaDB 10.6-10.11"},
+	{Engine: EngineMariaDB, Major: 11, MinMinor: 0, MaxMinor: 4, Label: "MariaDB 11.0-11.4"},
 }
 
 // DowngradeProfile controls strictness for downgrade compatibility checks.
@@ -179,35 +199,9 @@ func Evaluate(source Instance, dest Instance, selectedDatabases []string, downgr
 	case ProfileStrictLTS:
 		applyStrictLTSSameEngineChecks(&report)
 	case ProfileSameMajor:
-		if source.Major != dest.Major {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "downgrade_major_mismatch",
-				Severity: "error",
-				Message:  fmt.Sprintf("same-major profile blocks downgrade across major versions: %d -> %d.", source.Major, dest.Major),
-				Proposal: "Target an intermediate version inside the same major or switch profile if explicitly accepted.",
-			})
-		}
+		applySameMajorChecks(&report)
 	case ProfileAdjacentMinor:
-		if source.Major != dest.Major {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "downgrade_major_mismatch",
-				Severity: "error",
-				Message:  fmt.Sprintf("adjacent-minor profile blocks downgrade across major versions: %d -> %d.", source.Major, dest.Major),
-				Proposal: "Use a same-major destination or select max-compat with explicit risk acceptance.",
-			})
-			return report
-		}
-		if source.Minor-dest.Minor > 1 {
-			report.Compatible = false
-			report.Findings = append(report.Findings, Finding{
-				Code:     "downgrade_minor_gap",
-				Severity: "error",
-				Message:  fmt.Sprintf("adjacent-minor profile allows at most one minor step downgrade, got %d.%d -> %d.%d.", source.Major, source.Minor, dest.Major, dest.Minor),
-				Proposal: "Use staged downgrades one minor step at a time or select max-compat after risk review.",
-			})
-		}
+		applyAdjacentMinorChecks(&report)
 	case ProfileMaxCompat:
 		report.Findings = append(report.Findings, Finding{
 			Code:     "max_compat_profile",
@@ -349,6 +343,134 @@ func strictLTSLine(instance Instance) (string, bool) {
 func strictLTSMatrixSummary() string {
 	labels := make([]string, 0, len(strictLTSMatrix))
 	for _, entry := range strictLTSMatrix {
+		labels = append(labels, fmt.Sprintf("%s->%s", entry.Label, entry.Label))
+	}
+	return strings.Join(labels, ", ")
+}
+
+func applySameMajorChecks(report *Report) {
+	source := report.Source
+	dest := report.Dest
+	sourceRange, sourceKnown := profileMatrixRangeForInstance(source, sameMajorMatrix)
+	destRange, destKnown := profileMatrixRangeForInstance(dest, sameMajorMatrix)
+	matrixSummary := profileMatrixSummary(sameMajorMatrix)
+
+	if !sourceKnown || !destKnown {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "same_major_matrix_out_of_range",
+			Severity: "error",
+			Message:  fmt.Sprintf("same-major profile requires source/destination versions inside the explicit matrix, got %s %s -> %s %s.", source.Engine, source.Version, dest.Engine, dest.Version),
+			Proposal: fmt.Sprintf("Allowed same-major ranges: %s. Use max-compat for broader compatibility after risk review.", matrixSummary),
+		})
+		return
+	}
+
+	if source.Major != dest.Major {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "downgrade_major_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("same-major profile blocks downgrade across major versions: %d -> %d.", source.Major, dest.Major),
+			Proposal: fmt.Sprintf("Target an intermediate version inside the same major (%s) or switch profile if explicitly accepted.", matrixSummary),
+		})
+		return
+	}
+
+	if sourceRange != destRange {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "same_major_matrix_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("same-major profile blocks downgrade across explicit matrix ranges: %s -> %s.", sourceRange, destRange),
+			Proposal: fmt.Sprintf("Use staged downgrades inside one matrix range (%s) or switch profile after risk review.", matrixSummary),
+		})
+		return
+	}
+
+	report.Findings = append(report.Findings, Finding{
+		Code:     "same_major_matrix_match",
+		Severity: "info",
+		Message:  fmt.Sprintf("same-major matrix range matched: %s.", sourceRange),
+		Proposal: "Proceed with standard migration/verification gates under same-major policy.",
+	})
+}
+
+func applyAdjacentMinorChecks(report *Report) {
+	source := report.Source
+	dest := report.Dest
+	sourceRange, sourceKnown := profileMatrixRangeForInstance(source, adjacentMinorMatrix)
+	destRange, destKnown := profileMatrixRangeForInstance(dest, adjacentMinorMatrix)
+	matrixSummary := profileMatrixSummary(adjacentMinorMatrix)
+
+	if !sourceKnown || !destKnown {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "adjacent_minor_matrix_out_of_range",
+			Severity: "error",
+			Message:  fmt.Sprintf("adjacent-minor profile requires source/destination versions inside the explicit matrix, got %s %s -> %s %s.", source.Engine, source.Version, dest.Engine, dest.Version),
+			Proposal: fmt.Sprintf("Allowed adjacent-minor ranges: %s. Use same-major or max-compat outside these ranges after risk review.", matrixSummary),
+		})
+		return
+	}
+
+	if source.Major != dest.Major {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "downgrade_major_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("adjacent-minor profile blocks downgrade across major versions: %d -> %d.", source.Major, dest.Major),
+			Proposal: fmt.Sprintf("Use a same-major destination inside matrix ranges (%s) or select max-compat with explicit risk acceptance.", matrixSummary),
+		})
+		return
+	}
+
+	if sourceRange != destRange {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "adjacent_minor_matrix_mismatch",
+			Severity: "error",
+			Message:  fmt.Sprintf("adjacent-minor profile blocks downgrade across explicit matrix ranges: %s -> %s.", sourceRange, destRange),
+			Proposal: fmt.Sprintf("Keep source/destination inside one adjacent-minor matrix range (%s) or switch profile after risk review.", matrixSummary),
+		})
+		return
+	}
+
+	if source.Minor-dest.Minor > 1 {
+		report.Compatible = false
+		report.Findings = append(report.Findings, Finding{
+			Code:     "downgrade_minor_gap",
+			Severity: "error",
+			Message:  fmt.Sprintf("adjacent-minor profile allows at most one minor step downgrade, got %d.%d -> %d.%d.", source.Major, source.Minor, dest.Major, dest.Minor),
+			Proposal: "Use staged downgrades one minor step at a time or select max-compat after risk review.",
+		})
+		return
+	}
+
+	report.Findings = append(report.Findings, Finding{
+		Code:     "adjacent_minor_matrix_match",
+		Severity: "info",
+		Message:  fmt.Sprintf("adjacent-minor matrix range matched: %s.", sourceRange),
+		Proposal: "Proceed with one-minor-step downgrade gates and full verification.",
+	})
+}
+
+func profileMatrixRangeForInstance(instance Instance, matrix []profileMatrixRange) (string, bool) {
+	for _, entry := range matrix {
+		if instance.Engine != entry.Engine || instance.Major != entry.Major {
+			continue
+		}
+		if instance.Minor < entry.MinMinor || instance.Minor > entry.MaxMinor {
+			continue
+		}
+		return entry.Label, true
+	}
+	return "", false
+}
+
+func profileMatrixSummary(matrix []profileMatrixRange) string {
+	labels := make([]string, 0, len(matrix))
+	for _, entry := range matrix {
 		labels = append(labels, fmt.Sprintf("%s->%s", entry.Label, entry.Label))
 	}
 	return strings.Join(labels, ", ")
