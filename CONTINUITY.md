@@ -25,6 +25,8 @@ Last updated: 2026-03-05
   - CI checks for PR #28 are not being created (`gh pr checks 28` and `gh run list --branch` both return none).
   - Probe branch test (`codex/ci-probe-phase26`) also produced no workflow runs, then branch was deleted.
   - GitHub Actions permissions/workflow state report as enabled/active, so trigger issue is external to code changes.
+  - Added `workflow_dispatch` trigger to `.github/workflows/ci.yml`, but manual dispatch via CLI returned GitHub HTTP 500.
+  - Close/reopen cycle on PR #28 did not create checks either.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -116,12 +118,13 @@ Last updated: 2026-03-05
     - report status semantics added: `ok`, `attention_required`, `empty`.
     - report unit tests added and local full suite passed.
 - Now:
-  - Unblock CI trigger behavior at repository level, then rerun PR #28 checks.
+  - Decide unblock path for PR #28 while GitHub is not creating check suites.
 - Next:
-  - Merge PR #28 after CI starts and passes.
+  - Either bypass merge requirements for PR #28 or temporarily relax required status checks on `main`.
+  - Restore normal CI-gated flow once check-suite creation is working again.
   - Continue with next phase branch.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/report.go`, `internal/commands/report_test.go`, `README.md`, `docs/operators-guide.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `.github/workflows/ci.yml`, `internal/commands/report.go`, `internal/commands/report_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `gh workflow run`, `gh pr checks`.
