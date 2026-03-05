@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -90,6 +91,7 @@ var (
 	applyWindowFn          = applyWindowTransactional
 	timeNowFn              = time.Now
 	saveConflictReportFn   = state.SaveReplicationConflictReport
+	removeConflictReportFn = removeConflictReport
 )
 
 // Run updates replication checkpoint based on current source binlog position.
@@ -178,6 +180,9 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	if err := state.SaveReplicationCheckpoint(checkpointFile, checkpoint); err != nil {
 		return Summary{}, err
 	}
+	if err := removeConflictReportFn(applyFailureReportPath); err != nil {
+		return Summary{}, err
+	}
 
 	return Summary{
 		CheckpointFile: checkpointFile,
@@ -194,6 +199,16 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		EndPos:         applied.Pos,
 		AppliedEvents:  applied.AppliedEvents,
 	}, nil
+}
+
+func removeConflictReport(path string) error {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("clear stale replication conflict report: %w", err)
+	}
+	return nil
 }
 
 type preflightResult struct {
