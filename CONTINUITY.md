@@ -2,7 +2,7 @@ Last updated: 2026-03-05
 
 - Goal (incl. success criteria):
   - Deliver dbmigrate in phased PRs with green CI and explicit compatibility policy.
-  - Keep fail-fast defaults and actionable remediation in outputs.
+  - Keep docs synchronized with merged phases and current operational process.
 - Constraints/Assumptions:
   - MIT license, docs in English, JSON-first.
   - `--apply-ddl` fixed to `ignore|apply|warn`.
@@ -12,23 +12,19 @@ Last updated: 2026-03-05
   - Work via `codex/*` branches and PRs to `main`.
   - Option B matrix is adopted (active-LTS-first).
 - State:
-  - Current branch: `codex/feat/compat-unconfirmed-pair-signal-phase46`.
-  - `main` includes PR #44, PR #45, and PR #46 merged.
-  - PR #47 is open: https://github.com/esthergb/dbmigrate/pull/47
+  - Current branch: `codex/feat/readme-status-phase48`.
+  - `main` includes PR #47 merged.
+  - PR #48 is open: https://github.com/esthergb/dbmigrate/pull/48
 - Done:
-  - Phases 0-46 merged.
-  - Phase 47 implementation opened in PR #47:
-    - Candidate unconfirmed pair warning now explicitly covered in both directions.
-    - tests ensure candidate path does not degrade to generic unmapped warning.
-    - proposal text tightened with concrete validation guidance.
-    - local full suite passes (`go test ./... -count=1`).
+  - Phases 0-47 merged.
+  - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
 - Now:
-  - Wait for PR #47 checks/review/merge.
+  - Wait for PR #48 checks/review/merge.
 - Next:
-  - Merge PR #47.
-  - Continue from updated main.
+  - Merge PR #48 after checks.
+  - Continue with next compatibility hardening milestone.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: promote `MySQL 8.4.x <-> MariaDB 11.8.x` into strict-lts after repeated validated runs.
 - Working set (files/ids/commands):
-  - Files: `internal/compat/evaluate.go`, `internal/compat/evaluate_test.go`, `CONTINUITY.md`.
-  - Commands: `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git commit`, `git push`, `gh pr checks`.
+  - Files: `README.md`, `CONTINUITY.md`.
+  - Commands: `go test ./... -count=1`, `git commit`, `git push`, `gh pr create`, `gh pr checks 48`.
