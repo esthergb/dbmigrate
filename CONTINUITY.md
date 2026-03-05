@@ -9,19 +9,18 @@ Last updated: 2026-03-05
   - Output priority: JSON first, HTML later.
   - `--apply-ddl` surface is fixed to `ignore|apply|warn`.
   - Default behavior is fail-fast on incompatibilities; auto-fix is future work.
-  - `Instructions.md` is requested as tracked documentation (implemented in PR #26, pending merge).
+  - `Instructions.md` is tracked project documentation (merged in PR #26).
 - Key decisions:
   - Deliver in small PRs from `codex/*` branches.
   - Keep CI minimal and local testing comprehensive.
   - Prefer compatibility auto-detection and explicit exit codes on incompatibility.
   - Allow partial-database scope via `--databases`.
 - State:
-  - Branch: `codex/feat/row-diff-sample-phase25` from `main@308d4fd` (PR #25 already merged).
-  - PR #26 is open: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + `Instructions.md` tracked).
-  - PR #26 required CI checks (`validate` push/pull_request) are passing.
+  - Branch: `codex/feat/row-diff-sample-phase25` (PR #27 branch), synced with latest `main`.
+  - PR #26 merged on 2026-03-04: https://github.com/esthergb/dbmigrate/pull/26 (`README` process refresh + tracked `Instructions.md`).
   - PR #27 is open: https://github.com/esthergb/dbmigrate/pull/27 (`row_diff_sample` conflict-report hints).
-  - Phase 25 implementation is committed/pushed; local full test suite passed.
-  - PR #27 required CI checks (`validate` push/pull_request) are pending.
+  - Current work item is merge-conflict resolution against `main` (`CONTINUITY.md`).
+  - Phase 25 implementation is committed/pushed; local full test suite passed before conflict sync.
 - Done:
   - Phases 0-4 merged (research, foundation/CI, config+connection, schema baseline, data baseline+checkpoint).
   - Phases 5-9 merged (`verify` schema and all data modes: count/hash/sample/full-hash).
@@ -108,12 +107,12 @@ Last updated: 2026-03-05
     - replication apply failures now emit key sample + old/new row samples + diff hints.
     - tests updated for row-diff generation and conflict report persistence.
 - Now:
-  - Wait for PR #26 and PR #27 CI/review and merge.
+  - Finalize and push merge-conflict resolution for PR #27.
 - Next:
-  - Merge PR #26 and PR #27.
-  - Continue with next implementation branch after report ergonomics update.
+  - Wait for PR #27 CI/review and merge.
+  - Continue with next implementation branch after row-diff report ergonomics update.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: exact downgrade compatibility matrix per MySQL/MariaDB version ranges for stricter policy tables.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`, `README.md`, `docs/operators-guide.md`.
+  - Files: `CONTINUITY.md`, `Instructions.md`, `README.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/run_test.go`, `internal/state/replication_conflict.go`, `internal/state/replication_conflict_test.go`.
   - Commands: `/tmp/go-toolchain/go/bin/gofmt -w`, `/tmp/go-toolchain/go/bin/go test ./... -count=1`, `git push`, `gh pr create`.
