@@ -115,6 +115,11 @@ Replication start selection:
 - `--start-from=binlog-file:pos` requires `--resume=false` plus explicit `--start-file` and `--start-pos`.
 - `--start-from=gtid` is reserved and currently fails fast with explicit guidance.
 
+Replication window control:
+- `--max-events=0` (default) applies all available events in the selected window.
+- `--max-events=N` limits apply work by transaction boundaries (never checkpoints partial transactions).
+- If the first transaction already exceeds `N`, replicate fails fast with guidance to increase the limit.
+
 Replication preflight requirements:
 - source `log_bin` must be enabled
 - source `binlog_format` must be `ROW`
