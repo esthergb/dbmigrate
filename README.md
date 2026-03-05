@@ -120,6 +120,10 @@ Replication window control:
 - `--max-events=N` limits apply work by transaction boundaries (never checkpoints partial transactions).
 - If the first transaction already exceeds `N`, replicate fails fast with guidance to increase the limit.
 
+Idempotent replay guard:
+- `--idempotent` enables replay-safety guardrails and requires `--conflict-policy=source-wins` or `--conflict-policy=dest-wins`.
+- Using `--idempotent` with `--conflict-policy=fail` is rejected during validation.
+
 Replication preflight requirements:
 - source `log_bin` must be enabled
 - source `binlog_format` must be `ROW`
