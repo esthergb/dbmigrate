@@ -11,8 +11,8 @@ Last updated: 2026-03-06
   - Start Phase 59 with the smallest coherent slice: runnable local evidence plus operator guidance, not speculative precheck automation.
   - Reuse the existing script/report/doc workflow where possible.
 - State:
-  - Branch: `codex/feat/timezone-phase59`.
-  - Working tree contains Phase 59 changes ready to publish.
+  - Branch: `codex/feat/timezone-phase59`, pushed to `origin` on 2026-03-06.
+  - Phase 59 branch is published and under review.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -34,13 +34,14 @@ Last updated: 2026-03-06
   - Added `scripts/run-timezone-rehearsal.sh` to demonstrate session time-zone drift across `NOW()`, `TIMESTAMP`, and `DATETIME`.
   - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 59 time-zone rehearsal guidance.
   - Verified `scripts/run-timezone-rehearsal.sh` locally on `mysql84` and `mariadb11`; both reported `timestamp_display_changes=true`, `datetime_static_under_session_change=true`, and `explicit_now_drift_visible=true` with `system_time_zone=UTC`, `global_time_zone=SYSTEM`, and `session_time_zone_default=SYSTEM`.
+  - Committed the Phase 59 batch as `b00248a` (`feat: add timezone rehearsal guidance`) and opened PR `#61`.
 - Now:
-  - Publish Phase 59 on its dedicated branch and open the PR.
+  - Wait for CI and review on PR `#61`.
 - Next:
-  - After publishing, keep Phase 59 focused on time-zone rehearsal evidence unless review reveals a concrete gap.
+  - Keep Phase 59 focused on time-zone rehearsal evidence unless review reveals a concrete gap.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether the first Phase 59 slice should remain a docs-plus-script rehearsal, or whether it should also introduce a plan-time checklist artifact immediately.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `scripts/README.md`, `scripts/run-timezone-rehearsal.sh`, `docker-compose.yml`.
-  - IDs: merged PR `#59`, merged PR `#60`, commits `d3a751e`, `f5df019`, and `4da29cc`.
-  - Commands: `git checkout -b codex/feat/timezone-phase59`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84`, `./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11`.
+  - IDs: merged PR `#59`, merged PR `#60`, branch `codex/feat/timezone-phase59`, commit `b00248a`, PR `#61`.
+  - Commands: `git checkout -b codex/feat/timezone-phase59`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84`, `./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11`, `gh pr create`.
