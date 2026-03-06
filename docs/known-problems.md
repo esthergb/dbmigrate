@@ -144,6 +144,31 @@ Observed failure patterns:
   - `mariadb12 -> mysql84` with `utf8mb4_uca1400_ai_ci` failed both `plan` and logical restore with `ERROR 1273`.
   - `mariadb12 -> mariadb12` stayed schema-compatible but still emitted client-risk warnings for `utf8mb4_uca1400_ai_ci`.
 
+### 3.1 Naive verify hashes produce false positives when representation differs
+
+Evidence:
+
+- MySQL and MariaDB can render the same logical row differently depending on connection charset, session `time_zone`, collation ordering, JSON formatting, and approximate numeric presentation.
+- Phase 64 local rehearsal now demonstrates this directly with MySQL 8.4 -> MariaDB 12:
+  - naive evidence hashes differed
+  - canonicalized `hash`, `sample`, and `full-hash` all passed
+
+Observed failure patterns:
+
+- SQL-order-dependent checksum strategies drift when engines sort text differently.
+- Session-level charset or timezone drift causes identical rows to hash differently.
+- JSON objects with different key order look different in dumps or CLI output but are semantically equal.
+
+`dbmigrate` safeguards:
+
+- Current Phase 64 behavior:
+  - verify hashing runs on pinned, normalized sessions (`SET NAMES utf8mb4`, `time_zone='+00:00'`)
+  - row hashes are sorted client-side before aggregate hashing
+  - JSON payloads are canonicalized before hashing
+  - verify artifacts record canonicalization assumptions and representation-sensitive table risk
+  - `report` treats real verify diffs as `attention_required`, but keeps warning-only representation risk in `ok`
+- Rehearsal support is provided by `scripts/run-verify-canonicalization-rehearsal.sh`.
+
 ---
 
 ## 4) Authentication plugin and account migration gotchas (MySQL 8+)

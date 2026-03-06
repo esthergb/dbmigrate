@@ -87,6 +87,10 @@ Reference:
 - [ ] Pick verification level (`schema`, `data`, `full`) and data mode (`count`, `hash`, `sample`, `full-hash`).
 - [ ] Define tolerated differences (`definer`, `auto_increment`, table options, collation diffs).
 - [ ] Define pass/fail criteria and exit-code handling for automation.
+- [ ] Review `verify-data-report.json` or `dbmigrate report` output, not just raw command exit codes.
+- [ ] Distinguish real verify diffs from representation-sensitive tables before declaring drift.
+- [ ] For cross-engine verify, prefer `full-hash` after `sample` triage when temporal, JSON, collation, or approximate numeric columns exist.
+- [ ] Keep canonicalization evidence when verify passes on representation-sensitive tables; treat it as equivalence proof, not byte-for-byte identity proof.
 
 ## H) Operational safety
 

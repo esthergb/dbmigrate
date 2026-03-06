@@ -98,6 +98,44 @@ Verification behavior:
 - Any diff returns non-zero exit code.
 - `--json` emits structured diff details for automation pipelines.
 - `sample` mode uses `--sample-size` rows per table; `full-hash` hashes full table content.
+- Hash-based verification now canonicalizes rows before hashing:
+  - row hashes are sorted client-side, so SQL collation order no longer drives aggregate hash order
+  - verify sessions are pinned and normalized to `SET NAMES utf8mb4` plus `time_zone='+00:00'`
+  - JSON payloads are canonicalized before hashing
+- Verify JSON/text output now distinguishes representation-sensitive tables from real diffs:
+  - `noise_risk_mismatches`
+  - `representation_risk_tables`
+  - per-table `table_risk` notes
+- `dbmigrate report` loads `verify-data-report.json` when present:
+  - real verify diffs escalate report status to `attention_required`
+  - warning-only representation-risk tables keep report status `ok`
+  - proposals explain when to trust `count`, `hash`, `sample`, and `full-hash`
+
+## Verification canonicalization rehearsal
+
+Do not trust naive checksums across engines when collation order, session time zone, JSON formatting, or approximate numerics differ.
+
+Recommended rehearsal:
+- Start the required services with `docker compose up -d mysql84 mariadb12`.
+- Run:
+  - `./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64`
+
+What this proves:
+- naive cross-engine evidence can drift even when rows are semantically equivalent
+- canonicalized `hash`, `sample`, and `full-hash` can still pass when row order, JSON key order, and temporal rendering differ
+- `report` stays `ok` when there are representation-sensitive tables but no verify diffs
+
+What to inspect:
+- `summary.json`: compact scenario result with naive-hash drift versus canonical verify exit codes
+- `verify-hash.json`, `verify-sample.json`, `verify-full-hash.json`: verify artifacts and canonicalization metadata
+- `report.json`: final report status plus operator proposals
+- `source-*.tsv` and `dest-*.tsv`: raw rehearsal evidence showing why naive hashing is noisy
+
+Operational rule:
+- Treat `count` as the lowest-confidence guardrail.
+- Treat `sample` as a fast triage tool, not final proof.
+- Treat `full-hash` plus clean canonicalization metadata as the strongest current data-verify signal.
+- If verify passes but representation-sensitive tables exist, keep the artifact as evidence instead of claiming byte-for-byte identity.
 
 ## Incremental replication checkpoint execution
 

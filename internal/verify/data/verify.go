@@ -24,6 +24,12 @@ const (
 	diffKindTableHashMismatch    = "table_hash_mismatch"
 )
 
+type sqlQueryer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 // Options controls data verification behavior.
 type Options struct {
 	IncludeDatabases []string
@@ -33,24 +39,56 @@ type Options struct {
 
 // Diff describes one data-level mismatch.
 type Diff struct {
-	Kind        string `json:"kind"`
-	Database    string `json:"database"`
-	Table       string `json:"table"`
-	SourceCount int64  `json:"source_count,omitempty"`
-	DestCount   int64  `json:"dest_count,omitempty"`
-	SourceHash  string `json:"source_hash,omitempty"`
-	DestHash    string `json:"dest_hash,omitempty"`
+	Kind        string   `json:"kind"`
+	Database    string   `json:"database"`
+	Table       string   `json:"table"`
+	SourceCount int64    `json:"source_count,omitempty"`
+	DestCount   int64    `json:"dest_count,omitempty"`
+	SourceHash  string   `json:"source_hash,omitempty"`
+	DestHash    string   `json:"dest_hash,omitempty"`
+	NoiseRisk   string   `json:"noise_risk,omitempty"`
+	Notes       []string `json:"notes,omitempty"`
+}
+
+type CanonicalizationSummary struct {
+	RowOrderIndependent bool   `json:"row_order_independent"`
+	SessionTimeZone     string `json:"session_time_zone"`
+	TextByteNormalized  bool   `json:"text_byte_normalized"`
+	JSONNormalized      bool   `json:"json_normalized"`
+	SampleFullScan      bool   `json:"sample_full_scan"`
+	AggregateStrategy   string `json:"aggregate_strategy"`
+}
+
+type TableRisk struct {
+	Database                  string   `json:"database"`
+	Table                     string   `json:"table"`
+	ApproximateNumericColumns int      `json:"approximate_numeric_columns,omitempty"`
+	TemporalColumns           int      `json:"temporal_columns,omitempty"`
+	JSONColumns               int      `json:"json_columns,omitempty"`
+	CollationSensitiveColumns int      `json:"collation_sensitive_columns,omitempty"`
+	Notes                     []string `json:"notes,omitempty"`
 }
 
 // Summary captures data verification results.
 type Summary struct {
-	Databases            int    `json:"databases"`
-	TablesCompared       int    `json:"tables_compared"`
-	MissingInDestination int    `json:"missing_in_destination"`
-	MissingInSource      int    `json:"missing_in_source"`
-	CountMismatches      int    `json:"count_mismatches"`
-	HashMismatches       int    `json:"hash_mismatches"`
-	Diffs                []Diff `json:"diffs"`
+	Databases                int                     `json:"databases"`
+	TablesCompared           int                     `json:"tables_compared"`
+	MissingInDestination     int                     `json:"missing_in_destination"`
+	MissingInSource          int                     `json:"missing_in_source"`
+	CountMismatches          int                     `json:"count_mismatches"`
+	HashMismatches           int                     `json:"hash_mismatches"`
+	NoiseRiskMismatches      int                     `json:"noise_risk_mismatches,omitempty"`
+	RepresentationRiskTables int                     `json:"representation_risk_tables,omitempty"`
+	Canonicalization         CanonicalizationSummary `json:"canonicalization,omitempty"`
+	TableRisks               []TableRisk             `json:"table_risks,omitempty"`
+	Diffs                    []Diff                  `json:"diffs"`
+}
+
+type columnInfo struct {
+	Name             string
+	DataType         string
+	CollationName    string
+	CharacterSetName string
 }
 
 // VerifyCount compares table row counts between source and destination.
@@ -100,11 +138,26 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 		return Summary{}, errors.New("source and destination connections are required")
 	}
 
-	sourceDatabases, err := listDatabases(ctx, source)
+	sourceConn, err := source.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin source verify connection: %w", err)
+	}
+	defer func() {
+		_ = sourceConn.Close()
+	}()
+	destConn, err := dest.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin destination verify connection: %w", err)
+	}
+	defer func() {
+		_ = destConn.Close()
+	}()
+
+	sourceDatabases, err := listDatabases(ctx, sourceConn)
 	if err != nil {
 		return Summary{}, fmt.Errorf("list source databases: %w", err)
 	}
-	destDatabases, err := listDatabases(ctx, dest)
+	destDatabases, err := listDatabases(ctx, destConn)
 	if err != nil {
 		return Summary{}, fmt.Errorf("list destination databases: %w", err)
 	}
@@ -112,23 +165,46 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 	unionDatabases := unionAndSort(sourceDatabases, destDatabases)
 	selectedDatabases := baseSchema.SelectDatabases(unionDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
 
-	summary := Summary{Databases: len(selectedDatabases)}
+	summary := Summary{
+		Databases: len(selectedDatabases),
+		Canonicalization: CanonicalizationSummary{
+			RowOrderIndependent: true,
+			SessionTimeZone:     "+00:00",
+			TextByteNormalized:  true,
+			JSONNormalized:      true,
+			SampleFullScan:      false,
+			AggregateStrategy:   "sorted_row_hashes_utf8mb4_session",
+		},
+	}
+	if err := prepareVerifySession(ctx, sourceConn); err != nil {
+		return summary, fmt.Errorf("prepare source verify session: %w", err)
+	}
+	if err := prepareVerifySession(ctx, destConn); err != nil {
+		return summary, fmt.Errorf("prepare destination verify session: %w", err)
+	}
+	riskProfiles, err := tableRiskProfiles(ctx, sourceConn, selectedDatabases)
+	if err != nil {
+		return summary, fmt.Errorf("read source table risk profiles: %w", err)
+	}
+	summary.TableRisks = flattenTableRisks(riskProfiles)
+	summary.RepresentationRiskTables = len(summary.TableRisks)
 	for _, databaseName := range selectedDatabases {
-		sourceHashes, err := tableHashesForDatabase(ctx, source, databaseName)
+		sourceHashes, err := tableHashesForDatabase(ctx, sourceConn, databaseName)
 		if err != nil {
 			return summary, fmt.Errorf("read source table hashes for %s: %w", databaseName, err)
 		}
-		destHashes, err := tableHashesForDatabase(ctx, dest, databaseName)
+		destHashes, err := tableHashesForDatabase(ctx, destConn, databaseName)
 		if err != nil {
 			return summary, fmt.Errorf("read destination table hashes for %s: %w", databaseName, err)
 		}
 
-		diffs, compared, missingDest, missingSource, mismatches := diffTableHashes(databaseName, sourceHashes, destHashes)
+		diffs, compared, missingDest, missingSource, mismatches, noiseRisk := diffTableHashes(databaseName, sourceHashes, destHashes, riskProfiles[databaseName])
 		summary.Diffs = append(summary.Diffs, diffs...)
 		summary.TablesCompared += compared
 		summary.MissingInDestination += missingDest
 		summary.MissingInSource += missingSource
 		summary.HashMismatches += mismatches
+		summary.NoiseRiskMismatches += noiseRisk
 	}
 
 	sortDiffs(summary.Diffs)
@@ -149,11 +225,26 @@ func VerifySample(ctx context.Context, source *sql.DB, dest *sql.DB, opts Option
 		opts.SampleSize = 1000
 	}
 
-	sourceDatabases, err := listDatabases(ctx, source)
+	sourceConn, err := source.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin source verify connection: %w", err)
+	}
+	defer func() {
+		_ = sourceConn.Close()
+	}()
+	destConn, err := dest.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin destination verify connection: %w", err)
+	}
+	defer func() {
+		_ = destConn.Close()
+	}()
+
+	sourceDatabases, err := listDatabases(ctx, sourceConn)
 	if err != nil {
 		return Summary{}, fmt.Errorf("list source databases: %w", err)
 	}
-	destDatabases, err := listDatabases(ctx, dest)
+	destDatabases, err := listDatabases(ctx, destConn)
 	if err != nil {
 		return Summary{}, fmt.Errorf("list destination databases: %w", err)
 	}
@@ -161,31 +252,54 @@ func VerifySample(ctx context.Context, source *sql.DB, dest *sql.DB, opts Option
 	unionDatabases := unionAndSort(sourceDatabases, destDatabases)
 	selectedDatabases := baseSchema.SelectDatabases(unionDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
 
-	summary := Summary{Databases: len(selectedDatabases)}
+	summary := Summary{
+		Databases: len(selectedDatabases),
+		Canonicalization: CanonicalizationSummary{
+			RowOrderIndependent: true,
+			SessionTimeZone:     "+00:00",
+			TextByteNormalized:  true,
+			JSONNormalized:      true,
+			SampleFullScan:      true,
+			AggregateStrategy:   "sorted_row_hashes_then_limit_utf8mb4_session",
+		},
+	}
+	if err := prepareVerifySession(ctx, sourceConn); err != nil {
+		return summary, fmt.Errorf("prepare source verify session: %w", err)
+	}
+	if err := prepareVerifySession(ctx, destConn); err != nil {
+		return summary, fmt.Errorf("prepare destination verify session: %w", err)
+	}
+	riskProfiles, err := tableRiskProfiles(ctx, sourceConn, selectedDatabases)
+	if err != nil {
+		return summary, fmt.Errorf("read source table risk profiles: %w", err)
+	}
+	summary.TableRisks = flattenTableRisks(riskProfiles)
+	summary.RepresentationRiskTables = len(summary.TableRisks)
 	for _, databaseName := range selectedDatabases {
-		sourceHashes, err := tableSampleHashesForDatabase(ctx, source, databaseName, opts.SampleSize)
+		sourceHashes, err := tableSampleHashesForDatabase(ctx, sourceConn, databaseName, opts.SampleSize)
 		if err != nil {
 			return summary, fmt.Errorf("read source table sample hashes for %s: %w", databaseName, err)
 		}
-		destHashes, err := tableSampleHashesForDatabase(ctx, dest, databaseName, opts.SampleSize)
+		destHashes, err := tableSampleHashesForDatabase(ctx, destConn, databaseName, opts.SampleSize)
 		if err != nil {
 			return summary, fmt.Errorf("read destination table sample hashes for %s: %w", databaseName, err)
 		}
 
-		diffs, compared, missingDest, missingSource, mismatches := diffTableHashes(databaseName, sourceHashes, destHashes)
+		diffs, compared, missingDest, missingSource, mismatches, noiseRisk := diffTableHashes(databaseName, sourceHashes, destHashes, riskProfiles[databaseName])
 		summary.Diffs = append(summary.Diffs, diffs...)
 		summary.TablesCompared += compared
 		summary.MissingInDestination += missingDest
 		summary.MissingInSource += missingSource
 		summary.HashMismatches += mismatches
+		summary.NoiseRiskMismatches += noiseRisk
 	}
 
 	sortDiffs(summary.Diffs)
 	return summary, nil
 }
 
-func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
-	rows, err := db.QueryContext(ctx, "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME")
+func listDatabases(ctx context.Context, queryer sqlQueryer) ([]string, error) {
+	rows, err := queryer.QueryContext(ctx, "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME")
 	if err != nil {
 		return nil, err
 	}
@@ -207,14 +321,14 @@ func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return out, nil
 }
 
-func tableCountsForDatabase(ctx context.Context, db *sql.DB, databaseName string) (map[string]int64, error) {
-	tableNames, err := listBaseTables(ctx, db, databaseName)
+func tableCountsForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string) (map[string]int64, error) {
+	tableNames, err := listBaseTables(ctx, queryer, databaseName)
 	if err != nil {
 		return nil, err
 	}
 	counts := map[string]int64{}
 	for _, tableName := range tableNames {
-		count, err := countRows(ctx, db, databaseName, tableName)
+		count, err := countRows(ctx, queryer, databaseName, tableName)
 		if err != nil {
 			return nil, err
 		}
@@ -223,14 +337,14 @@ func tableCountsForDatabase(ctx context.Context, db *sql.DB, databaseName string
 	return counts, nil
 }
 
-func tableHashesForDatabase(ctx context.Context, db *sql.DB, databaseName string) (map[string]string, error) {
-	tableNames, err := listBaseTables(ctx, db, databaseName)
+func tableHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string) (map[string]string, error) {
+	tableNames, err := listBaseTables(ctx, queryer, databaseName)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]string{}
 	for _, tableName := range tableNames {
-		tableHash, err := hashTable(ctx, db, databaseName, tableName)
+		tableHash, err := hashTable(ctx, queryer, databaseName, tableName)
 		if err != nil {
 			return nil, err
 		}
@@ -239,14 +353,14 @@ func tableHashesForDatabase(ctx context.Context, db *sql.DB, databaseName string
 	return out, nil
 }
 
-func tableSampleHashesForDatabase(ctx context.Context, db *sql.DB, databaseName string, sampleSize int) (map[string]string, error) {
-	tableNames, err := listBaseTables(ctx, db, databaseName)
+func tableSampleHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string, sampleSize int) (map[string]string, error) {
+	tableNames, err := listBaseTables(ctx, queryer, databaseName)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]string{}
 	for _, tableName := range tableNames {
-		tableHash, err := hashTableSample(ctx, db, databaseName, tableName, sampleSize)
+		tableHash, err := hashTableSample(ctx, queryer, databaseName, tableName, sampleSize)
 		if err != nil {
 			return nil, err
 		}
@@ -255,8 +369,8 @@ func tableSampleHashesForDatabase(ctx context.Context, db *sql.DB, databaseName 
 	return out, nil
 }
 
-func listBaseTables(ctx context.Context, db *sql.DB, databaseName string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `
+func listBaseTables(ctx context.Context, queryer sqlQueryer, databaseName string) ([]string, error) {
+	rows, err := queryer.QueryContext(ctx, `
 		SELECT TABLE_NAME
 		FROM information_schema.TABLES
 		WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
@@ -283,9 +397,21 @@ func listBaseTables(ctx context.Context, db *sql.DB, databaseName string) ([]str
 	return out, nil
 }
 
-func listTableColumns(ctx context.Context, db *sql.DB, databaseName string, tableName string) ([]string, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT COLUMN_NAME
+func listTableColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]string, error) {
+	infos, err := listTableColumnInfo(ctx, queryer, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	columns := make([]string, 0, len(infos))
+	for _, info := range infos {
+		columns = append(columns, info.Name)
+	}
+	return columns, nil
+}
+
+func listTableColumnInfo(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]columnInfo, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT COLUMN_NAME, DATA_TYPE, COALESCE(COLLATION_NAME, ''), COALESCE(CHARACTER_SET_NAME, '')
 		FROM information_schema.COLUMNS
 		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
 		ORDER BY ORDINAL_POSITION
@@ -297,13 +423,16 @@ func listTableColumns(ctx context.Context, db *sql.DB, databaseName string, tabl
 		_ = rows.Close()
 	}()
 
-	columns := []string{}
+	columns := []columnInfo{}
 	for rows.Next() {
-		var columnName string
-		if err := rows.Scan(&columnName); err != nil {
+		var info columnInfo
+		if err := rows.Scan(&info.Name, &info.DataType, &info.CollationName, &info.CharacterSetName); err != nil {
 			return nil, err
 		}
-		columns = append(columns, columnName)
+		info.DataType = strings.ToLower(strings.TrimSpace(info.DataType))
+		info.CollationName = strings.TrimSpace(info.CollationName)
+		info.CharacterSetName = strings.TrimSpace(info.CharacterSetName)
+		columns = append(columns, info)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -311,28 +440,28 @@ func listTableColumns(ctx context.Context, db *sql.DB, databaseName string, tabl
 	return columns, nil
 }
 
-func countRows(ctx context.Context, db *sql.DB, databaseName string, tableName string) (int64, error) {
+func countRows(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) (int64, error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
 	var out int64
-	if err := db.QueryRowContext(ctx, query).Scan(&out); err != nil {
+	if err := queryer.QueryRowContext(ctx, query).Scan(&out); err != nil {
 		return 0, err
 	}
 	return out, nil
 }
 
-func hashTable(ctx context.Context, db *sql.DB, databaseName string, tableName string) (string, error) {
-	return hashTableWithLimit(ctx, db, databaseName, tableName, 0)
+func hashTable(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) (string, error) {
+	return hashTableWithLimit(ctx, queryer, databaseName, tableName, 0)
 }
 
-func hashTableSample(ctx context.Context, db *sql.DB, databaseName string, tableName string, sampleSize int) (string, error) {
+func hashTableSample(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string, sampleSize int) (string, error) {
 	if sampleSize < 1 {
-		return hashTableWithLimit(ctx, db, databaseName, tableName, 0)
+		return hashTableWithLimit(ctx, queryer, databaseName, tableName, 0)
 	}
-	return hashTableWithLimit(ctx, db, databaseName, tableName, sampleSize)
+	return hashTableWithLimit(ctx, queryer, databaseName, tableName, sampleSize)
 }
 
-func hashTableWithLimit(ctx context.Context, db *sql.DB, databaseName string, tableName string, limit int) (string, error) {
-	columns, err := listTableColumns(ctx, db, databaseName, tableName)
+func hashTableWithLimit(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string, limit int) (string, error) {
+	columns, err := listTableColumnInfo(ctx, queryer, databaseName, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -341,13 +470,8 @@ func hashTableWithLimit(ctx context.Context, db *sql.DB, databaseName string, ta
 		return hex.EncodeToString(empty[:]), nil
 	}
 
-	query := buildOrderedSelectSQL(databaseName, tableName, columns, limit)
-	var rows *sql.Rows
-	if limit > 0 {
-		rows, err = db.QueryContext(ctx, query, limit)
-	} else {
-		rows, err = db.QueryContext(ctx, query)
-	}
+	query := buildSelectSQL(databaseName, tableName, columns)
+	rows, err := queryer.QueryContext(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -355,7 +479,7 @@ func hashTableWithLimit(ctx context.Context, db *sql.DB, databaseName string, ta
 		_ = rows.Close()
 	}()
 
-	hasher := sha256.New()
+	rowHashes := make([]string, 0, 32)
 	for rows.Next() {
 		rowValues := make([]any, len(columns))
 		scanValues := make([]any, len(columns))
@@ -368,52 +492,59 @@ func hashTableWithLimit(ctx context.Context, db *sql.DB, databaseName string, ta
 
 		normalized := make([]string, len(rowValues))
 		for i, value := range rowValues {
-			normalized[i] = normalizeHashValue(value)
+			normalized[i] = normalizeHashValue(value, columns[i])
 		}
 		raw, err := json.Marshal(normalized)
 		if err != nil {
 			return "", err
 		}
-		if _, err := hasher.Write(raw); err != nil {
+		rowSum := sha256.Sum256(raw)
+		rowHashes = append(rowHashes, hex.EncodeToString(rowSum[:]))
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	sort.Strings(rowHashes)
+	if limit > 0 && len(rowHashes) > limit {
+		rowHashes = rowHashes[:limit]
+	}
+	hasher := sha256.New()
+	for _, rowHash := range rowHashes {
+		if _, err := hasher.Write([]byte(rowHash)); err != nil {
 			return "", err
 		}
 		if _, err := hasher.Write([]byte{'\n'}); err != nil {
 			return "", err
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-func buildOrderedSelectSQL(databaseName string, tableName string, columns []string, limit int) string {
+func buildSelectSQL(databaseName string, tableName string, columns []columnInfo) string {
 	quotedColumns := make([]string, 0, len(columns))
-	for _, columnName := range columns {
-		quotedColumns = append(quotedColumns, quoteIdentifier(columnName))
+	for _, column := range columns {
+		quotedColumns = append(quotedColumns, quoteIdentifier(column.Name))
 	}
 	columnList := strings.Join(quotedColumns, ", ")
-	base := fmt.Sprintf(
-		"SELECT %s FROM %s.%s ORDER BY %s",
+	return fmt.Sprintf(
+		"SELECT %s FROM %s.%s",
 		columnList,
 		quoteIdentifier(databaseName),
 		quoteIdentifier(tableName),
-		columnList,
 	)
-	if limit > 0 {
-		return base + " LIMIT ?"
-	}
-	return base
 }
 
-func normalizeHashValue(value any) string {
+func normalizeHashValue(value any, info columnInfo) string {
 	switch typed := value.(type) {
 	case nil:
 		return "null:"
 	case []byte:
+		if shouldTreatAsText(info) {
+			return normalizeTextHashValue(string(typed), info)
+		}
 		return "bytes:" + base64.StdEncoding.EncodeToString(typed)
 	case string:
-		return "string:" + typed
+		return normalizeTextHashValue(typed, info)
 	case bool:
 		return "bool:" + strconv.FormatBool(typed)
 	case int:
@@ -445,6 +576,20 @@ func normalizeHashValue(value any) string {
 	default:
 		return fmt.Sprintf("%T:%v", value, value)
 	}
+}
+
+func normalizeTextHashValue(value string, info columnInfo) string {
+	trimmed := strings.TrimSpace(value)
+	if maybeJSONValue(info, trimmed) {
+		var decoded any
+		if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
+			canonical, err := json.Marshal(decoded)
+			if err == nil {
+				return "json:" + string(canonical)
+			}
+		}
+	}
+	return "string:" + value
 }
 
 func diffTableCounts(databaseName string, source map[string]int64, dest map[string]int64) ([]Diff, int, int, int, int) {
@@ -496,12 +641,13 @@ func diffTableCounts(databaseName string, source map[string]int64, dest map[stri
 	return diffs, compared, missingDestination, missingSource, countMismatch
 }
 
-func diffTableHashes(databaseName string, source map[string]string, dest map[string]string) ([]Diff, int, int, int, int) {
+func diffTableHashes(databaseName string, source map[string]string, dest map[string]string, risks map[string]TableRisk) ([]Diff, int, int, int, int, int) {
 	diffs := []Diff{}
 	compared := 0
 	missingDestination := 0
 	missingSource := 0
 	hashMismatch := 0
+	noiseRiskMismatch := 0
 
 	for tableName, sourceHash := range source {
 		destHash, ok := dest[tableName]
@@ -518,12 +664,21 @@ func diffTableHashes(databaseName string, source map[string]string, dest map[str
 
 		compared++
 		if sourceHash != destHash {
+			noiseRisk := ""
+			var notes []string
+			if risk, ok := risks[tableName]; ok && len(risk.Notes) > 0 {
+				noiseRisk = "representation_sensitive"
+				notes = append(notes, risk.Notes...)
+				noiseRiskMismatch++
+			}
 			diffs = append(diffs, Diff{
 				Kind:       diffKindTableHashMismatch,
 				Database:   databaseName,
 				Table:      tableName,
 				SourceHash: sourceHash,
 				DestHash:   destHash,
+				NoiseRisk:  noiseRisk,
+				Notes:      notes,
 			})
 			hashMismatch++
 		}
@@ -542,7 +697,149 @@ func diffTableHashes(databaseName string, source map[string]string, dest map[str
 		missingSource++
 	}
 
-	return diffs, compared, missingDestination, missingSource, hashMismatch
+	return diffs, compared, missingDestination, missingSource, hashMismatch, noiseRiskMismatch
+}
+
+func prepareVerifySession(ctx context.Context, queryer sqlQueryer) error {
+	if _, err := queryer.ExecContext(ctx, "SET NAMES utf8mb4"); err != nil {
+		return err
+	}
+	_, err := queryer.ExecContext(ctx, "SET SESSION time_zone = '+00:00'")
+	return err
+}
+
+func tableRiskProfiles(ctx context.Context, queryer sqlQueryer, databases []string) (map[string]map[string]TableRisk, error) {
+	if len(databases) == 0 {
+		return map[string]map[string]TableRisk{}, nil
+	}
+
+	placeholders, args := placeholdersForStrings(databases)
+	rows, err := queryer.QueryContext(ctx, fmt.Sprintf(`
+		SELECT TABLE_SCHEMA, TABLE_NAME, DATA_TYPE, COALESCE(COLLATION_NAME, '')
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA IN (%s)
+		ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION
+	`, placeholders), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	out := map[string]map[string]TableRisk{}
+	for rows.Next() {
+		var databaseName string
+		var tableName string
+		var dataType string
+		var collationName string
+		if err := rows.Scan(&databaseName, &tableName, &dataType, &collationName); err != nil {
+			return nil, err
+		}
+		if _, ok := out[databaseName]; !ok {
+			out[databaseName] = map[string]TableRisk{}
+		}
+		risk := out[databaseName][tableName]
+		risk.Database = databaseName
+		risk.Table = tableName
+		switch strings.ToLower(strings.TrimSpace(dataType)) {
+		case "float", "double", "real":
+			risk.ApproximateNumericColumns++
+		case "timestamp", "datetime", "date", "time":
+			risk.TemporalColumns++
+		case "json":
+			risk.JSONColumns++
+		}
+		if strings.TrimSpace(collationName) != "" {
+			risk.CollationSensitiveColumns++
+		}
+		out[databaseName][tableName] = risk
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for databaseName, tables := range out {
+		for tableName, risk := range tables {
+			risk.Notes = buildRiskNotes(risk)
+			tables[tableName] = risk
+		}
+		out[databaseName] = tables
+	}
+	return out, nil
+}
+
+func buildRiskNotes(risk TableRisk) []string {
+	notes := make([]string, 0, 4)
+	if risk.ApproximateNumericColumns > 0 {
+		notes = append(notes, "Approximate numeric columns can produce representation-sensitive hash noise; confirm with row samples if hashes drift.")
+	}
+	if risk.TemporalColumns > 0 {
+		notes = append(notes, "Temporal columns depend on session time_zone rendering; verify runs normalize sessions to UTC before hashing.")
+	}
+	if risk.JSONColumns > 0 {
+		notes = append(notes, "JSON values are canonicalized before hashing, but semantic edge cases still deserve row-sample review.")
+	}
+	if risk.CollationSensitiveColumns > 0 {
+		notes = append(notes, "Text ordering and collation differences can create false positives if hashing depends on SQL sort order; row hashes are sorted client-side here.")
+	}
+	return notes
+}
+
+func flattenTableRisks(risks map[string]map[string]TableRisk) []TableRisk {
+	out := make([]TableRisk, 0, 8)
+	for _, tables := range risks {
+		for _, risk := range tables {
+			if len(risk.Notes) == 0 {
+				continue
+			}
+			out = append(out, risk)
+		}
+	}
+	sort.Slice(out, func(i int, j int) bool {
+		if out[i].Database != out[j].Database {
+			return out[i].Database < out[j].Database
+		}
+		return out[i].Table < out[j].Table
+	})
+	return out
+}
+
+func maybeJSONValue(info columnInfo, value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	if info.DataType == "json" {
+		return true
+	}
+	if !shouldTreatAsText(info) {
+		return false
+	}
+	first := trimmed[0]
+	if first != '{' && first != '[' {
+		return false
+	}
+	return json.Valid([]byte(trimmed))
+}
+
+func shouldTreatAsText(info columnInfo) bool {
+	switch info.DataType {
+	case "char", "varchar", "tinytext", "text", "mediumtext", "longtext", "enum", "set", "json":
+		return true
+	default:
+		return false
+	}
+}
+
+func placeholdersForStrings(values []string) (string, []any) {
+	items := make([]string, 0, len(values))
+	args := make([]any, 0, len(values))
+	for _, value := range values {
+		items = append(items, "?")
+		args = append(args, value)
+	}
+	return strings.Join(items, ", "), args
 }
 
 func sortDiffs(diffs []Diff) {

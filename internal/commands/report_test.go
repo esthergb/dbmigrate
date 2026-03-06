@@ -12,6 +12,7 @@ import (
 
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/state"
+	dataVerify "github.com/esthergb/dbmigrate/internal/verify/data"
 )
 
 func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
@@ -225,6 +226,119 @@ func TestRunReportJSONAllowsIncompatiblePrecheckOverride(t *testing.T) {
 	}
 }
 
+func TestRunReportJSONIncludesVerifyDataArtifactAndProposals(t *testing.T) {
+	tmp := t.TempDir()
+
+	artifact := verifyDataArtifact{
+		Command:     "verify",
+		Status:      "diff",
+		VerifyLevel: "data",
+		DataMode:    "sample",
+		Summary: dataVerify.Summary{
+			TablesCompared:           2,
+			HashMismatches:           1,
+			NoiseRiskMismatches:      1,
+			RepresentationRiskTables: 2,
+			Diffs: []dataVerify.Diff{{
+				Kind:      "table_hash_mismatch",
+				Database:  "app",
+				Table:     "events",
+				NoiseRisk: "representation_sensitive",
+				Notes:     []string{"Temporal columns depend on session time_zone rendering; verify runs normalize sessions to UTC before hashing."},
+			}},
+		},
+	}
+	if err := persistVerifyDataArtifact(tmp, artifact.DataMode, artifact.Summary); err != nil {
+		t.Fatalf("persist verify data artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected verify diff artifact to fail report by default")
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if !payload.Summary.Artifacts.VerifyDataReport {
+		t.Fatal("expected verify data artifact in summary")
+	}
+	if payload.Summary.VerifyDataReport == nil {
+		t.Fatal("expected verify data report summary")
+	}
+	if payload.Summary.VerifyDataReport.DiffCount != 1 {
+		t.Fatalf("unexpected verify diff count: %#v", payload.Summary.VerifyDataReport)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if !strings.Contains(strings.Join(payload.Proposals, " | "), "representation-sensitive tables") {
+		t.Fatalf("expected verify-data proposal, got %#v", payload.Proposals)
+	}
+}
+
+func TestRunReportJSONKeepsRiskOnlyVerifyArtifactOK(t *testing.T) {
+	tmp := t.TempDir()
+
+	artifact := verifyDataArtifact{
+		Command:     "verify",
+		Status:      "ok",
+		VerifyLevel: "data",
+		DataMode:    "full-hash",
+		Summary: dataVerify.Summary{
+			TablesCompared:           4,
+			HashMismatches:           0,
+			RepresentationRiskTables: 3,
+			TableRisks: []dataVerify.TableRisk{{
+				Database:                  "app",
+				Table:                     "events",
+				TemporalColumns:           1,
+				CollationSensitiveColumns: 1,
+				Notes: []string{
+					"Temporal columns depend on session time_zone rendering; verify runs normalize sessions to UTC before hashing.",
+					"Text ordering and collation differences can create false positives if hashing depends on SQL sort order; row hashes are sorted client-side here.",
+				},
+			}},
+		},
+	}
+	if err := persistVerifyDataArtifact(tmp, artifact.DataMode, artifact.Summary); err != nil {
+		t.Fatalf("persist verify data artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out); err != nil {
+		t.Fatalf("expected risk-only verify artifact to keep report ok, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "ok" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if payload.Summary.VerifyDataReport == nil {
+		t.Fatal("expected verify data report summary")
+	}
+	if payload.Summary.VerifyDataReport.DiffCount != 0 {
+		t.Fatalf("expected no diffs, got %#v", payload.Summary.VerifyDataReport)
+	}
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("expected one risk-only proposal, got %#v", payload.Proposals)
+	}
+	if !strings.Contains(payload.Proposals[0], "representation-sensitive tables exist") {
+		t.Fatalf("unexpected proposal: %#v", payload.Proposals)
+	}
+}
+
 func TestRunReportJSONConflictOverrideDoesNotFail(t *testing.T) {
 	tmp := t.TempDir()
 	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
@@ -404,7 +518,7 @@ func TestRunReportTextNoArtifacts(t *testing.T) {
 	if !strings.Contains(text, "status=empty") {
 		t.Fatalf("expected empty status, got %q", text)
 	}
-	if !strings.Contains(text, "artifacts(collation_precheck=false data_baseline=false replication_checkpoint=false replication_conflict=false)") {
+	if !strings.Contains(text, "artifacts(collation_precheck=false verify_data=false data_baseline=false replication_checkpoint=false replication_conflict=false)") {
 		t.Fatalf("expected artifact summary, got %q", text)
 	}
 }

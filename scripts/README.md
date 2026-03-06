@@ -19,6 +19,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-replication-shape-rehearsal.sh`: local proof that transaction shape matters more than nominal worker count.
 - `run-invisible-gipk-rehearsal.sh`: local proof of invisible-column visibility drift and generated invisible primary key dump behavior.
 - `run-collation-rehearsal.sh`: local proof that server-unsupported collations and client-compatibility risk are different failure classes.
+- `run-verify-canonicalization-rehearsal.sh`: local proof that naive hashes can drift while canonicalized verify remains stable.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -148,6 +149,13 @@ docker compose up -d mysql80 mysql84 mariadb10 mariadb12
 ./scripts/run-collation-rehearsal.sh ./state/collation-phase63
 ```
 
+Run the Phase 64 verification canonicalization rehearsal:
+
+```bash
+docker compose up -d mysql84 mariadb12
+./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64
+```
+
 Run all scenarios sequentially:
 
 ```bash
@@ -218,7 +226,24 @@ Interpretation:
 
 - `backup_completed=true` only means the dump command succeeded.
 - `backup_validated=true` means the artifact contains the expected object definitions.
-- `restore_usable=true` means the dump restored into a shadow schema and passed smoke tests for rows, views, routines, and event presence.
+- `restore_usable=true` means the artifact restored into a shadow schema and passed smoke tests.
+
+## Verification canonicalization rehearsal artifacts
+
+`run-verify-canonicalization-rehearsal.sh` is the focused Phase 64 rehearsal for noisy verify/checksum false positives.
+
+Artifacts written to the chosen output directory:
+
+- `source-*.tsv` and `dest-*.tsv`: raw cross-engine evidence showing why naive hashes differ
+- `verify-hash.json`, `verify-sample.json`, `verify-full-hash.json`: canonicalized verify results
+- `report.json`: final report output based on `verify-data-report.json`
+- `summary.json`: compact scenario summary including naive-hash drift and canonical verify exit codes
+
+Interpretation:
+
+- `naive_hashes_differ=true` is expected in this rehearsal.
+- `verify_hash_exit_code=0`, `verify_sample_exit_code=0`, and `verify_full_hash_exit_code=0` show the canonicalized verify path removed the false positive.
+- `representation_risk_tables > 0` is also expected; it means the scenario is sensitive enough to deserve evidence retention.
 
 Phase boundary:
 

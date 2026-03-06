@@ -1,17 +1,13 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 63 on `codex/feat/collation-client-phase63`.
-  - Success means:
-    - `plan` and schema `migrate` distinguish server-unsupported collations from client-compatibility risk,
-    - focused fixtures and a rehearsal script exist for `utf8mb4_0900_ai_ci` and `utf8mb4_uca1400_ai_ci`,
-    - `report` surfaces the collation artifact, separates server-side and client-side proposals, and treats incompatible precheck artifacts as `attention_required`,
-    - local tests/build/rehearsal pass.
+  - Complete Phase 64 from the merged Phase 63 baseline.
+  - Success means verification canonicalization/reporting, fixtures, and rehearsal coverage are implemented, locally verified, then committed and published in a PR.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - Do not commit, push, or open a PR until the user asks.
+  - The user has now asked to implement all of Phase 64, then commit, push, and open the PR.
 - Key decisions:
   - Phase 62 enforces hidden-schema compatibility as product behavior, not just documentation: MySQL invisible columns, invisible indexes, and GIPK are inventory items in `plan` and schema blockers in `migrate` when destination semantics drift.
   - MariaDB destinations are blocked for these hidden-schema features because local restore evidence shows visibility drift instead of semantic preservation.
@@ -25,10 +21,14 @@ Last updated: 2026-03-06
     - warning-only precheck artifacts remain `ok`
     - default `report` exit code follows that status unless `--fail-on-conflict=false` is set
   - MariaDB `uca1400_*` and `utf8mb4_uca1400_*` names are treated as the same support family when inventorying destination support.
+  - Phase 64 is defined as the verification canonicalization and false-positive control track.
+  - Phase 64 must land as one coherent slice: canonicalized data verify behavior, artifact/report surfacing, and a dedicated rehearsal with fixtures.
+  - Verification hashing must be session-pinned. Setting session state on pooled `*sql.DB` handles is insufficient for charset/time zone stability.
 - State:
-  - Current branch: `codex/feat/collation-client-phase63`.
-  - Phase 63 implementation is complete locally and uncommitted.
-  - Working tree contains code, fixtures, rehearsal script, docs, and continuity updates for Phase 63.
+  - Current branch: `codex/feat/verify-canonicalization-phase64`.
+  - PR `#65` is merged.
+  - Phase 64 implementation is complete locally and currently uncommitted.
+  - Working tree contains Phase 64 code, tests, fixture SQL, and rehearsal script changes.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -59,6 +59,7 @@ Last updated: 2026-03-06
       - `docs/risk-checklist.md`
       - `scripts/README.md`
       - `datasets/README.md`
+  - Phase 63 merged via PR `#65`.
   - Verified locally:
     - `go test ./internal/commands`
     - `go test ./...`
@@ -82,28 +83,47 @@ Last updated: 2026-03-06
   - Research history and PR execution plan remain documented in:
     - `docs/migration-replication-conflict-history.md`
     - `docs/matrix-pr-plan.md`
-- Now:
-  - Commit, push, and open the Phase 63 PR.
-- Next:
-  - Wait for CI and review on the Phase 63 PR.
-- Open questions (UNCONFIRMED if needed):
-  - None currently blocking Phase 63.
-- Working set (files/ids/commands):
-  - Files:
-    - `internal/commands/collation_precheck.go`
-    - `internal/commands/plan.go`
-    - `internal/commands/migrate.go`
-    - `internal/commands/report.go`
-    - `internal/commands/collation_precheck_test.go`
-    - `scripts/run-collation-rehearsal.sh`
-    - `datasets/phase63_mysql0900_collation.sql`
-    - `datasets/phase63_mariadb_uca1400_collation.sql`
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
-    - `docs/risk-checklist.md`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`; branch `codex/feat/collation-client-phase63`.
-  - Commands:
-    - `go test ./internal/commands`
+  - Phase 64 partial implementation already exists locally:
+    - verify data artifacts persisted to `verify-data-report.json`
+    - `report` surfaces verify artifact status/proposals
+    - rehearsal fixtures/scripts exist for MySQL 8.4 -> MariaDB 12 canonicalization evidence
+  - Phase 64 final local behavior:
+    - verify hashing runs on pinned source/destination connections with normalized session state
+    - `report` escalates real verify diffs, but not risk-only artifacts
+    - rehearsal script forces UTF-8 client loading so fixture evidence is semantically stable
+  - Verified locally:
+    - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
     - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-collation-rehearsal.sh ./state/collation-phase63`
+    - `./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64-final3`
+  - Observed Phase 64 evidence:
+    - `naive_hashes_differ=true`
+    - `verify_hash_exit_code=0`
+    - `verify_sample_exit_code=0`
+    - `verify_full_hash_exit_code=0`
+    - `representation_risk_tables=4`
+    - `noise_risk_mismatches=0`
+- Now:
+  - Commit, push, and open the Phase 64 PR.
+- Next:
+  - Wait for CI and review on the Phase 64 PR.
+- Open questions (UNCONFIRMED if needed):
+  - None currently blocking Phase 64.
+- Working set (files/ids/commands):
+  - Files:
+    - `CONTINUITY.md`
+    - `docs/matrix-pr-plan.md`
+    - `docs/migration-replication-conflict-history.md`
+    - `internal/verify/data/verify.go`
+    - `internal/commands/report.go`
+    - `internal/commands/verify.go`
+    - `internal/commands/verify_artifact.go`
+    - `datasets/phase64_verify_source_mysql84.sql`
+    - `datasets/phase64_verify_dest_mariadb12.sql`
+    - `scripts/run-verify-canonicalization-rehearsal.sh`
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`; branch `main`.
+  - Commands:
+    - `go test ./internal/verify/data ./internal/commands`
+    - `go test ./...`
+    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
+    - `./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64-final3`

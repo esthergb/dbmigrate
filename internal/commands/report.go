@@ -32,6 +32,8 @@ type reportSummary struct {
 	Artifacts                   reportArtifacts                  `json:"artifacts"`
 	CollationPrecheck           *collationPrecheckSummary        `json:"collation_precheck,omitempty"`
 	CollationPrecheckFilePath   string                           `json:"collation_precheck_file,omitempty"`
+	VerifyDataReport            *verifyDataReportSummary         `json:"verify_data_report,omitempty"`
+	VerifyDataReportFilePath    string                           `json:"verify_data_report_file,omitempty"`
 	DataBaselineCheckpoint      *dataBaselineCheckpointSummary   `json:"data_baseline_checkpoint,omitempty"`
 	ReplicationCheckpoint       *replicationCheckpointSummary    `json:"replication_checkpoint,omitempty"`
 	ReplicationConflictReport   *state.ReplicationConflictReport `json:"replication_conflict_report,omitempty"`
@@ -41,6 +43,7 @@ type reportSummary struct {
 
 type reportArtifacts struct {
 	CollationPrecheck         bool `json:"collation_precheck"`
+	VerifyDataReport          bool `json:"verify_data_report"`
 	DataBaselineCheckpoint    bool `json:"data_baseline_checkpoint"`
 	ReplicationCheckpoint     bool `json:"replication_checkpoint"`
 	ReplicationConflictReport bool `json:"replication_conflict_report"`
@@ -55,6 +58,18 @@ type collationPrecheckSummary struct {
 	DestServerCollation          string `json:"dest_server_collation,omitempty"`
 	UnsupportedDestinationCount  int    `json:"unsupported_destination_count"`
 	ClientCompatibilityRiskCount int    `json:"client_compatibility_risk_count"`
+}
+
+type verifyDataReportSummary struct {
+	Path                     string `json:"path"`
+	Status                   string `json:"status"`
+	DataMode                 string `json:"data_mode"`
+	TablesCompared           int    `json:"tables_compared"`
+	CountMismatches          int    `json:"count_mismatches"`
+	HashMismatches           int    `json:"hash_mismatches"`
+	DiffCount                int    `json:"diff_count"`
+	NoiseRiskMismatches      int    `json:"noise_risk_mismatches,omitempty"`
+	RepresentationRiskTables int    `json:"representation_risk_tables,omitempty"`
 }
 
 type dataBaselineCheckpointSummary struct {
@@ -93,7 +108,7 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	if reportNeedsAttention(summary) {
 		status = "attention_required"
 	}
-	if !summary.Artifacts.CollationPrecheck && !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
+	if !summary.Artifacts.CollationPrecheck && !summary.Artifacts.VerifyDataReport && !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
 		status = "empty"
 	}
 
@@ -129,6 +144,9 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 
 func reportNeedsAttention(summary reportSummary) bool {
 	if summary.CollationPrecheck != nil && summary.CollationPrecheck.Incompatible {
+		return true
+	}
+	if summary.VerifyDataReport != nil && summary.VerifyDataReport.DiffCount > 0 {
 		return true
 	}
 	return summary.ReplicationConflictReport != nil &&
@@ -178,6 +196,30 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 			ClientCompatibilityRiskCount: report.ClientCompatibilityRiskCount,
 		}
 		proposals = append(proposals, collationPrecheckProposals(report)...)
+	}
+
+	verifyDataPath := verifyDataArtifactPath(stateDir)
+	if exists, err := fileExists(verifyDataPath); err != nil {
+		return reportSummary{}, nil, err
+	} else if exists {
+		artifact, err := loadVerifyDataArtifact(stateDir)
+		if err != nil {
+			return reportSummary{}, nil, err
+		}
+		summary.Artifacts.VerifyDataReport = true
+		summary.VerifyDataReportFilePath = verifyDataPath
+		summary.VerifyDataReport = &verifyDataReportSummary{
+			Path:                     verifyDataPath,
+			Status:                   artifact.Status,
+			DataMode:                 artifact.DataMode,
+			TablesCompared:           artifact.Summary.TablesCompared,
+			CountMismatches:          artifact.Summary.CountMismatches,
+			HashMismatches:           artifact.Summary.HashMismatches,
+			DiffCount:                len(artifact.Summary.Diffs),
+			NoiseRiskMismatches:      artifact.Summary.NoiseRiskMismatches,
+			RepresentationRiskTables: artifact.Summary.RepresentationRiskTables,
+		}
+		proposals = append(proposals, verifyDataProposals(artifact)...)
 	}
 
 	dataCheckpointPath := filepath.Join(stateDir, "data-baseline-checkpoint.json")
@@ -337,10 +379,11 @@ func fileExists(path string) (bool, error) {
 func writeReportText(out io.Writer, payload reportResult) error {
 	if _, err := fmt.Fprintf(
 		out,
-		"[report] status=%s state_dir=%s artifacts(collation_precheck=%v data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
+		"[report] status=%s state_dir=%s artifacts(collation_precheck=%v verify_data=%v data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
 		payload.Status,
 		payload.Summary.StateDir,
 		payload.Summary.Artifacts.CollationPrecheck,
+		payload.Summary.Artifacts.VerifyDataReport,
 		payload.Summary.Artifacts.DataBaselineCheckpoint,
 		payload.Summary.Artifacts.ReplicationCheckpoint,
 		payload.Summary.Artifacts.ReplicationConflictReport,
@@ -360,6 +403,25 @@ func writeReportText(out io.Writer, payload reportResult) error {
 			cp.DestServerCollation,
 			cp.UnsupportedDestinationCount,
 			cp.ClientCompatibilityRiskCount,
+		); err != nil {
+			return err
+		}
+	}
+
+	if payload.Summary.VerifyDataReport != nil {
+		cp := payload.Summary.VerifyDataReport
+		if _, err := fmt.Fprintf(
+			out,
+			"[report] verify_data path=%s status=%s data_mode=%s compared=%d diffs=%d count_mismatches=%d hash_mismatches=%d noise_risk_mismatches=%d risk_tables=%d\n",
+			cp.Path,
+			cp.Status,
+			cp.DataMode,
+			cp.TablesCompared,
+			cp.DiffCount,
+			cp.CountMismatches,
+			cp.HashMismatches,
+			cp.NoiseRiskMismatches,
+			cp.RepresentationRiskTables,
 		); err != nil {
 			return err
 		}
@@ -466,6 +528,26 @@ func collationPrecheckProposals(report collationPrecheckReport) []string {
 	}
 	if report.ClientCompatibilityRiskCount > 0 {
 		proposals = append(proposals, "rehearse representative drivers and connection startup against the chosen collation set; server acceptance does not guarantee client-library compatibility.")
+	}
+	return proposals
+}
+
+func verifyDataProposals(artifact verifyDataArtifact) []string {
+	proposals := make([]string, 0, 3)
+	if len(artifact.Summary.Diffs) == 0 {
+		if artifact.Summary.RepresentationRiskTables > 0 {
+			proposals = append(proposals, "verify passed, but representation-sensitive tables exist; keep the verify artifact as evidence and review table-risk notes before treating hash modes as byte-for-byte guarantees.")
+		}
+		return proposals
+	}
+	if artifact.Summary.NoiseRiskMismatches > 0 {
+		proposals = append(proposals, "some verify mismatches touch representation-sensitive tables; review row samples before declaring real drift.")
+	}
+	if artifact.DataMode == "sample" && artifact.Summary.HashMismatches > 0 {
+		proposals = append(proposals, "sample mode found drift; rerun with --data-mode=full-hash or inspect row samples before cutover decisions.")
+	}
+	if artifact.Summary.HashMismatches > 0 || artifact.Summary.CountMismatches > 0 {
+		proposals = append(proposals, "treat verify mismatches as blocking until row samples or a stronger verify mode confirms whether the drift is real.")
 	}
 	return proposals
 }
