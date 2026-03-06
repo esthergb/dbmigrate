@@ -157,6 +157,31 @@ Current scope:
 - Keep replication checkpoints immutable per successful run.
 - If verification fails, stop apply loop and inspect report before retry.
 
+## Backup and restore rehearsal
+
+Do not treat "backup completed" as evidence that rollback is safe.
+
+Recommended rehearsal:
+- Start one service with `docker compose up -d <service>`.
+- Run:
+  - `./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84`
+  - or `./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11`
+
+What the rehearsal distinguishes:
+- `backup_completed=true`: the dump command succeeded and produced an artifact.
+- `backup_validated=true`: the artifact contains the expected table, view, routine, and event definitions.
+- `restore_usable=true`: the artifact restored into a shadow schema and passed smoke tests.
+
+What to inspect:
+- `logical-backup.sql`: the actual backup artifact
+- `validation.txt`: whether the expected objects are present in the artifact
+- `restore-smoke.txt`: whether restored rows, view access, routine execution, and event presence were verified
+- `summary.json`: the machine-readable result for automation and runbooks
+
+Operational rule:
+- A release-grade rollback claim requires `restore_usable=true`, not just backup completion.
+- Physical backup workflows remain a separate risk class and need their own vendor-supported prepare and restore procedures.
+
 ## Temporary CI operations note (review later)
 
 - If GitHub automatic workflow triggers are degraded, dispatch CI manually for a branch:

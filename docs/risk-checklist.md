@@ -1,6 +1,6 @@
 # Operator Risk Checklist (Preflight)
 
-Last reviewed: 2026-03-04
+Last reviewed: 2026-03-06
 
 Use this checklist before running `dbmigrate plan`, `migrate`, or `replicate`.
 
@@ -105,6 +105,8 @@ Reference:
 
 - [ ] Dry-run plan reviewed and signed off.
 - [ ] Baseline backup/snapshot confirmed.
+- [ ] Logical backup rehearsal completed for the exact tool and workflow planned for rollback.
+- [ ] Restore evidence reviewed: distinguish `backup completed`, `artifact validated`, and `restore usable`.
+- [ ] If physical backup is part of rollback: prepare/apply-log procedure and exact tool-version compatibility confirmed separately.
 - [ ] Rollback strategy documented.
 - [ ] Post-run verification and report review assigned to owner.
-

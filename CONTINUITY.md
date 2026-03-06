@@ -1,18 +1,18 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 57 (`ddl_metadata_lock_observability_runbooks`) on a dedicated branch.
-  - Success means: metadata-lock incidents become a first-class reported failure mode, a local rehearsal script exists, and operator docs explain diagnosis and safe-abort workflow.
+  - Implement Phase 58 (`backup_restore_validation_gaps`) on a dedicated branch.
+  - Success means: the repo gains a clear restore-rehearsal path that distinguishes backup completion, backup validation, and restore usability, with docs and runnable local evidence where practical.
 - Constraints/Assumptions:
   - Docs in English.
-  - Keep the phase focused: metadata-lock observability and runbooks only, not broader lock automation.
+  - Keep the phase focused: backup/restore validation gaps only, not a general backup subsystem.
   - Do not commit until the user asks.
 - Key decisions:
-  - Start Phase 57 with one runnable local scenario plus one product-level failure classification, instead of trying to automate lock management.
-  - Reuse existing report/remediation surfaces for operator signal.
+  - Start Phase 58 with the smallest coherent slice: restore-rehearsal evidence and operator guidance, not full physical-backup automation.
+  - Reuse the existing script/report/doc workflow where possible.
 - State:
-  - Branch: `codex/feat/metadata-lock-phase57`, pushed to `origin` on 2026-03-06.
-  - Phase 57 branch is published and under review.
+  - Branch: `codex/feat/backup-restore-phase58`.
+  - Working tree contains the first uncommitted Phase 58 implementation slice plus ledger updates.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -21,13 +21,19 @@ Last updated: 2026-03-06
   - Verified `go test ./internal/replicate/binlog`.
   - Verified `scripts/run-metadata-lock-scenario.sh` locally on `mysql84` and `mariadb11`; both reproduced queue amplification with `ddl_exit_code=1`, `ddl_elapsed_seconds=5`, `read_exit_code=0`, `read_elapsed_seconds=4`, and processlist evidence showing both DDL and ordinary reads waiting for table metadata lock.
   - Committed the Phase 57 batch as `9a5aa6e` (`feat: add metadata lock rehearsal and reporting`) and opened PR `#59`.
+  - PR `#59` merged into `main`.
+  - Created branch `codex/feat/backup-restore-phase58` for Phase 58.
+  - Added `scripts/run-backup-restore-rehearsal.sh` to distinguish `backup_completed`, `backup_validated`, and `restore_usable` using engine-native logical dump tooling and a shadow-schema restore.
+  - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 58 backup/restore rehearsal guidance and the physical-backup boundary note.
+  - Updated `docs/risk-checklist.md` so rollback gates now require restore rehearsal evidence rather than backup-job success alone.
+  - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
 - Now:
-  - Wait for CI and review on PR `#59`.
+  - Commit the current Phase 58 slice.
 - Next:
-  - Decide whether to add matrix-wrapper scripts for the metadata-lock rehearsal in a follow-up, or keep it as a focused operator script only.
+  - Push and open the Phase 58 PR when the user asks.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether MariaDB plugin-assisted deep lock visibility should be automated later, or left as manual operator guidance.
+  - UNCONFIRMED: whether physical-backup tooling should stay documentation-only in this phase, or whether the local phase slice should include a tool-agnostic restore rehearsal helper.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `scripts/run-metadata-lock-scenario.sh`, `scripts/README.md`, `docs/operators-guide.md`, `docs/known-problems.md`.
-  - IDs: branch `codex/feat/metadata-lock-phase57`, commit `9a5aa6e`, PR `#59`.
-  - Commands: `go test ./internal/replicate/binlog`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84`, `./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`, `scripts/run-backup-restore-rehearsal.sh`, `docker-compose.yml`.
+  - IDs: merged PR `#59`, commits `9a5aa6e` and `e4b5845`.
+  - Commands: `git checkout -b codex/feat/backup-restore-phase58`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84`, `./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11`.
