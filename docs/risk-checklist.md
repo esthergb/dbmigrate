@@ -59,9 +59,17 @@ Reference:
 
 - [ ] Inventory source auth plugins per user.
 - [ ] Verify destination plugin support and defaults.
+- [ ] Treat removed/unknown `default_authentication_plugin` behavior as a compatibility finding, not as a silent fallback.
 - [ ] Decide scope: business accounts only vs include system accounts.
 - [ ] Decide password/plugin rewrite and account lock/reset workflow for incompatible users.
 - [ ] Ensure TLS/RSA requirements for auth plugins are satisfied.
+
+## F2) Storage engine and plugin-backed object readiness
+
+- [ ] Inventory selected source table engines before schema apply.
+- [ ] Verify destination engine support for every source engine in scope.
+- [ ] Confirm destination `sql_mode` includes `NO_ENGINE_SUBSTITUTION`.
+- [ ] Exclude or convert plugin-backed/optional-engine tables before migration.
 
 Reference:
 

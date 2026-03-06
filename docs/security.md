@@ -16,3 +16,4 @@
 - Keep user/grant migration optional and explicit.
 - Produce a detailed compatibility report for auth plugin mismatches.
 - Avoid unsafe automatic plugin downgrades by default.
+- Current guardrail: surface auth-plugin drift during `plan` even when the baseline run is only schema/data.

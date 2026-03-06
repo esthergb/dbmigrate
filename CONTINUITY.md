@@ -1,18 +1,19 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 59 (`session_timezone_and_now_function_behavior`) on a dedicated branch.
-  - Success means: the repo gains explicit local evidence and operator guidance for time-zone-sensitive behavior, especially `NOW()`, `TIMESTAMP`, `DATETIME`, and session/server time-zone drift.
+  - Implement Phase 60 (`plugin_lifecycle_and_disabled_feature_flags`) on `codex/feat/plugin-lifecycle-phase60`.
+  - Success means: `plan` and `migrate` detect incompatible auth plugins and unsupported table engines before execution, the repo gains a runnable rehearsal for plugin/engine drift, and operator docs explain detection and response.
 - Constraints/Assumptions:
   - Docs in English.
-  - Keep the phase focused: session time zone and time-function behavior only, not a general temporal compatibility subsystem.
-  - Do not commit until the user asks.
+  - Keep the phase focused: plugin lifecycle, auth-plugin drift, engine availability, and disabled-feature fallout only.
+  - Commit/push/PR are now explicitly authorized for this Phase 60 batch.
 - Key decisions:
-  - Start Phase 59 with the smallest coherent slice: runnable local evidence plus operator guidance, not speculative precheck automation.
-  - Reuse the existing script/report/doc workflow where possible.
+  - Phase 60 is full implementation, not docs-only: add real precheck/report behavior plus rehearsal evidence.
+  - Fail fast on unsupported source table engines; keep auth-plugin incompatibilities as explicit warnings until user/grant execution is wired into the command path.
+  - Reuse the existing precheck/report patterns already used for zero-date validation.
 - State:
-  - Branch: `codex/feat/timezone-phase59`, pushed to `origin` on 2026-03-06.
-  - Phase 59 branch is published and under review.
+  - Branch: `codex/feat/plugin-lifecycle-phase60`.
+  - Branch is pushed to `origin` and PR `#62` is open.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -22,7 +23,6 @@ Last updated: 2026-03-06
   - Verified `scripts/run-metadata-lock-scenario.sh` locally on `mysql84` and `mariadb11`; both reproduced queue amplification with `ddl_exit_code=1`, `ddl_elapsed_seconds=5`, `read_exit_code=0`, `read_elapsed_seconds=4`, and processlist evidence showing both DDL and ordinary reads waiting for table metadata lock.
   - Committed the Phase 57 batch as `9a5aa6e` (`feat: add metadata lock rehearsal and reporting`) and opened PR `#59`.
   - PR `#59` merged into `main`.
-  - Created branch `codex/feat/backup-restore-phase58` for Phase 58.
   - Added `scripts/run-backup-restore-rehearsal.sh` to distinguish `backup_completed`, `backup_validated`, and `restore_usable` using engine-native logical dump tooling and a shadow-schema restore.
   - Refined the rehearsal artifact so `summary.json` and `validation.txt` record the exact dump client and server version used.
   - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 58 backup/restore rehearsal guidance and the physical-backup boundary note.
@@ -30,18 +30,43 @@ Last updated: 2026-03-06
   - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
   - Committed the Phase 58 batch as `d3a751e` (`feat: add backup restore rehearsal guidance`) and refinement commit `f5df019` (`chore: record backup rehearsal tool versions`), then opened PR `#60`.
   - PR `#60` merged into `main`.
-  - Created branch `codex/feat/timezone-phase59` for Phase 59.
   - Added `scripts/run-timezone-rehearsal.sh` to demonstrate session time-zone drift across `NOW()`, `TIMESTAMP`, and `DATETIME`.
   - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 59 time-zone rehearsal guidance.
   - Verified `scripts/run-timezone-rehearsal.sh` locally on `mysql84` and `mariadb11`; both reported `timestamp_display_changes=true`, `datetime_static_under_session_change=true`, and `explicit_now_drift_visible=true` with `system_time_zone=UTC`, `global_time_zone=SYSTEM`, and `session_time_zone_default=SYSTEM`.
   - Committed the Phase 59 batch as `b00248a` (`feat: add timezone rehearsal guidance`) and opened PR `#61`.
+  - PR `#61` merged into `main`.
+  - Created `codex/feat/plugin-lifecycle-phase60` and confirmed the current repo already contains auth-plugin probes, docs, and a reusable migrate precheck pattern.
+  - Verified live engine/plugin evidence in local containers: MySQL 8.0 accepts `mysql_native_password` accounts, while MySQL 8.4 rejects them with `ERROR 1524 (HY000): Plugin 'mysql_native_password' is not loaded`.
+  - Added `internal/commands/plugin_precheck.go` with a new Phase 60 precheck that inventories source account plugins, destination active plugins, selected source table engines, destination engine support, destination `sql_mode`, and `default_authentication_plugin` visibility.
+  - Wired the Phase 60 precheck into `plan` and schema `migrate`.
+  - Unsupported source storage engines now fail `plan`/schema `migrate`; auth-plugin mismatches are reported as warnings with account classification (`user-managed`, `administrative`, `system`).
+  - Added `scripts/run-plugin-lifecycle-rehearsal.sh` and updated `scripts/README.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/security.md`, and `docs/risk-checklist.md`.
+  - Added focused unit coverage in `internal/commands/plugin_precheck_test.go` and `internal/commands/migrate_test.go`.
+  - Verified `go test ./...`.
+  - Verified `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`.
+  - Verified `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`:
+    - `plan_exit_code=0`
+    - `unsupported_auth_plugins_detected=true`
+    - `unsupported_storage_engines_detected=false`
+    - warning finding for `phase60_native@%` using `mysql_native_password`
+  - Verified `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`:
+    - `plan_exit_code=2`
+    - `unsupported_auth_plugins_detected=true`
+    - `unsupported_storage_engines_detected=true`
+    - error finding for `phase60_plugin_lifecycle.aria_items` using `Aria`
+  - Verified direct schema apply block with:
+    - `./bin/dbmigrate migrate --source 'mysql://root:rootpass123@127.0.0.1:13307/' --dest 'mysql://root:rootpass123@127.0.0.1:23307/' --databases phase60_plugin_lifecycle --schema-only --json`
+    - result: exit code `2` with `precheck=plugin-lifecycle`
+  - Committed the Phase 60 feature batch as `5939782` (`feat: add plugin lifecycle precheck and rehearsal`).
+  - Pushed `codex/feat/plugin-lifecycle-phase60` to `origin`.
+  - Opened PR `#62` (`feat: add plugin lifecycle precheck and rehearsal`).
 - Now:
-  - Wait for CI and review on PR `#61`.
+  - Await CI/review feedback on PR `#62`.
 - Next:
-  - Keep Phase 59 focused on time-zone rehearsal evidence unless review reveals a concrete gap.
+  - If CI or review finds issues, fix them on the same branch.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether the first Phase 59 slice should remain a docs-plus-script rehearsal, or whether it should also introduce a plan-time checklist artifact immediately.
+  - None blocking. A later follow-up may decide whether to extend the precheck to plugin-backed routines/events beyond account plugins and table engines.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `scripts/README.md`, `scripts/run-timezone-rehearsal.sh`, `docker-compose.yml`.
-  - IDs: merged PR `#59`, merged PR `#60`, branch `codex/feat/timezone-phase59`, commit `b00248a`, PR `#61`.
-  - Commands: `git checkout -b codex/feat/timezone-phase59`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84`, `./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `internal/commands/plugin_precheck.go`, `internal/commands/plugin_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `scripts/run-plugin-lifecycle-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/security.md`, `docs/risk-checklist.md`, `scripts/README.md`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, open PR `#62`; branch `codex/feat/plugin-lifecycle-phase60`; commits `5939782`, `b00266d`.
+  - Commands: `docker compose -f docker-compose.yml up -d mysql84 mysql80 mariadb11`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`, `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`, `git push -u origin codex/feat/plugin-lifecycle-phase60`, `gh pr create --base main --head codex/feat/plugin-lifecycle-phase60`.

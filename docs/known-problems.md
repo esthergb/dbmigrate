@@ -133,9 +133,10 @@ Observed failure patterns:
 
 `dbmigrate` safeguards:
 
-- Account preflight: inventory accounts, auth plugins, TLS/RSA requirements, and plugin availability on destination.
-- User/grant migration helper implemented with selectable scope (business-only or include system).
-- Detailed compatibility report for each account with action class: migrate as-is, migrate with plugin rewrite, manual reset required, or blocked.
+- Current preflight: inventory visible source account plugins, destination plugin availability, and destination default-auth variable behavior.
+- Current Phase 60 behavior: unsupported auth plugins are surfaced as warnings in `plan` output so account cutover work is explicit before any later user/grant step.
+- Engine preflight runs in `plan` and schema `migrate`: unsupported source table engines fail before DDL apply.
+- Detailed findings include per-account plugin mismatch reporting and per-table engine mismatch reporting.
 
 ---
 
