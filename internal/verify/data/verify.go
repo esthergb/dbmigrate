@@ -397,18 +397,6 @@ func listBaseTables(ctx context.Context, queryer sqlQueryer, databaseName string
 	return out, nil
 }
 
-func listTableColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]string, error) {
-	infos, err := listTableColumnInfo(ctx, queryer, databaseName, tableName)
-	if err != nil {
-		return nil, err
-	}
-	columns := make([]string, 0, len(infos))
-	for _, info := range infos {
-		columns = append(columns, info.Name)
-	}
-	return columns, nil
-}
-
 func listTableColumnInfo(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]columnInfo, error) {
 	rows, err := queryer.QueryContext(ctx, `
 		SELECT COLUMN_NAME, DATA_TYPE, COALESCE(COLLATION_NAME, ''), COALESCE(CHARACTER_SET_NAME, '')

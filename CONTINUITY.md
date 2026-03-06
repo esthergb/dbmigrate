@@ -29,7 +29,7 @@ Last updated: 2026-03-06
   - PR `#65` is merged.
   - PR `#66` is open for Phase 64.
   - Phase 64 implementation is committed and pushed.
-  - Working tree contains continuity-only follow-up state.
+  - Working tree contains the Phase 64 CI fix.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -104,10 +104,12 @@ Last updated: 2026-03-06
     - `verify_full_hash_exit_code=0`
     - `representation_risk_tables=4`
     - `noise_risk_mismatches=0`
+  - CI failure identified on PR `#66`:
+    - `golangci-lint` reported `internal/verify/data/verify.go:400:6: func listTableColumns is unused`
 - Now:
-  - Record Phase 64 PR state in continuity and wait for CI.
+  - Remove the dead helper, rerun lint/tests, and push the PR fix.
 - Next:
-  - Wait for CI and review on the Phase 64 PR.
+  - Wait for CI rerun and review on the Phase 64 PR.
 - Open questions (UNCONFIRMED if needed):
   - None currently blocking Phase 64.
 - Working set (files/ids/commands):
