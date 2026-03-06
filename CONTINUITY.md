@@ -11,8 +11,8 @@ Last updated: 2026-03-06
   - Start Phase 57 with one runnable local scenario plus one product-level failure classification, instead of trying to automate lock management.
   - Reuse existing report/remediation surfaces for operator signal.
 - State:
-  - Branch: `codex/feat/metadata-lock-phase57`.
-  - Working tree contains Phase 57 code/docs changes ready to publish.
+  - Branch: `codex/feat/metadata-lock-phase57`, pushed to `origin` on 2026-03-06.
+  - Phase 57 branch is published and under review.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -20,12 +20,14 @@ Last updated: 2026-03-06
   - Updated `docs/operators-guide.md`, `docs/known-problems.md`, and `scripts/README.md` with Phase 57 runbook and rehearsal guidance.
   - Verified `go test ./internal/replicate/binlog`.
   - Verified `scripts/run-metadata-lock-scenario.sh` locally on `mysql84` and `mariadb11`; both reproduced queue amplification with `ddl_exit_code=1`, `ddl_elapsed_seconds=5`, `read_exit_code=0`, `read_elapsed_seconds=4`, and processlist evidence showing both DDL and ordinary reads waiting for table metadata lock.
+  - Committed the Phase 57 batch as `9a5aa6e` (`feat: add metadata lock rehearsal and reporting`) and opened PR `#59`.
 - Now:
-  - Publish Phase 57 on its dedicated branch and open the PR.
+  - Wait for CI and review on PR `#59`.
 - Next:
   - Decide whether to add matrix-wrapper scripts for the metadata-lock rehearsal in a follow-up, or keep it as a focused operator script only.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether MariaDB plugin-assisted deep lock visibility should be automated later, or left as manual operator guidance.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `scripts/run-metadata-lock-scenario.sh`, `scripts/README.md`, `docs/operators-guide.md`, `docs/known-problems.md`.
-  - Commands: `go test ./internal/replicate/binlog`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84`, `./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11`.
+  - IDs: branch `codex/feat/metadata-lock-phase57`, commit `9a5aa6e`, PR `#59`.
+  - Commands: `go test ./internal/replicate/binlog`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84`, `./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11`, `gh pr create`.
