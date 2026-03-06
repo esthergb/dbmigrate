@@ -1,18 +1,18 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 58 (`backup_restore_validation_gaps`) on a dedicated branch.
-  - Success means: the repo gains a clear restore-rehearsal path that distinguishes backup completion, backup validation, and restore usability, with docs and runnable local evidence where practical.
+  - Implement Phase 59 (`session_timezone_and_now_function_behavior`) on a dedicated branch.
+  - Success means: the repo gains explicit local evidence and operator guidance for time-zone-sensitive behavior, especially `NOW()`, `TIMESTAMP`, `DATETIME`, and session/server time-zone drift.
 - Constraints/Assumptions:
   - Docs in English.
-  - Keep the phase focused: backup/restore validation gaps only, not a general backup subsystem.
+  - Keep the phase focused: session time zone and time-function behavior only, not a general temporal compatibility subsystem.
   - Do not commit until the user asks.
 - Key decisions:
-  - Start Phase 58 with the smallest coherent slice: restore-rehearsal evidence and operator guidance, not full physical-backup automation.
+  - Start Phase 59 with the smallest coherent slice: runnable local evidence plus operator guidance, not speculative precheck automation.
   - Reuse the existing script/report/doc workflow where possible.
 - State:
-  - Branch: `codex/feat/backup-restore-phase58`, pushed to `origin` on 2026-03-06.
-  - Phase 58 branch is published and under review.
+  - Branch: `codex/feat/timezone-phase59`, pushed to `origin` on 2026-03-06.
+  - Phase 59 branch is published and under review.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -29,13 +29,19 @@ Last updated: 2026-03-06
   - Updated `docs/risk-checklist.md` so rollback gates now require restore rehearsal evidence rather than backup-job success alone.
   - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
   - Committed the Phase 58 batch as `d3a751e` (`feat: add backup restore rehearsal guidance`) and refinement commit `f5df019` (`chore: record backup rehearsal tool versions`), then opened PR `#60`.
+  - PR `#60` merged into `main`.
+  - Created branch `codex/feat/timezone-phase59` for Phase 59.
+  - Added `scripts/run-timezone-rehearsal.sh` to demonstrate session time-zone drift across `NOW()`, `TIMESTAMP`, and `DATETIME`.
+  - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 59 time-zone rehearsal guidance.
+  - Verified `scripts/run-timezone-rehearsal.sh` locally on `mysql84` and `mariadb11`; both reported `timestamp_display_changes=true`, `datetime_static_under_session_change=true`, and `explicit_now_drift_visible=true` with `system_time_zone=UTC`, `global_time_zone=SYSTEM`, and `session_time_zone_default=SYSTEM`.
+  - Committed the Phase 59 batch as `b00248a` (`feat: add timezone rehearsal guidance`) and opened PR `#61`.
 - Now:
-  - Wait for CI and review on PR `#60`.
+  - Wait for CI and review on PR `#61`.
 - Next:
-  - Keep Phase 58 focused on restore-rehearsal assurance; start Phase 59 only after PR `#60` lands.
+  - Keep Phase 59 focused on time-zone rehearsal evidence unless review reveals a concrete gap.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether physical-backup tooling should stay documentation-only in this phase, or whether the local phase slice should include a tool-agnostic restore rehearsal helper.
+  - UNCONFIRMED: whether the first Phase 59 slice should remain a docs-plus-script rehearsal, or whether it should also introduce a plan-time checklist artifact immediately.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`, `scripts/run-backup-restore-rehearsal.sh`, `docker-compose.yml`.
-  - IDs: merged PR `#59`, branch `codex/feat/backup-restore-phase58`, commits `d3a751e` and `f5df019`, PR `#60`.
-  - Commands: `git checkout -b codex/feat/backup-restore-phase58`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84`, `./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11`, `gh pr create`.
+  - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `scripts/README.md`, `scripts/run-timezone-rehearsal.sh`, `docker-compose.yml`.
+  - IDs: merged PR `#59`, merged PR `#60`, branch `codex/feat/timezone-phase59`, commit `b00248a`, PR `#61`.
+  - Commands: `git checkout -b codex/feat/timezone-phase59`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84`, `./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11`, `gh pr create`.

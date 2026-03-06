@@ -252,6 +252,25 @@ Observed failure patterns:
 - Runbooks now distinguish backup completion, artifact validation, and restore usability.
 - Physical backup tooling remains documented as a separate compatibility class rather than being conflated with logical migration success.
 
+### 7.3 Session time zone changes make `TIMESTAMP` and `DATETIME` diverge operationally
+
+Evidence:
+
+- MySQL documents that time-zone handling affects temporal functions and `TIMESTAMP` behavior.
+  - https://dev.mysql.com/doc/mysql-g11n-excerpt/8.0/en/time-zone-support.html
+- MySQL replication docs call out time-zone-sensitive behavior explicitly.
+  - https://dev.mysql.com/doc/refman/8.2/en/replication-features-timezone.html
+
+Observed failure patterns:
+
+- Teams compare rows across sessions or hosts and assume a shifted `TIMESTAMP` means corruption.
+- Applications mix `TIMESTAMP` and `DATETIME` columns, then discover after cutover that local-time rendering and stored wall-clock values behave differently.
+
+`dbmigrate` safeguards:
+
+- Operator rehearsal script: `scripts/run-timezone-rehearsal.sh`.
+- Runbooks now require explicit review of `system_time_zone`, session `time_zone`, and `TIMESTAMP` versus `DATETIME` semantics before compatibility claims.
+
 ---
 
 ## Additional high-impact checks to bake into preflight
