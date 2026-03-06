@@ -334,6 +334,13 @@ func TestRunCheckpointAdvancesOnlyToAppliedEnd(t *testing.T) {
 			File:          "mysql-bin.000020",
 			Pos:           360,
 			AppliedEvents: 7,
+			Shape: state.ReplicationTransactionShape{
+				TransactionsSeen:     2,
+				TransactionsApplied:  1,
+				MaxTransactionEvents: 7,
+				RiskLevel:            "high",
+				RiskSignals:          []string{"large_transaction_dominates"},
+			},
 		}, nil
 	}
 
@@ -359,6 +366,9 @@ func TestRunCheckpointAdvancesOnlyToAppliedEnd(t *testing.T) {
 	if summary.SourceEndPos != 500 || summary.EndPos != 360 || summary.AppliedEvents != 7 {
 		t.Fatalf("unexpected summary positions/events: source_end=%d applied_end=%d applied_events=%d", summary.SourceEndPos, summary.EndPos, summary.AppliedEvents)
 	}
+	if summary.Shape.MaxTransactionEvents != 7 || summary.Shape.RiskLevel != "high" {
+		t.Fatalf("unexpected shape summary: %+v", summary.Shape)
+	}
 
 	cp, err := state.LoadReplicationCheckpoint(checkpointFile)
 	if err != nil {
@@ -366,6 +376,9 @@ func TestRunCheckpointAdvancesOnlyToAppliedEnd(t *testing.T) {
 	}
 	if cp.BinlogPos != 360 {
 		t.Fatalf("unexpected checkpoint position: %d", cp.BinlogPos)
+	}
+	if cp.Shape.MaxTransactionEvents != 7 {
+		t.Fatalf("unexpected checkpoint shape: %+v", cp.Shape)
 	}
 }
 
@@ -436,6 +449,9 @@ func TestRunWritesConflictReportOnApplyFailure(t *testing.T) {
 	}
 	if report.SourceEndPos != 460 {
 		t.Fatalf("unexpected source end pos: %d", report.SourceEndPos)
+	}
+	if report.Shape.RiskLevel != "" {
+		t.Fatalf("did not expect shape on stubbed failure, got %+v", report.Shape)
 	}
 }
 
@@ -685,6 +701,15 @@ func TestApplyWindowTransactionalRespectsMaxEventsLimit(t *testing.T) {
 	if beginCalls != 1 {
 		t.Fatalf("expected single transaction to execute, got begin calls=%d", beginCalls)
 	}
+	if result.Shape.TransactionsSeen != 2 || result.Shape.TransactionsApplied != 1 {
+		t.Fatalf("unexpected shape counts: %+v", result.Shape)
+	}
+	if result.Shape.RiskLevel != "medium" && result.Shape.RiskLevel != "high" {
+		t.Fatalf("expected non-empty risk level, got %+v", result.Shape)
+	}
+	if !strings.Contains(strings.Join(result.Shape.RiskSignals, ","), "window_cut_before_next_transaction") {
+		t.Fatalf("expected window cut signal, got %+v", result.Shape)
+	}
 }
 
 func TestApplyWindowTransactionalFailsWhenMaxEventsBelowFirstTransaction(t *testing.T) {
@@ -719,6 +744,16 @@ func TestApplyWindowTransactionalFailsWhenMaxEventsBelowFirstTransaction(t *test
 	}
 	if !strings.Contains(err.Error(), "exceeds --max-events=1") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	var failure *applyFailure
+	if !errors.As(err, &failure) || failure == nil {
+		t.Fatalf("expected applyFailure, got %T", err)
+	}
+	if failure.Shape.MaxTransactionEvents != 2 {
+		t.Fatalf("unexpected shape on max-events failure: %+v", failure.Shape)
+	}
+	if !strings.Contains(strings.Join(failure.Shape.RiskSignals, ","), "transaction_exceeds_max_events_limit") {
+		t.Fatalf("expected transaction_exceeds_max_events_limit signal, got %+v", failure.Shape)
 	}
 }
 

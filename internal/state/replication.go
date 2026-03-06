@@ -10,11 +10,29 @@ import (
 
 // ReplicationCheckpoint stores incremental replication progress.
 type ReplicationCheckpoint struct {
-	Version    int       `json:"version"`
-	BinlogFile string    `json:"binlog_file"`
-	BinlogPos  uint32    `json:"binlog_pos"`
-	ApplyDDL   string    `json:"apply_ddl"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Version    int                         `json:"version"`
+	BinlogFile string                      `json:"binlog_file"`
+	BinlogPos  uint32                      `json:"binlog_pos"`
+	ApplyDDL   string                      `json:"apply_ddl"`
+	Shape      ReplicationTransactionShape `json:"shape,omitempty"`
+	UpdatedAt  time.Time                   `json:"updated_at"`
+}
+
+// ReplicationTransactionShape captures transaction-shape and serialization risk signals
+// observed while processing a replication window.
+type ReplicationTransactionShape struct {
+	TransactionsSeen          uint64   `json:"transactions_seen,omitempty"`
+	TransactionsApplied       uint64   `json:"transactions_applied,omitempty"`
+	EventsSeen                uint64   `json:"events_seen,omitempty"`
+	AppliedEvents             uint64   `json:"applied_events,omitempty"`
+	MaxTransactionEvents      uint64   `json:"max_transaction_events,omitempty"`
+	AvgTransactionEvents      uint64   `json:"avg_transaction_events,omitempty"`
+	DDLTransactions           uint64   `json:"ddl_transactions,omitempty"`
+	FKConstrainedTransactions uint64   `json:"fk_constrained_transactions,omitempty"`
+	KeylessOperations         uint64   `json:"keyless_operations,omitempty"`
+	KeylessTables             []string `json:"keyless_tables,omitempty"`
+	RiskLevel                 string   `json:"risk_level,omitempty"`
+	RiskSignals               []string `json:"risk_signals,omitempty"`
 }
 
 // NewReplicationCheckpoint creates an empty checkpoint value.

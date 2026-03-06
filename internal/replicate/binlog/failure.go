@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
+
+	"github.com/esthergb/dbmigrate/internal/state"
 )
 
 type applyFailure struct {
@@ -25,6 +27,7 @@ type applyFailure struct {
 	Cause         error
 	AppliedFile   string
 	AppliedPos    uint32
+	Shape         state.ReplicationTransactionShape
 }
 
 func (f *applyFailure) Error() string {
@@ -79,7 +82,7 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 			failure.Remediation = "resolve duplicate key conflict or rerun with --conflict-policy=source-wins or --conflict-policy=dest-wins"
 		case 1451, 1452:
 			failure.FailureType = "conflict_foreign_key"
-			failure.Remediation = "verify parent/child row ordering and schema constraints, then rerun replicate"
+			failure.Remediation = "verify parent/child row ordering, transaction chunking, and schema constraints, then rerun replicate"
 		case 1054, 1136, 1146, 1051:
 			failure.FailureType = "schema_drift"
 			failure.Remediation = "run migrate --schema-only to align schema, then rerun replicate"
@@ -91,7 +94,7 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 			failure.Remediation = "inspect source/destination column types and sql_mode, then rerun after remediation"
 		case 1213, 1205:
 			failure.FailureType = "retryable_transaction_error"
-			failure.Remediation = "retry replicate; if recurring, reduce batch size or lock contention on destination"
+			failure.Remediation = "retry replicate; if recurring, reduce transaction size, batch size, or lock contention on destination"
 			if looksLikeMetadataLockFailure(mysqlErr.Message, event) {
 				failure.FailureType = "metadata_lock_timeout"
 				failure.Remediation = "inspect SHOW FULL PROCESSLIST and performance_schema.metadata_locks (or MariaDB metadata_lock_info), identify the blocking session, abort the waiting DDL if blast radius is growing, then rerun during a drained window"

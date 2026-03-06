@@ -52,11 +52,12 @@ type dataBaselineCheckpointSummary struct {
 }
 
 type replicationCheckpointSummary struct {
-	Path       string    `json:"path"`
-	BinlogFile string    `json:"binlog_file"`
-	BinlogPos  uint32    `json:"binlog_pos"`
-	ApplyDDL   string    `json:"apply_ddl"`
-	UpdatedAt  time.Time `json:"updated_at,omitempty"`
+	Path       string                            `json:"path"`
+	BinlogFile string                            `json:"binlog_file"`
+	BinlogPos  uint32                            `json:"binlog_pos"`
+	ApplyDDL   string                            `json:"apply_ddl"`
+	Shape      state.ReplicationTransactionShape `json:"shape,omitempty"`
+	UpdatedAt  time.Time                         `json:"updated_at,omitempty"`
 }
 
 type reportOptions struct {
@@ -166,8 +167,10 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 			BinlogFile: cp.BinlogFile,
 			BinlogPos:  cp.BinlogPos,
 			ApplyDDL:   cp.ApplyDDL,
+			Shape:      cp.Shape,
 			UpdatedAt:  cp.UpdatedAt,
 		}
+		proposals = append(proposals, replicationShapeProposals(cp.Shape)...)
 	}
 
 	conflictReportPath := filepath.Join(stateDir, "replication-conflict-report.json")
@@ -317,11 +320,16 @@ func writeReportText(out io.Writer, payload reportResult) error {
 		cp := payload.Summary.ReplicationCheckpoint
 		if _, err := fmt.Fprintf(
 			out,
-			"[report] replication_checkpoint path=%s binlog=%s:%d apply_ddl=%s\n",
+			"[report] replication_checkpoint path=%s binlog=%s:%d apply_ddl=%s tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s)\n",
 			cp.Path,
 			cp.BinlogFile,
 			cp.BinlogPos,
 			cp.ApplyDDL,
+			cp.Shape.TransactionsSeen,
+			cp.Shape.TransactionsApplied,
+			cp.Shape.MaxTransactionEvents,
+			cp.Shape.RiskLevel,
+			strings.Join(cp.Shape.RiskSignals, ","),
 		); err != nil {
 			return err
 		}
@@ -349,4 +357,41 @@ func writeReportText(out io.Writer, payload reportResult) error {
 		}
 	}
 	return nil
+}
+
+func replicationShapeProposals(shape state.ReplicationTransactionShape) []string {
+	if len(shape.RiskSignals) == 0 {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	proposals := make([]string, 0, len(shape.RiskSignals))
+	add := func(text string) {
+		if strings.TrimSpace(text) == "" {
+			return
+		}
+		if _, ok := seen[text]; ok {
+			return
+		}
+		seen[text] = struct{}{}
+		proposals = append(proposals, text)
+	}
+
+	for _, signal := range shape.RiskSignals {
+		switch signal {
+		case "large_transaction_dominates", "single_transaction_window":
+			add("reduce source transaction size or chunk bulk changes; worker count will not split one huge commit.")
+		case "transaction_exceeds_max_events_limit":
+			add("increase --max-events or, preferably, reduce source transaction size so replication windows can advance cleanly.")
+		case "ddl_serializes_apply":
+			add("keep replication DDL outside hot catch-up windows or apply schema changes separately with migrate --schema-only.")
+		case "foreign_key_serialization_pressure":
+			add("review FK-heavy workloads and keep commit batches smaller so replica-style serialization pressure stays bounded.")
+		case "keyless_row_matching_pressure":
+			add("add stable primary keys where possible; fallback row matching increases apply cost and drift risk.")
+		case "window_cut_before_next_transaction":
+			add("expect checkpoint progress only at transaction boundaries; if windows look stalled, inspect transaction shape before tuning worker counts.")
+		}
+	}
+	return proposals
 }

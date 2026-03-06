@@ -91,6 +91,7 @@ Reference:
 - [ ] Set lag and rate-control bounds.
 - [ ] Validate retry/backoff and timeout policy.
 - [ ] Schedule around long-running DDL windows.
+- [ ] Review transaction shape, not just worker count: large commits, FK-heavy workloads, and keyless row matching can dominate replication lag.
 
 Reference:
 

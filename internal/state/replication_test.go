@@ -14,6 +14,12 @@ func TestReplicationCheckpointRoundTrip(t *testing.T) {
 	cp.BinlogFile = "mysql-bin.000001"
 	cp.BinlogPos = 1234
 	cp.ApplyDDL = "warn"
+	cp.Shape = ReplicationTransactionShape{
+		TransactionsSeen:     3,
+		MaxTransactionEvents: 120,
+		RiskLevel:            "high",
+		RiskSignals:          []string{"large_transaction_dominates"},
+	}
 	cp.UpdatedAt = time.Now().UTC()
 
 	if err := SaveReplicationCheckpoint(path, cp); err != nil {
@@ -32,6 +38,12 @@ func TestReplicationCheckpointRoundTrip(t *testing.T) {
 	}
 	if loaded.ApplyDDL != cp.ApplyDDL {
 		t.Fatalf("unexpected apply-ddl: got=%q want=%q", loaded.ApplyDDL, cp.ApplyDDL)
+	}
+	if loaded.Shape.MaxTransactionEvents != cp.Shape.MaxTransactionEvents {
+		t.Fatalf("unexpected shape max transaction events: got=%d want=%d", loaded.Shape.MaxTransactionEvents, cp.Shape.MaxTransactionEvents)
+	}
+	if loaded.Shape.RiskLevel != cp.Shape.RiskLevel {
+		t.Fatalf("unexpected shape risk level: got=%q want=%q", loaded.Shape.RiskLevel, cp.Shape.RiskLevel)
 	}
 }
 
