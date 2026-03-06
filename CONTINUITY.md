@@ -8,7 +8,7 @@ Last updated: 2026-03-06
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
   - A new branch is authorized because the user explicitly requested the next feature phase.
-  - Do not commit, push, or open a PR until the user asks.
+  - Commit, push, and PR creation are authorized for Phase 62.
 - Key decisions:
   - Phase 61 shipped transaction-shape telemetry and rehearsal evidence instead of pretending to control replica worker settings directly.
   - The research queue is closed; execution continues through implementation phases and test/rehearsal coverage.
@@ -18,8 +18,9 @@ Last updated: 2026-03-06
 - State:
   - Current branch: `codex/feat/invisible-gipk-phase62`.
   - Branch was created from updated `main` after merged PR `#63`.
-  - Phase 62 implementation is complete locally and uncommitted.
-  - Working tree contains Phase 62 code, fixture, rehearsal, doc, and ledger updates.
+  - Commit `c634e61` contains the Phase 62 implementation batch.
+  - Branch is pushed to `origin/codex/feat/invisible-gipk-phase62`.
+  - PR `#64` is open: `feat: add invisible schema downgrade precheck`.
 - Done:
   - Phases 57-61 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -61,13 +62,16 @@ Last updated: 2026-03-06
     - `mysql84 -> mysql80`: `plan_exit_code=0`, invisible columns/indexes stayed hidden, included dump preserved GIPK as invisible, and skipped dump removed GIPK entirely.
     - `mysql84 -> mariadb10`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
     - `mysql84 -> mariadb11`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
+  - Committed Phase 62 implementation as `c634e61` (`feat: add invisible schema downgrade precheck`).
+  - Pushed branch `codex/feat/invisible-gipk-phase62` to origin.
+  - Opened PR `#64` (`feat: add invisible schema downgrade precheck`).
 - Now:
-  - Await the user's instruction to commit/push/open the Phase 62 PR.
+  - Monitor PR `#64` for CI and review feedback.
 - Next:
-  - Commit the branch and open the Phase 62 PR when the user asks.
+  - Fix CI or review feedback on the Phase 62 PR if needed.
 - Open questions (UNCONFIRMED if needed):
   - None blocking.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `internal/commands/invisible_gipk_precheck.go`, `internal/commands/invisible_gipk_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `datasets/phase62_mysql_hidden_schema.sql`, `scripts/run-invisible-gipk-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/migration-replication-conflict-history.md`, `scripts/README.md`, `datasets/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`; branch `codex/feat/invisible-gipk-phase62`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, open PR `#64`; branch `codex/feat/invisible-gipk-phase62`; commit `c634e61`.
   - Commands: `git checkout -b codex/feat/invisible-gipk-phase62`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `docker compose -f docker-compose.yml up -d mysql80 mysql84 mariadb10 mariadb11`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`.
