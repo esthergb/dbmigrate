@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/esthergb/dbmigrate/internal/config"
@@ -124,6 +125,9 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			if err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
+			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, err)
+			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
@@ -147,6 +151,9 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			})
 			if err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
+			}
+			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, err)
@@ -172,6 +179,9 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			if err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
 			}
+			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, err)
+			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
@@ -195,6 +205,9 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 			})
 			if err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
+			}
+			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, err)
@@ -316,7 +329,7 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 
 	if _, err := fmt.Fprintf(
 		out,
-		"[verify] level=%s data_mode=%s status=%s databases=%d compared=%d missing_in_destination=%d missing_in_source=%d count_mismatches=%d hash_mismatches=%d\n",
+		"[verify] level=%s data_mode=%s status=%s databases=%d compared=%d missing_in_destination=%d missing_in_source=%d count_mismatches=%d hash_mismatches=%d noise_risk_mismatches=%d risk_tables=%d canonical(row_order_independent=%v session_time_zone=%s json=%v sample_full_scan=%v)\n",
 		level,
 		dataMode,
 		status,
@@ -326,6 +339,12 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 		summary.MissingInSource,
 		summary.CountMismatches,
 		summary.HashMismatches,
+		summary.NoiseRiskMismatches,
+		summary.RepresentationRiskTables,
+		summary.Canonicalization.RowOrderIndependent,
+		summary.Canonicalization.SessionTimeZone,
+		summary.Canonicalization.JSONNormalized,
+		summary.Canonicalization.SampleFullScan,
 	); err != nil {
 		return err
 	}
@@ -341,6 +360,26 @@ func writeDataVerifyResult(out io.Writer, cfg config.RuntimeConfig, level string
 			diff.DestCount,
 			diff.SourceHash,
 			diff.DestHash,
+		); err != nil {
+			return err
+		}
+		if diff.NoiseRisk != "" {
+			if _, err := fmt.Fprintf(out, "[verify] diff_note database=%s table=%s noise_risk=%s notes=%s\n", diff.Database, diff.Table, diff.NoiseRisk, strings.Join(diff.Notes, " | ")); err != nil {
+				return err
+			}
+		}
+	}
+	for _, risk := range summary.TableRisks {
+		if _, err := fmt.Fprintf(
+			out,
+			"[verify] table_risk database=%s table=%s approx_numeric=%d temporal=%d json=%d collation_sensitive=%d notes=%s\n",
+			risk.Database,
+			risk.Table,
+			risk.ApproximateNumericColumns,
+			risk.TemporalColumns,
+			risk.JSONColumns,
+			risk.CollationSensitiveColumns,
+			strings.Join(risk.Notes, " | "),
 		); err != nil {
 			return err
 		}

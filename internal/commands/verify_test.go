@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -172,11 +173,24 @@ func TestWriteDataVerifyResultJSON(t *testing.T) {
 func TestWriteDataVerifyResultTextHashDiff(t *testing.T) {
 	var out bytes.Buffer
 	summary := dataVerify.Summary{
-		Databases:            1,
-		TablesCompared:       1,
-		MissingInDestination: 0,
-		MissingInSource:      0,
-		HashMismatches:       1,
+		Databases:                1,
+		TablesCompared:           1,
+		MissingInDestination:     0,
+		MissingInSource:          0,
+		HashMismatches:           1,
+		NoiseRiskMismatches:      1,
+		RepresentationRiskTables: 1,
+		Canonicalization: dataVerify.CanonicalizationSummary{
+			RowOrderIndependent: true,
+			SessionTimeZone:     "+00:00",
+			JSONNormalized:      true,
+		},
+		TableRisks: []dataVerify.TableRisk{{
+			Database:                  "app",
+			Table:                     "users",
+			CollationSensitiveColumns: 1,
+			Notes:                     []string{"Text ordering note"},
+		}},
 		Diffs: []dataVerify.Diff{
 			{
 				Kind:       "table_hash_mismatch",
@@ -184,6 +198,8 @@ func TestWriteDataVerifyResultTextHashDiff(t *testing.T) {
 				Table:      "users",
 				SourceHash: "abc",
 				DestHash:   "def",
+				NoiseRisk:  "representation_sensitive",
+				Notes:      []string{"Temporal note"},
 			},
 		},
 	}
@@ -197,5 +213,36 @@ func TestWriteDataVerifyResultTextHashDiff(t *testing.T) {
 	}
 	if !strings.Contains(text, "source_hash=abc") {
 		t.Fatalf("expected source hash in output, got %q", text)
+	}
+	if !strings.Contains(text, "noise_risk_mismatches=1") {
+		t.Fatalf("expected noise risk counter in output, got %q", text)
+	}
+	if !strings.Contains(text, "row_order_independent=true") {
+		t.Fatalf("expected canonicalization details in output, got %q", text)
+	}
+	if !strings.Contains(text, "diff_note") || !strings.Contains(text, "table_risk") {
+		t.Fatalf("expected note lines in output, got %q", text)
+	}
+}
+
+func TestVerifyDataArtifactRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	summary := dataVerify.Summary{
+		TablesCompared: 3,
+		HashMismatches: 1,
+	}
+	if err := persistVerifyDataArtifact(tmp, "hash", summary); err != nil {
+		t.Fatalf("persist verify artifact: %v", err)
+	}
+	path := verifyDataArtifactPath(tmp)
+	if path != filepath.Join(tmp, "verify-data-report.json") {
+		t.Fatalf("unexpected artifact path: %q", path)
+	}
+	artifact, err := loadVerifyDataArtifact(tmp)
+	if err != nil {
+		t.Fatalf("load verify artifact: %v", err)
+	}
+	if artifact.DataMode != "hash" || artifact.Summary.TablesCompared != 3 {
+		t.Fatalf("unexpected artifact: %#v", artifact)
 	}
 }

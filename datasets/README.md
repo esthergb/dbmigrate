@@ -12,6 +12,8 @@ This directory contains SQL datasets used by the migration matrix test scripts.
 6. `phase62_mysql_hidden_schema.sql` - focused MySQL fixture for invisible columns, invisible indexes, and generated invisible primary keys.
 7. `phase63_mysql0900_collation.sql` - focused MySQL fixture for `utf8mb4_0900_ai_ci`.
 8. `phase63_mariadb_uca1400_collation.sql` - focused MariaDB fixture for `utf8mb4_uca1400_ai_ci`.
+9. `phase64_verify_source_mysql84.sql` - focused MySQL 8.4 fixture for verify canonicalization noise sources.
+10. `phase64_verify_dest_mariadb12.sql` - focused MariaDB 12 fixture with semantically equivalent rows but different representation shape.
 
 ## Dataset Design
 
@@ -29,6 +31,8 @@ Focused fixtures:
 - It requires a MySQL source because it enables `sql_generate_invisible_primary_key`.
 - `phase63_mysql0900_collation.sql` is intentionally narrow and should be used by the dedicated Phase 63 collation rehearsal.
 - `phase63_mariadb_uca1400_collation.sql` is intentionally narrow and should be used by the dedicated Phase 63 collation rehearsal on MariaDB 12+ sources.
+- `phase64_verify_source_mysql84.sql` and `phase64_verify_dest_mariadb12.sql` are intentionally narrow and should be used by the dedicated Phase 64 verification canonicalization rehearsal.
+- The Phase 64 pair intentionally includes row-order changes, JSON key-order changes, temporal rendering risk, and approximate numerics while keeping logical row content equivalent.
 
 ## Usage in Scripts
 

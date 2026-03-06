@@ -694,6 +694,19 @@ This document converts the local simulation roadmap in [migration-replication-co
 - Exit criteria:
   - collation compatibility is surfaced as a first-class planning result with explicit server-versus-client risk framing instead of a generic charset warning
 
+## Phase 64: Verification canonicalization and false-positive control track
+
+- Scope:
+  - `verification_false_positives`
+  - `checksum_hash_mismatch_row_canonicalization`
+  - data-type edge cases where representation drift looks like data drift
+- Deliverables:
+  - verify/report behavior that distinguishes real row drift from canonicalization-sensitive differences
+  - fixtures and rehearsal coverage for ordering, time-zone, JSON, floating-point, and collation-sensitive comparisons
+  - operator guidance for when to trust `count`, `hash`, `sample`, and `full-hash` results
+- Exit criteria:
+  - verification output is explicit about canonicalization assumptions and reduces high-noise false positives in reproducible scenarios
+
 ## Follow-on cloud track
 
 - Keep these out of the local PR sequence unless local approximations become genuinely useful:
