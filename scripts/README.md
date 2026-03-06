@@ -13,6 +13,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-migration-test.sh`: shared runner with robust orchestration.
 - `run-compat-probes.sh`: compatibility probes executed on source/destination services before migration.
 - `run-backup-restore-rehearsal.sh`: logical backup/restore rehearsal that distinguishes backup completion, validation, and restore usability.
+- `run-timezone-rehearsal.sh`: local proof of session time-zone drift for `NOW()`, `TIMESTAMP`, and `DATETIME`.
 - `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
@@ -81,6 +82,18 @@ docker compose up -d mysql84
 ```bash
 docker compose up -d mariadb11
 ./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11
+```
+
+Run the Phase 59 time-zone rehearsal against a single service:
+
+```bash
+docker compose up -d mysql84
+./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84
+```
+
+```bash
+docker compose up -d mariadb11
+./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11
 ```
 
 Run all scenarios sequentially:
@@ -158,3 +171,20 @@ Interpretation:
 Phase boundary:
 
 - This script is intentionally logical and tool-native. It does not claim to validate physical backup portability across version lines.
+
+## Time-zone rehearsal artifacts
+
+`run-timezone-rehearsal.sh` is the focused Phase 59 rehearsal for session time-zone drift and `NOW()` semantics.
+
+Artifacts written to the chosen output directory:
+
+- `server-variables.txt`: `system_time_zone`, global `time_zone`, and default session `time_zone`
+- `query-utc.tsv`: same rows observed under `+00:00`
+- `query-alt.tsv`: same rows observed under `+02:00`
+- `summary.json`: machine-readable statement of whether `TIMESTAMP` display changed while `DATETIME` stayed stable
+
+Interpretation:
+
+- `timestamp_display_changes=true` means the same stored `TIMESTAMP` rendered differently after a session time-zone change.
+- `datetime_static_under_session_change=true` means the `DATETIME` value did not shift when the session time zone changed.
+- `explicit_now_drift_visible=true` means `NOW()`-driven inserts exposed the expected `TIMESTAMP` versus `DATETIME` semantic split.

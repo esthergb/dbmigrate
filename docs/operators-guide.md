@@ -182,6 +182,30 @@ Operational rule:
 - A release-grade rollback claim requires `restore_usable=true`, not just backup completion.
 - Physical backup workflows remain a separate risk class and need their own vendor-supported prepare and restore procedures.
 
+## Time-zone and `NOW()` rehearsal
+
+Do not assume matching SQL text means matching temporal behavior.
+
+Recommended rehearsal:
+- Start one service with `docker compose up -d <service>`.
+- Run:
+  - `./scripts/run-timezone-rehearsal.sh mysql84 ./state/timezone/mysql84`
+  - or `./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11`
+
+What this checks:
+- whether `TIMESTAMP` renders differently under different session `time_zone` values
+- whether `DATETIME` stays stable under the same session changes
+- whether `NOW()`-driven inserts expose the semantic split clearly enough for operator review
+
+What to inspect:
+- `server-variables.txt`: baseline `system_time_zone`, global `time_zone`, and default session `time_zone`
+- `query-utc.tsv` and `query-alt.tsv`: the same rows rendered under different session offsets
+- `summary.json`: compact result for automation and runbooks
+
+Operational rule:
+- If the app or cutover path depends on local-time rendering, review `TIMESTAMP` and `DATETIME` usage explicitly before claiming compatibility.
+- Prefer UTC discipline and explicit session initialization where possible.
+
 ## Temporary CI operations note (review later)
 
 - If GitHub automatic workflow triggers are degraded, dispatch CI manually for a branch:
