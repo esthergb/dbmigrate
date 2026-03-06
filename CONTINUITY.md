@@ -11,8 +11,8 @@ Last updated: 2026-03-06
   - Start Phase 58 with the smallest coherent slice: restore-rehearsal evidence and operator guidance, not full physical-backup automation.
   - Reuse the existing script/report/doc workflow where possible.
 - State:
-  - Branch: `codex/feat/backup-restore-phase58`.
-  - Working tree contains the first uncommitted Phase 58 implementation slice plus ledger updates.
+  - Branch: `codex/feat/backup-restore-phase58`, pushed to `origin` on 2026-03-06.
+  - Phase 58 branch is published and under review.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -28,13 +28,14 @@ Last updated: 2026-03-06
   - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 58 backup/restore rehearsal guidance and the physical-backup boundary note.
   - Updated `docs/risk-checklist.md` so rollback gates now require restore rehearsal evidence rather than backup-job success alone.
   - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
+  - Committed the Phase 58 batch as `d3a751e` (`feat: add backup restore rehearsal guidance`) and refinement commit `f5df019` (`chore: record backup rehearsal tool versions`), then opened PR `#60`.
 - Now:
-  - Commit the current Phase 58 slice.
+  - Wait for CI and review on PR `#60`.
 - Next:
-  - Push and open the Phase 58 PR when the user asks.
+  - Keep Phase 58 focused on restore-rehearsal assurance; start Phase 59 only after PR `#60` lands.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether physical-backup tooling should stay documentation-only in this phase, or whether the local phase slice should include a tool-agnostic restore rehearsal helper.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `docs/matrix-pr-plan.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`, `scripts/run-backup-restore-rehearsal.sh`, `docker-compose.yml`.
-  - IDs: merged PR `#59`, commits `9a5aa6e` and `e4b5845`.
-  - Commands: `git checkout -b codex/feat/backup-restore-phase58`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84`, `./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11`.
+  - IDs: merged PR `#59`, branch `codex/feat/backup-restore-phase58`, commits `d3a751e` and `f5df019`, PR `#60`.
+  - Commands: `git checkout -b codex/feat/backup-restore-phase58`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84`, `./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11`, `gh pr create`.
