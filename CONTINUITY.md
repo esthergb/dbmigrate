@@ -21,6 +21,7 @@ Last updated: 2026-03-06
   - Commit `c634e61` contains the Phase 62 implementation batch.
   - Branch is pushed to `origin/codex/feat/invisible-gipk-phase62`.
   - PR `#64` is open: `feat: add invisible schema downgrade precheck`.
+  - CI failure root cause was a dead unused helper (`sortInvisibleGIPKReport`) flagged by `golangci-lint`.
 - Done:
   - Phases 57-61 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -65,8 +66,11 @@ Last updated: 2026-03-06
   - Committed Phase 62 implementation as `c634e61` (`feat: add invisible schema downgrade precheck`).
   - Pushed branch `codex/feat/invisible-gipk-phase62` to origin.
   - Opened PR `#64` (`feat: add invisible schema downgrade precheck`).
+  - Verified CI fix locally with:
+    - `go test ./internal/commands`
+    - `golangci-lint run ./...`
 - Now:
-  - Monitor PR `#64` for CI and review feedback.
+  - Push the lint fix to PR `#64` and wait for CI to rerun.
 - Next:
   - Fix CI or review feedback on the Phase 62 PR if needed.
 - Open questions (UNCONFIRMED if needed):

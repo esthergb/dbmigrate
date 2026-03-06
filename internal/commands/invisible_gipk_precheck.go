@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -485,34 +484,4 @@ func writeInvisibleGIPKPrecheckReport(out io.Writer, cfg config.RuntimeConfig, r
 		}
 	}
 	return nil
-}
-
-func sortInvisibleGIPKReport(report *invisibleGIPKPrecheckReport) {
-	sort.Slice(report.InvisibleColumns, func(i, j int) bool {
-		if report.InvisibleColumns[i].Database != report.InvisibleColumns[j].Database {
-			return report.InvisibleColumns[i].Database < report.InvisibleColumns[j].Database
-		}
-		if report.InvisibleColumns[i].Table != report.InvisibleColumns[j].Table {
-			return report.InvisibleColumns[i].Table < report.InvisibleColumns[j].Table
-		}
-		return report.InvisibleColumns[i].Column < report.InvisibleColumns[j].Column
-	})
-	sort.Slice(report.InvisibleIndexes, func(i, j int) bool {
-		if report.InvisibleIndexes[i].Database != report.InvisibleIndexes[j].Database {
-			return report.InvisibleIndexes[i].Database < report.InvisibleIndexes[j].Database
-		}
-		if report.InvisibleIndexes[i].Table != report.InvisibleIndexes[j].Table {
-			return report.InvisibleIndexes[i].Table < report.InvisibleIndexes[j].Table
-		}
-		return report.InvisibleIndexes[i].Index < report.InvisibleIndexes[j].Index
-	})
-	sort.Slice(report.GIPKTables, func(i, j int) bool {
-		if report.GIPKTables[i].Database != report.GIPKTables[j].Database {
-			return report.GIPKTables[i].Database < report.GIPKTables[j].Database
-		}
-		if report.GIPKTables[i].Table != report.GIPKTables[j].Table {
-			return report.GIPKTables[i].Table < report.GIPKTables[j].Table
-		}
-		return report.GIPKTables[i].Column < report.GIPKTables[j].Column
-	})
 }
