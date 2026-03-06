@@ -13,7 +13,7 @@ Last updated: 2026-03-06
   - Create a dedicated living-history document under `docs/`.
   - Structure each conflict as an operator playbook: why it fails, affected paths, simulation, detection, mitigation, and source links.
 - State:
-  - Branch: `main`, synced with `origin/main` on 2026-03-06.
+  - Branch: `codex/chore/research-closeout-phase61`, pushed to `origin` on 2026-03-06.
   - No code changes permitted for this task.
 - Done:
   - Reviewed existing research docs: `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`.
@@ -37,12 +37,14 @@ Last updated: 2026-03-06
   - Executed the next live queue on GIPK runtime behavior, stored-object partial-scope interactions, chunking/autocommit semantics, monitoring-agent/exporter compatibility, and non-InnoDB engine behavior; extended the PR plan through Phase 51.
   - Executed the final queued topics on metadata-lock observability runbooks, backup/restore validation gaps, session time-zone and `NOW()` behavior drift, plugin lifecycle and disabled-feature flags, and replication parallelism versus chunking; extended the PR plan through Phase 61.
   - Closed the high-priority active research queue with no additional queue items opened.
+  - Committed the docs-only batch as `a61d11f` (`docs: close research queue and extend migration history`) and opened PR `#58`.
 - Now:
-  - Publish the completed docs-only research batch on a dedicated branch and PR.
+  - Wait for CI and review on PR `#58`.
 - Next:
-  - After publishing, keep the report dormant unless new field evidence or product scope changes justify reopening the queue.
+  - After PR `#58` lands, keep the report dormant unless new field evidence or product scope changes justify reopening the queue.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether the user wants this report later linked from `README.md` or kept as a standalone research artifact for now.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`, `docs/migration-replication-conflict-history.md`, `docs/matrix-pr-plan.md`.
-  - Commands: `git pull --ff-only origin main`, targeted web research via official docs and community sources.
+  - IDs: branch `codex/chore/research-closeout-phase61`, commit `a61d11f`, PR `#58`.
+  - Commands: `git pull --ff-only origin main`, targeted web research via official docs and community sources, `gh pr create`.
