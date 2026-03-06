@@ -9,6 +9,7 @@ This directory contains SQL datasets used by the migration matrix test scripts.
 3. `populate_mariadb12.sql` - MariaDB 12.0 compatible dataset with latest MariaDB features.
 4. `populate_mysql80.sql` - MySQL 8.0 compatible dataset.
 5. `populate_mysql84.sql` - MySQL 8.4 compatible dataset.
+6. `phase62_mysql_hidden_schema.sql` - focused MySQL fixture for invisible columns, invisible indexes, and generated invisible primary keys.
 
 ## Dataset Design
 
@@ -19,6 +20,11 @@ Each dataset is intended to stress migration behavior with realistic structures:
 - varied data types (`INT`, `VARCHAR`, `TEXT`, `DATE`, `DATETIME`, `DECIMAL`, `BOOLEAN`, etc.)
 - routines, triggers, and version-appropriate advanced features
 - transactional inserts for deterministic seeding
+
+Focused fixtures:
+
+- `phase62_mysql_hidden_schema.sql` is intentionally narrow and should be used by dedicated rehearsals, not by the full baseline matrix.
+- It requires a MySQL source because it enables `sql_generate_invisible_primary_key`.
 
 ## Usage in Scripts
 

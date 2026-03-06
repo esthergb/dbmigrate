@@ -104,6 +104,20 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 			)
 		}
 
+		invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("invisible/gipk precheck failed: %w", err)
+		}
+		if invisibleReport.Incompatible {
+			if err := writeInvisibleGIPKPrecheckReport(out, cfg, invisibleReport); err != nil {
+				return err
+			}
+			return WithExitCode(
+				ExitCodeDiff,
+				errors.New("schema precheck failed; invisible columns or generated invisible primary keys drift on destination"),
+			)
+		}
+
 		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("schema precheck failed: %w", err)

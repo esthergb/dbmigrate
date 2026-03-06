@@ -1,6 +1,6 @@
 # Known Problems and Mitigations for MySQL/MariaDB Migration
 
-Last reviewed: 2026-03-04
+Last reviewed: 2026-03-06
 
 This document summarizes migration and replication failure modes observed in MySQL/MariaDB upgrades and cross-engine moves, and defines the default safeguards `dbmigrate` should implement.
 
@@ -59,6 +59,29 @@ Observed failure patterns:
 - Preflight scanner for unsupported DDL constructs (sequence objects, system-versioned clauses, engine-specific syntax).
 - Default behavior: fail-fast with exact object list and remediation hints.
 - `--apply-ddl` policy gate applied before replaying risky DDL in replication.
+
+### 1.3 MySQL invisible columns, invisible indexes, and generated invisible primary keys drift across downgrade targets
+
+Evidence:
+
+- MySQL invisible columns and indexes are implemented through versioned DDL comments and metadata flags.
+  - https://dev.mysql.com/doc/refman/8.4/en/invisible-columns.html
+  - https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html
+- MySQL generated invisible primary keys can be included in logical dumps or removed with `--skip-generated-invisible-primary-key`.
+  - https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html
+  - https://dev.mysql.com/doc/refman/9.6/en/create-table-gipks.html
+
+Observed failure patterns:
+
+- MySQL -> MariaDB restore accepts the DDL but materializes invisible columns and invisible indexes as visible objects.
+- Included dumps preserve the GIPK column name on MariaDB, but it is no longer hidden.
+- `--skip-generated-invisible-primary-key` removes the hidden PK from the logical schema entirely, which changes table shape even on MySQL targets that otherwise support GIPK.
+
+`dbmigrate` safeguards:
+
+- Current Phase 62 behavior: `plan` inventories invisible columns, invisible indexes, and GIPK tables in selected source databases.
+- Schema `migrate` fails fast when the destination cannot preserve those hidden-schema semantics.
+- Rehearsal support is provided by `scripts/run-invisible-gipk-rehearsal.sh` so operators can compare `dump included`, `dump skipped`, and restored DDL evidence before cutover.
 
 ---
 
