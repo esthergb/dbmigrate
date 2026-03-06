@@ -42,6 +42,7 @@ type Summary struct {
 	EndFile        string
 	EndPos         uint32
 	AppliedEvents  uint64
+	Shape          state.ReplicationTransactionShape
 }
 
 type applyWindow struct {
@@ -55,6 +56,7 @@ type applyResult struct {
 	File          string
 	Pos           uint32
 	AppliedEvents uint64
+	Shape         state.ReplicationTransactionShape
 }
 
 type applyEvent struct {
@@ -67,6 +69,8 @@ type applyEvent struct {
 	KeyArgs             []any
 	Operation           string
 	TableName           string
+	UsesFallbackKey     bool
+	HasForeignKeys      bool
 	RequireRowsAffected bool
 }
 
@@ -176,6 +180,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	checkpoint.BinlogFile = applied.File
 	checkpoint.BinlogPos = applied.Pos
 	checkpoint.ApplyDDL = opts.ApplyDDL
+	checkpoint.Shape = applied.Shape
 	checkpoint.UpdatedAt = timeNowFn().UTC()
 	if err := state.SaveReplicationCheckpoint(checkpointFile, checkpoint); err != nil {
 		return Summary{}, err
@@ -198,6 +203,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		EndFile:        applied.File,
 		EndPos:         applied.Pos,
 		AppliedEvents:  applied.AppliedEvents,
+		Shape:          applied.Shape,
 	}, nil
 }
 
@@ -459,6 +465,11 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 		}
 	}
 
+	shapeTracker := newTransactionShapeTracker(opts)
+	for _, batch := range batches {
+		shapeTracker.observeBatch(batch)
+	}
+
 	lastFile := window.StartFile
 	lastPos := window.StartPos
 	var appliedEvents uint64
@@ -483,6 +494,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 					Remediation: "increase --max-lag-seconds or rerun with a smaller apply window (for example via --max-events)",
 					AppliedFile: lastFile,
 					AppliedPos:  lastPos,
+					Shape:       shapeTracker.snapshot(),
 				}
 			}
 		}
@@ -502,6 +514,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 					Remediation: fmt.Sprintf("increase --max-events to at least %d or rerun without --max-events limit", batchEvents),
 					AppliedFile: lastFile,
 					AppliedPos:  lastPos,
+					Shape:       shapeTracker.snapshot(),
 				}
 			}
 			if appliedEvents+batchEvents > opts.MaxEvents {
@@ -516,6 +529,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				Remediation: "inspect source binlog events and rerun replicate",
 				AppliedFile: lastFile,
 				AppliedPos:  lastPos,
+				Shape:       shapeTracker.snapshot(),
 			}
 		}
 		if batch.EndPos == 0 {
@@ -527,6 +541,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				Remediation: "inspect source binlog events and rerun replicate",
 				AppliedFile: lastFile,
 				AppliedPos:  lastPos,
+				Shape:       shapeTracker.snapshot(),
 			}
 		}
 
@@ -542,6 +557,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				Remediation: "verify destination connectivity and transaction permissions, then rerun replicate",
 				AppliedFile: lastFile,
 				AppliedPos:  lastPos,
+				Shape:       shapeTracker.snapshot(),
 			}
 		}
 
@@ -558,6 +574,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 					Remediation: "inspect generated replication apply statements and rerun replicate",
 					AppliedFile: lastFile,
 					AppliedPos:  lastPos,
+					Shape:       shapeTracker.snapshot(),
 				}
 			}
 			result, err := tx.ExecContext(ctx, event.Query, event.Args...)
@@ -600,6 +617,7 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 						Remediation: "review drift and rerun with --conflict-policy=source-wins or --conflict-policy=dest-wins if acceptable",
 						AppliedFile: lastFile,
 						AppliedPos:  lastPos,
+						Shape:       shapeTracker.snapshot(),
 					}
 				}
 			}
@@ -617,18 +635,21 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				Remediation: "verify destination transaction durability settings and rerun replicate",
 				AppliedFile: lastFile,
 				AppliedPos:  lastPos,
+				Shape:       shapeTracker.snapshot(),
 			}
 		}
 
 		lastFile = batch.EndFile
 		lastPos = batch.EndPos
 		appliedEvents += uint64(len(batch.Events))
+		shapeTracker.markApplied(batch)
 	}
 
 	return applyResult{
 		File:          lastFile,
 		Pos:           lastPos,
 		AppliedEvents: appliedEvents,
+		Shape:         shapeTracker.snapshot(),
 	}, nil
 }
 
@@ -673,6 +694,7 @@ func buildConflictReport(opts Options, startFile string, startPos uint32, source
 		report.OldRowSample = failure.OldRowSample
 		report.NewRowSample = failure.NewRowSample
 		report.RowDiffSample = failure.RowDiffSample
+		report.Shape = failure.Shape
 		report.Remediation = failure.Remediation
 		if failure.File != "" {
 			report.SourceEndFile = failure.File

@@ -211,6 +211,31 @@ Observed failure patterns:
 - Throughput/lag metrics and progress reporting at table and stream level.
 - Safety limits (`--max-events`, `--max-lag-seconds`, bounded worker queues).
 
+### 7.4 Replication worker count does not rescue bad transaction shape
+
+Evidence:
+
+- MySQL and MariaDB both document that replication progress still depends on transaction dependency and commit boundaries, not worker count alone.
+  - https://dev.mysql.com/doc/refman/8.4/en/replication-threads.html
+  - https://dev.mysql.com/doc/mysql/8.0/en/replication-options-binary-log.html
+  - https://mariadb.com/docs/server/ha-and-performance/standard-replication/parallel-replication
+
+Observed failure patterns:
+
+- One huge transaction dominates lag and checkpoint progress even when worker settings look generous.
+- DDL, FK-heavy workloads, or keyless row matching collapse apparently parallel apply back into serialization.
+- Operators keep tuning worker count while the real fix is smaller commits or better key coverage.
+
+`dbmigrate` safeguards:
+
+- Replication checkpoint artifacts now persist transaction-shape signals:
+  - transactions seen/applied
+  - max transaction event count
+  - DDL/FK/keyless pressure
+  - derived `risk_level` and `risk_signals`
+- `report` now surfaces transaction-shape remediation proposals instead of treating worker count as the only tuning knob.
+- Operator rehearsal script: `scripts/run-replication-shape-rehearsal.sh`.
+
 ### 7.1 Metadata-lock queue amplification during DDL windows
 
 Evidence:

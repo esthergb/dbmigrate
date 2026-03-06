@@ -40,8 +40,9 @@ type streamEvent struct {
 }
 
 type tableMetadata struct {
-	Columns     []string
-	KeyOrdinals []int
+	Columns        []string
+	KeyOrdinals    []int
+	HasForeignKeys bool
 }
 
 var (
@@ -359,14 +360,16 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 				return nil, err
 			}
 			out = append(out, applyEvent{
-				Query:      query,
-				Args:       args,
-				RowColumns: rowColumns,
-				NewRowArgs: copyAnySlice(row),
-				KeyColumns: keyColumns,
-				KeyArgs:    keyArgs,
-				Operation:  "insert",
-				TableName:  targetName,
+				Query:           query,
+				Args:            args,
+				RowColumns:      rowColumns,
+				NewRowArgs:      copyAnySlice(row),
+				KeyColumns:      keyColumns,
+				KeyArgs:         keyArgs,
+				Operation:       "insert",
+				TableName:       targetName,
+				UsesFallbackKey: len(metadata.KeyOrdinals) == 0,
+				HasForeignKeys:  metadata.HasForeignKeys,
 			})
 		}
 		return out, nil
@@ -388,6 +391,8 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 				KeyArgs:             keyArgs,
 				Operation:           "delete",
 				TableName:           targetName,
+				UsesFallbackKey:     len(metadata.KeyOrdinals) == 0,
+				HasForeignKeys:      metadata.HasForeignKeys,
 				RequireRowsAffected: conflictPolicy == "fail",
 			})
 		}
@@ -416,6 +421,8 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 				KeyArgs:             keyArgs,
 				Operation:           "update",
 				TableName:           targetName,
+				UsesFallbackKey:     len(metadata.KeyOrdinals) == 0,
+				HasForeignKeys:      metadata.HasForeignKeys,
 				RequireRowsAffected: conflictPolicy == "fail",
 			})
 		}
@@ -659,9 +666,22 @@ func loadTableMetadata(ctx context.Context, source *sql.DB, schema string, table
 	}
 	sort.Ints(keyOrdinals)
 
+	var foreignKeyCount int
+	if err := source.QueryRowContext(
+		ctx,
+		`SELECT COUNT(*)
+		 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+		 WHERE CONSTRAINT_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_TYPE = 'FOREIGN KEY'`,
+		schema,
+		table,
+	).Scan(&foreignKeyCount); err != nil {
+		return tableMetadata{}, fmt.Errorf("read foreign key metadata for %s.%s: %w", schema, table, err)
+	}
+
 	return tableMetadata{
-		Columns:     columns,
-		KeyOrdinals: keyOrdinals,
+		Columns:        columns,
+		KeyOrdinals:    keyOrdinals,
+		HasForeignKeys: foreignKeyCount > 0,
 	}, nil
 }
 

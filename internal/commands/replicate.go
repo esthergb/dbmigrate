@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/db"
@@ -117,7 +118,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -128,6 +129,11 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			summary.EndFile,
 			summary.EndPos,
 			summary.AppliedEvents,
+			summary.Shape.TransactionsSeen,
+			summary.Shape.TransactionsApplied,
+			summary.Shape.MaxTransactionEvents,
+			summary.Shape.RiskLevel,
+			strings.Join(summary.Shape.RiskSignals, ","),
 			opts.ReplicationMode,
 			opts.StartFrom,
 			opts.MaxEvents,

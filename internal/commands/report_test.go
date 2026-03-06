@@ -93,6 +93,56 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	}
 }
 
+func TestRunReportJSONIncludesReplicationShapeProposals(t *testing.T) {
+	tmp := t.TempDir()
+	replicationPath := filepath.Join(tmp, "replication-checkpoint.json")
+
+	replicationCheckpoint := state.NewReplicationCheckpoint()
+	replicationCheckpoint.BinlogFile = "mysql-bin.000031"
+	replicationCheckpoint.BinlogPos = 456
+	replicationCheckpoint.ApplyDDL = "warn"
+	replicationCheckpoint.Shape = state.ReplicationTransactionShape{
+		TransactionsSeen:     1,
+		TransactionsApplied:  1,
+		MaxTransactionEvents: 120,
+		RiskLevel:            "high",
+		RiskSignals: []string{
+			"single_transaction_window",
+			"large_transaction_dominates",
+			"keyless_row_matching_pressure",
+		},
+	}
+	replicationCheckpoint.UpdatedAt = time.Date(2026, 3, 5, 12, 5, 0, 0, time.UTC)
+	if err := state.SaveReplicationCheckpoint(replicationPath, replicationCheckpoint); err != nil {
+		t.Fatalf("save replication checkpoint: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out); err != nil {
+		t.Fatalf("expected report without conflicts to succeed, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Summary.ReplicationCheckpoint == nil {
+		t.Fatal("expected replication checkpoint in payload")
+	}
+	if payload.Summary.ReplicationCheckpoint.Shape.MaxTransactionEvents != 120 {
+		t.Fatalf("unexpected shape summary: %+v", payload.Summary.ReplicationCheckpoint.Shape)
+	}
+	if len(payload.Proposals) == 0 {
+		t.Fatal("expected shape proposals")
+	}
+	if !strings.Contains(strings.Join(payload.Proposals, " | "), "worker count will not split one huge commit") {
+		t.Fatalf("expected chunking proposal, got %#v", payload.Proposals)
+	}
+}
+
 func TestRunReportJSONConflictOverrideDoesNotFail(t *testing.T) {
 	tmp := t.TempDir()
 	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")

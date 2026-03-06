@@ -1,72 +1,77 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 60 (`plugin_lifecycle_and_disabled_feature_flags`) on `codex/feat/plugin-lifecycle-phase60`.
-  - Success means: `plan` and `migrate` detect incompatible auth plugins and unsupported table engines before execution, the repo gains a runnable rehearsal for plugin/engine drift, and operator docs explain detection and response.
+  - Implement Phase 61 (`replication_parallelism_vs_chunking_interactions`) on `codex/feat/parallelism-phase61`.
+  - Success means: replication checkpoint/report artifacts surface transaction-shape and serialization risk, the repo gains a runnable rehearsal for monolithic versus chunked workloads, and operator docs explain how to interpret the new signals.
 - Constraints/Assumptions:
-  - Docs in English.
-  - Keep the phase focused: plugin lifecycle, auth-plugin drift, engine availability, and disabled-feature fallout only.
-  - Commit/push/PR are now explicitly authorized for this Phase 60 batch.
+  - Docs remain in English.
+  - Keep Phase 61 focused on replication worker behavior, transaction shape, chunking, commit-order behavior, FK/DDL serialization, and related operator-visible failure modes.
+  - Commit, push, and PR creation are now explicitly authorized for Phase 61.
 - Key decisions:
-  - Phase 60 is full implementation, not docs-only: add real precheck/report behavior plus rehearsal evidence.
-  - Fail fast on unsupported source table engines; keep auth-plugin incompatibilities as explicit warnings until user/grant execution is wired into the command path.
-  - Reuse the existing precheck/report patterns already used for zero-date validation.
+  - Phase 60 is complete and merged; Phase 61 starts on a fresh branch.
+  - Phase 61 is full implementation, not docs-only: add product-side transaction-shape telemetry plus rehearsal evidence.
+  - Do not fake replica-worker control that the product does not own; surface transaction-shape and serialization risk instead.
 - State:
-  - Branch: `codex/feat/plugin-lifecycle-phase60`.
-  - Branch is pushed to `origin` and PR `#62` is open.
+  - Branch: `codex/feat/parallelism-phase61`.
+  - Commit `a5bf985` contains the Phase 61 implementation.
+  - Commit `337ff6b` refreshes continuity for PR publication.
+  - Branch is pushed to `origin/codex/feat/parallelism-phase61`.
+  - PR `#63` is open: `feat: add replication transaction shape telemetry`.
 - Done:
-  - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
-  - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
-  - Added focused binlog test coverage for `metadata_lock_timeout`.
-  - Updated `docs/operators-guide.md`, `docs/known-problems.md`, and `scripts/README.md` with Phase 57 runbook and rehearsal guidance.
-  - Verified `go test ./internal/replicate/binlog`.
-  - Verified `scripts/run-metadata-lock-scenario.sh` locally on `mysql84` and `mariadb11`; both reproduced queue amplification with `ddl_exit_code=1`, `ddl_elapsed_seconds=5`, `read_exit_code=0`, `read_elapsed_seconds=4`, and processlist evidence showing both DDL and ordinary reads waiting for table metadata lock.
-  - Committed the Phase 57 batch as `9a5aa6e` (`feat: add metadata lock rehearsal and reporting`) and opened PR `#59`.
-  - PR `#59` merged into `main`.
-  - Added `scripts/run-backup-restore-rehearsal.sh` to distinguish `backup_completed`, `backup_validated`, and `restore_usable` using engine-native logical dump tooling and a shadow-schema restore.
-  - Refined the rehearsal artifact so `summary.json` and `validation.txt` record the exact dump client and server version used.
-  - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 58 backup/restore rehearsal guidance and the physical-backup boundary note.
-  - Updated `docs/risk-checklist.md` so rollback gates now require restore rehearsal evidence rather than backup-job success alone.
-  - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
-  - Committed the Phase 58 batch as `d3a751e` (`feat: add backup restore rehearsal guidance`) and refinement commit `f5df019` (`chore: record backup rehearsal tool versions`), then opened PR `#60`.
-  - PR `#60` merged into `main`.
-  - Added `scripts/run-timezone-rehearsal.sh` to demonstrate session time-zone drift across `NOW()`, `TIMESTAMP`, and `DATETIME`.
-  - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 59 time-zone rehearsal guidance.
-  - Verified `scripts/run-timezone-rehearsal.sh` locally on `mysql84` and `mariadb11`; both reported `timestamp_display_changes=true`, `datetime_static_under_session_change=true`, and `explicit_now_drift_visible=true` with `system_time_zone=UTC`, `global_time_zone=SYSTEM`, and `session_time_zone_default=SYSTEM`.
-  - Committed the Phase 59 batch as `b00248a` (`feat: add timezone rehearsal guidance`) and opened PR `#61`.
-  - PR `#61` merged into `main`.
-  - Created `codex/feat/plugin-lifecycle-phase60` and confirmed the current repo already contains auth-plugin probes, docs, and a reusable migrate precheck pattern.
-  - Verified live engine/plugin evidence in local containers: MySQL 8.0 accepts `mysql_native_password` accounts, while MySQL 8.4 rejects them with `ERROR 1524 (HY000): Plugin 'mysql_native_password' is not loaded`.
-  - Added `internal/commands/plugin_precheck.go` with a new Phase 60 precheck that inventories source account plugins, destination active plugins, selected source table engines, destination engine support, destination `sql_mode`, and `default_authentication_plugin` visibility.
-  - Wired the Phase 60 precheck into `plan` and schema `migrate`.
-  - Unsupported source storage engines now fail `plan`/schema `migrate`; auth-plugin mismatches are reported as warnings with account classification (`user-managed`, `administrative`, `system`).
-  - Added `scripts/run-plugin-lifecycle-rehearsal.sh` and updated `scripts/README.md`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/security.md`, and `docs/risk-checklist.md`.
-  - Added focused unit coverage in `internal/commands/plugin_precheck_test.go` and `internal/commands/migrate_test.go`.
-  - Verified `go test ./...`.
-  - Verified `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`.
-  - Verified `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`:
-    - `plan_exit_code=0`
-    - `unsupported_auth_plugins_detected=true`
-    - `unsupported_storage_engines_detected=false`
-    - warning finding for `phase60_native@%` using `mysql_native_password`
-  - Verified `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`:
-    - `plan_exit_code=2`
-    - `unsupported_auth_plugins_detected=true`
-    - `unsupported_storage_engines_detected=true`
-    - error finding for `phase60_plugin_lifecycle.aria_items` using `Aria`
-  - Verified direct schema apply block with:
-    - `./bin/dbmigrate migrate --source 'mysql://root:rootpass123@127.0.0.1:13307/' --dest 'mysql://root:rootpass123@127.0.0.1:23307/' --databases phase60_plugin_lifecycle --schema-only --json`
-    - result: exit code `2` with `precheck=plugin-lifecycle`
-  - Committed the Phase 60 feature batch as `5939782` (`feat: add plugin lifecycle precheck and rehearsal`).
-  - Pushed `codex/feat/plugin-lifecycle-phase60` to `origin`.
-  - Opened PR `#62` (`feat: add plugin lifecycle precheck and rehearsal`).
+  - Phases 57, 58, 59, and 60 are merged into `main`.
+  - Phase 60 shipped plugin lifecycle prechecks, rehearsal script, and operator docs via merged PR `#62`.
+  - Created branch `codex/feat/parallelism-phase61` from updated `main` after PR `#62` merged.
+  - Added transaction-shape telemetry to replication artifacts:
+    - `internal/state/replication.go`
+    - `internal/state/replication_conflict.go`
+    - `internal/replicate/binlog/shape.go`
+    - `internal/replicate/binlog/run.go`
+    - `internal/replicate/binlog/load.go`
+    - `internal/replicate/binlog/failure.go`
+  - Replication checkpoint and conflict artifacts now record:
+    - transactions seen/applied
+    - events seen/applied
+    - max and average transaction size
+    - DDL/FK/keyless pressure
+    - `risk_level` and `risk_signals`
+  - `report` now surfaces replication shape data and remediation proposals derived from risk signals.
+  - `replicate` command text output now includes a compact `tx_shape(...)` summary.
+  - Added Phase 61 rehearsal script:
+    - `scripts/run-replication-shape-rehearsal.sh`
+  - Updated docs:
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+    - `docs/risk-checklist.md`
+    - `scripts/README.md`
+  - Added/updated tests:
+    - `internal/replicate/binlog/shape_test.go`
+    - `internal/replicate/binlog/run_test.go`
+    - `internal/commands/report_test.go`
+    - `internal/state/replication_test.go`
+  - Verified:
+    - `go test ./internal/replicate/binlog ./internal/commands ./internal/state`
+    - `go test ./...`
+    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
+    - `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`
+    - `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`
+  - Rehearsal results on both MySQL 8.4 and MariaDB 11.0:
+    - `total_rows=1000`
+    - monolithic path: `transaction_count=1`, `max_rows_per_transaction=1000`
+    - chunked path: `transaction_count=20`, `max_rows_per_transaction=50`
+    - `shape_signal.same_total_rows=true`
+    - `shape_signal.monolithic_dominates_transaction_shape=true`
+    - `shape_signal.chunked_reduces_commit_granularity=true`
+  - Committed Phase 61 implementation as `a5bf985` (`feat: add replication transaction shape telemetry`).
+  - Committed continuity refresh as `337ff6b` (`docs: refresh continuity for phase61 pr`).
+  - Pushed branch `codex/feat/parallelism-phase61` to origin.
+  - Opened PR `#63` (`feat: add replication transaction shape telemetry`).
 - Now:
-  - Await CI/review feedback on PR `#62`.
+  - Monitor PR `#63` for CI and review feedback.
 - Next:
-  - If CI or review finds issues, fix them on the same branch.
+  - Fix CI or review feedback on the Phase 61 PR if needed.
 - Open questions (UNCONFIRMED if needed):
-  - None blocking. A later follow-up may decide whether to extend the precheck to plugin-backed routines/events beyond account plugins and table engines.
+  - None blocking. A later follow-up may decide whether to add managed-service or real replica-worker environment probes beyond the current transaction-shape telemetry.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/plugin_precheck.go`, `internal/commands/plugin_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `scripts/run-plugin-lifecycle-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/security.md`, `docs/risk-checklist.md`, `scripts/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, open PR `#62`; branch `codex/feat/plugin-lifecycle-phase60`; commits `5939782`, `b00266d`.
-  - Commands: `docker compose -f docker-compose.yml up -d mysql84 mysql80 mariadb11`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`, `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`, `git push -u origin codex/feat/plugin-lifecycle-phase60`, `gh pr create --base main --head codex/feat/plugin-lifecycle-phase60`.
+  - Files: `CONTINUITY.md`, `internal/state/replication.go`, `internal/state/replication_conflict.go`, `internal/replicate/binlog/shape.go`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/failure.go`, `internal/commands/report.go`, `internal/commands/replicate.go`, `scripts/run-replication-shape-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, open PR `#63`; branch `codex/feat/parallelism-phase61`; commits `a5bf985`, `337ff6b`.
+  - Commands: `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`, `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`.

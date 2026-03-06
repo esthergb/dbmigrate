@@ -16,6 +16,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-timezone-rehearsal.sh`: local proof of session time-zone drift for `NOW()`, `TIMESTAMP`, and `DATETIME`.
 - `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
 - `run-plugin-lifecycle-rehearsal.sh`: local proof of auth-plugin drift and unsupported storage-engine detection.
+- `run-replication-shape-rehearsal.sh`: local proof that transaction shape matters more than nominal worker count.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -107,6 +108,18 @@ docker compose up -d mysql80 mysql84
 ```bash
 docker compose up -d mariadb11 mysql84
 ./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84
+```
+
+Run the Phase 61 replication transaction-shape rehearsal against a single service:
+
+```bash
+docker compose up -d mysql84
+./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84
+```
+
+```bash
+docker compose up -d mariadb11
+./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11
 ```
 
 Run all scenarios sequentially:
@@ -221,3 +234,22 @@ Interpretation:
 - `unsupported_auth_plugins_detected=true` means account plugins visible on source are not active on destination and must be normalized before user/grant cutover work.
 - `unsupported_storage_engines_detected=true` means `plan` and schema `migrate` should fail fast before DDL apply.
 - MySQL `8.4` intentionally reports `dest-default-auth.txt=unavailable` because `default_authentication_plugin` is no longer a usable variable there.
+
+## Replication transaction-shape rehearsal artifacts
+
+`run-replication-shape-rehearsal.sh` is the focused Phase 61 rehearsal for the gap between "more workers" and "actually parallelizable transaction shape".
+
+Artifacts written to the chosen output directory:
+
+- `setup.sql`: schema and FK setup used by the rehearsal
+- `monolithic.sql`: one large transaction for the full workload
+- `chunked.sql`: the same row volume split into many small commits
+- `monolithic.log` and `chunked.log`: execution logs for each variant
+- `notes.txt`: operator-facing interpretation
+- `summary.json`: compact machine-readable comparison
+
+Interpretation:
+
+- `same_total_rows=true` with different transaction counts is the point: identical row volume can create very different replication scheduling pressure.
+- `monolithic_dominates_transaction_shape=true` means one huge transaction would remain one serialization unit for replica-style apply.
+- `chunked_reduces_commit_granularity=true` means smaller commits create more restart-safe and scheduler-friendly units, even before any worker setting is considered.

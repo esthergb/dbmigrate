@@ -95,6 +95,11 @@ Replication checkpoint behavior:
 - Supported DDL policy values are restricted to `--apply-ddl={ignore,apply,warn}`.
 - Supported conflict policies are `--conflict-policy={fail,source-wins,dest-wins}`.
 - Run summary reports `start`, `source_end`, `applied_end`, and `applied_events`.
+- Replication checkpoint artifacts now also record transaction-shape signals:
+  - transactions seen versus applied
+  - max transaction size in apply events
+  - DDL, FK, and keyless-row matching pressure
+  - derived `risk_level` and `risk_signals`
 - Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
 - Event application is transaction-batch based; checkpoint advances only after commit.
 - Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
@@ -132,6 +137,7 @@ Metadata-lock classification:
 - Unsupported auth plugins are surfaced explicitly in `plan` findings so account cutover work is not guessed later.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
+- Treat replication worker count as secondary to transaction shape; one huge commit still behaves like one serialization unit.
 
 ## Metadata-lock incident triage
 
@@ -242,6 +248,30 @@ What to inspect:
 Operational rule:
 - Treat unsupported storage engines as a migration blocker until tables are converted or excluded.
 - Treat unsupported auth plugins as a required account-cutover task; do not auto-rewrite them blindly.
+
+## Replication parallelism and transaction-shape rehearsal
+
+Do not assume "more workers" fixes replication lag.
+
+Recommended rehearsal:
+- Start one service with `docker compose up -d <service>`.
+- Run:
+  - `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`
+  - or `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`
+
+What this checks:
+- the same row volume written as one huge transaction versus many smaller commits
+- FK-bound workload shape, which is a common serialization pressure point
+- why commit boundaries matter more than nominal worker count
+
+What to inspect:
+- `summary.json`: transaction count, max rows per transaction, and comparison flags
+- `monolithic.sql` versus `chunked.sql`: the actual transaction boundary difference
+- `notes.txt`: operator interpretation for runbooks
+
+Operational rule:
+- If replication windows keep stalling at transaction boundaries, reduce source transaction size before you start tuning worker counts.
+- Use checkpoint/report shape fields as evidence: `risk_signals` such as `large_transaction_dominates`, `ddl_serializes_apply`, `foreign_key_serialization_pressure`, and `keyless_row_matching_pressure` are the real warning signs.
 
 ## Temporary CI operations note (review later)
 
