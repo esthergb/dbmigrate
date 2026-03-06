@@ -27,8 +27,9 @@ Last updated: 2026-03-06
 - State:
   - Current branch: `codex/feat/verify-canonicalization-phase64`.
   - PR `#65` is merged.
-  - Phase 64 implementation is complete locally and currently uncommitted.
-  - Working tree contains Phase 64 code, tests, fixture SQL, and rehearsal script changes.
+  - PR `#66` is open for Phase 64.
+  - Phase 64 implementation is committed and pushed.
+  - Working tree contains continuity-only follow-up state.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -104,7 +105,7 @@ Last updated: 2026-03-06
     - `representation_risk_tables=4`
     - `noise_risk_mismatches=0`
 - Now:
-  - Commit, push, and open the Phase 64 PR.
+  - Record Phase 64 PR state in continuity and wait for CI.
 - Next:
   - Wait for CI and review on the Phase 64 PR.
 - Open questions (UNCONFIRMED if needed):
@@ -121,7 +122,7 @@ Last updated: 2026-03-06
     - `datasets/phase64_verify_source_mysql84.sql`
     - `datasets/phase64_verify_dest_mariadb12.sql`
     - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`; branch `main`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`; open PR `#66`; branch `codex/feat/verify-canonicalization-phase64`.
   - Commands:
     - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
