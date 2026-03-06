@@ -147,6 +147,7 @@ Artifacts written to the chosen output directory:
 - `validation.txt`: artifact-level checks showing whether expected objects are present in the dump
 - `restore-smoke.txt`: post-restore smoke test evidence
 - `summary.json`: machine-readable distinction between backup completion, validation, and restore usability
+- `summary.json` also records the exact dump client and server version used for the rehearsal
 
 Interpretation:
 

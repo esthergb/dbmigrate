@@ -46,6 +46,14 @@ dump_bin() {
   fi
 }
 
+server_version() {
+  db_exec -N -B -e "SELECT VERSION();"
+}
+
+dump_client_version() {
+  compose exec -T "$SERVICE" "$(dump_bin)" --version | head -n 1
+}
+
 db_exec() {
   compose exec -T "$SERVICE" "$(client_bin)" -u root -prootpass123 "$@"
 }
@@ -83,6 +91,9 @@ DUMP_FILE="$OUTPUT_DIR/logical-backup.sql"
 VALIDATION_FILE="$OUTPUT_DIR/validation.txt"
 RESTORE_SMOKE_FILE="$OUTPUT_DIR/restore-smoke.txt"
 SUMMARY_FILE="$OUTPUT_DIR/summary.json"
+
+DUMP_CLIENT_VERSION="$(dump_client_version)"
+SERVER_VERSION="$(server_version)"
 
 echo "Waiting for $SERVICE..."
 wait_for_db
@@ -128,6 +139,8 @@ backup_validated="false"
 if [ "$backup_completed" = "true" ] && [ -s "$DUMP_FILE" ]; then
   {
     echo "dump_nonempty=true"
+    echo "dump_client_version=$DUMP_CLIENT_VERSION"
+    echo "server_version=$SERVER_VERSION"
     if rg -q "CREATE TABLE \`$TABLE_NAME\`" "$DUMP_FILE"; then
       echo "table_definition_present=true"
     else
@@ -159,6 +172,8 @@ if [ "$backup_completed" = "true" ] && [ -s "$DUMP_FILE" ]; then
 else
   {
     echo "dump_nonempty=false"
+    echo "dump_client_version=$DUMP_CLIENT_VERSION"
+    echo "server_version=$SERVER_VERSION"
     echo "table_definition_present=false"
     echo "view_definition_present=false"
     echo "procedure_definition_present=false"
@@ -202,6 +217,9 @@ cat >"$SUMMARY_FILE" <<JSON
   "scenario": "backup_restore_rehearsal_required",
   "service": "$(json_escape "$SERVICE")",
   "engine_family": "$(json_escape "$(if is_mariadb_service "$SERVICE"; then echo mariadb; else echo mysql; fi)")",
+  "dump_client": "$(json_escape "$(dump_bin)")",
+  "dump_client_version": "$(json_escape "$DUMP_CLIENT_VERSION")",
+  "server_version": "$(json_escape "$SERVER_VERSION")",
   "source_db": "$(json_escape "$SOURCE_DB")",
   "restore_db": "$(json_escape "$RESTORE_DB")",
   "backup_completed": $backup_completed,

@@ -24,6 +24,7 @@ Last updated: 2026-03-06
   - PR `#59` merged into `main`.
   - Created branch `codex/feat/backup-restore-phase58` for Phase 58.
   - Added `scripts/run-backup-restore-rehearsal.sh` to distinguish `backup_completed`, `backup_validated`, and `restore_usable` using engine-native logical dump tooling and a shadow-schema restore.
+  - Refined the rehearsal artifact so `summary.json` and `validation.txt` record the exact dump client and server version used.
   - Updated `scripts/README.md`, `docs/operators-guide.md`, and `docs/known-problems.md` with Phase 58 backup/restore rehearsal guidance and the physical-backup boundary note.
   - Updated `docs/risk-checklist.md` so rollback gates now require restore rehearsal evidence rather than backup-job success alone.
   - Verified `scripts/run-backup-restore-rehearsal.sh` locally on `mysql84` and `mariadb11`; both returned `backup_completed=true`, `backup_validated=true`, `restore_usable=true`, and smoke-tested rows, view access, procedure execution, and event presence.
