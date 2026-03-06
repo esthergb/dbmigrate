@@ -6,14 +6,15 @@ Last updated: 2026-03-06
 - Constraints/Assumptions:
   - Docs remain in English.
   - Keep Phase 61 focused on replication worker behavior, transaction shape, chunking, commit-order behavior, FK/DDL serialization, and related operator-visible failure modes.
-  - Do not commit until the user asks.
+  - Commit, push, and PR creation are now explicitly authorized for Phase 61.
 - Key decisions:
   - Phase 60 is complete and merged; Phase 61 starts on a fresh branch.
   - Phase 61 is full implementation, not docs-only: add product-side transaction-shape telemetry plus rehearsal evidence.
   - Do not fake replica-worker control that the product does not own; surface transaction-shape and serialization risk instead.
 - State:
   - Branch: `codex/feat/parallelism-phase61`.
-  - Working tree contains completed Phase 61 implementation edits and rehearsal artifacts; nothing is committed yet.
+  - Commit `a5bf985` contains the Phase 61 implementation.
+  - Working tree is clean after the feature commit; branch is not pushed yet.
 - Done:
   - Phases 57, 58, 59, and 60 are merged into `main`.
   - Phase 60 shipped plugin lifecycle prechecks, rehearsal script, and operator docs via merged PR `#62`.
@@ -58,13 +59,14 @@ Last updated: 2026-03-06
     - `shape_signal.same_total_rows=true`
     - `shape_signal.monolithic_dominates_transaction_shape=true`
     - `shape_signal.chunked_reduces_commit_granularity=true`
+  - Committed Phase 61 implementation as `a5bf985` (`feat: add replication transaction shape telemetry`).
 - Now:
-  - Phase 61 implementation is complete on the branch and awaiting user instruction for commit/push/PR.
+  - Refresh the continuity ledger, push the branch, and open the Phase 61 PR.
 - Next:
-  - Commit the Phase 61 branch and open the PR when the user asks.
+  - Fix CI or review feedback on the Phase 61 PR if needed.
 - Open questions (UNCONFIRMED if needed):
   - None blocking. A later follow-up may decide whether to add managed-service or real replica-worker environment probes beyond the current transaction-shape telemetry.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `internal/state/replication.go`, `internal/state/replication_conflict.go`, `internal/replicate/binlog/shape.go`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/failure.go`, `internal/commands/report.go`, `internal/commands/replicate.go`, `scripts/run-replication-shape-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`; branch `codex/feat/parallelism-phase61`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`; branch `codex/feat/parallelism-phase61`; commit `a5bf985`.
   - Commands: `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`, `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`.
