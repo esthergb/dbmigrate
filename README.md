@@ -1,37 +1,65 @@
 # dbmigrate
 
-`dbmigrate` is a Go CLI for migration and consistency verification between MySQL-family databases, with planned incremental replication support.
+`dbmigrate` is a Go CLI for migration, incremental replication, and consistency verification between MySQL-family databases.
 
 ## Current status
 
-This repository is in phased development.
+This repository is in phased development, with merged work through Phase 64.
 
-Completed milestones (merged through Phase 54):
-- Phase 0: research and operator risk docs
-- Phase 1: foundation scaffold + CI baseline
-- Phase 2: runtime config, DSN validation, config file support
-- Phase 3: baseline schema migration (tables/views)
-- Phase 4: baseline data migration with checkpoint/resume
-- Phase 5-9: verification pipeline (schema + count/hash/sample/full-hash data modes)
-- Phase 10-15: replication baseline, checkpoint safety, transactional apply, binlog decode/apply pipeline
-- Phase 16-18: conflict policy + DDL safety + SQL error categorization
-- Phase 19-21: conflict report enrichment (`value_sample`, `old_row_sample`, `new_row_sample`)
-- Phase 22: selectable downgrade profiles (`strict-lts`, `same-major`, `adjacent-minor`, `max-compat`)
-- Phase 23: explicit strict-lts downgrade matrix hardening
-- Phase 24-30: report fail-fast default + CI manual-dispatch helper + command status normalization
-- Phase 31-39: command exit-code semantics and replication runtime fail-fast guards (`replication-mode`, trigger flags, start-point checks, max-events, idempotent policy, max-lag, unsupported-gate exit code 2)
-- Phase 40-42: stale conflict-report lifecycle hardening (cleanup/ignore/timestamp fallback)
-- Phase 43-47: Option B compatibility matrix enforcement + active-LTS candidate signaling for `MySQL 8.4.x <-> MariaDB 11.8.x`
+Merged capability families:
+- research and operator risk baseline
+- foundation scaffold, CI, runtime config, and DSN/config-file handling
+- baseline schema migration and chunked data migration with resume/checkpoints
+- schema/data verification (`count`, `hash`, `sample`, `full-hash`)
+- incremental replication in implemented binlog mode
+- conflict policy, DDL safety, and conflict-report enrichment
+- downgrade-profile enforcement and compatibility prechecks
+- operator rehearsals for metadata locks, rollback evidence, time-zone drift, plugin lifecycle, transaction shape, hidden schema, collation risk, and verify canonicalization
 
 Current process:
 - Delivery is phase-based via small PRs from `codex/*` branches.
 - Each phase runs local full tests and required CI checks before merge.
 - Matrix test scripts include compatibility probes that exercise version/engine-specific SQL behavior differences.
 
-Pending next milestones:
-- Continue replication/report ergonomics hardening and operator-facing diagnostics.
-- Promote active-LTS cross-engine candidates into strict-lts only after repeated staged validation evidence.
-- Keep documentation and runbooks synchronized with merged phases.
+Current release stance:
+- `v1`: only implemented and genuinely supported self-managed paths
+- `v2`: currently surfaced but not yet implemented CLI paths
+- `v3`: managed/cloud deployment support
+
+## Supported in v1
+
+- self-managed deployments only
+- baseline migrate workflow:
+  - `plan`
+  - `migrate`
+  - `verify`
+  - `report`
+- replication in implemented binlog mode only
+- current merged fail-fast prechecks and report semantics already on `main`
+
+Release-grade v1 support is limited to exact engine/version pairs validated by the frozen support matrix and fresh release evidence.
+
+## Not supported in v1
+
+- managed/cloud deployment support
+- any engine/version pair not included in the frozen v1 matrix
+- any path blocked by current prechecks as incompatible by design
+- any cross-engine candidate pair not yet promoted into the frozen v1 matrix
+
+## Reserved for v2
+
+- `--replication-mode=capture-triggers`
+- `--replication-mode=hybrid`
+- `--enable-trigger-cdc`
+- `--teardown-cdc`
+- `--start-from=gtid`
+
+These names are intentionally reserved in the CLI surface, but they are not part of `v1`.
+
+## Reserved for v3
+
+- managed/cloud qualification for platforms such as RDS, Cloud SQL, Azure Database for MySQL, and Aurora-like offerings
+- managed failover and provider-specific durability guarantees as a release-grade support promise
 
 ## Latest validation snapshot (2026-03-05)
 
@@ -110,7 +138,8 @@ Supported profiles:
 
 Profile scope note:
 - `same-major` and `adjacent-minor` are same-engine only (cross-engine paths are blocked by default).
-- Use `strict-lts` for matrix-based cross-engine validation or `max-compat` for permissive risk-reviewed paths.
+- Use `strict-lts` for release-grade matrix-based validation.
+- `max-compat` remains available for permissive risk-reviewed paths, but it is not release-grade `v1` support unless a path is explicitly promoted into the frozen matrix.
 - Under `max-compat`, legacy lines (for example MySQL 8.0.x and MariaDB 10.6.x) are allowed but explicitly warned in findings.
 - Under `max-compat`, `MySQL 8.4.x <-> MariaDB 11.8.x` is flagged as an active-LTS candidate pair pending strict-lts validation.
 - `plan` output surfaces `report.requires_evidence=true` for active-LTS candidate paths that still need repeated staged validation evidence before strict-lts promotion.
@@ -150,13 +179,13 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mo
 
 Replication mode selection:
 - `--replication-mode=binlog` is the currently implemented mode.
-- `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are accepted values but currently fail fast with an explicit "not implemented yet" error.
-- `--enable-trigger-cdc` and `--teardown-cdc` are accepted flags for upcoming trigger CDC workflows and currently fail fast with explicit "not implemented yet" guidance.
+- `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are reserved for `v2`; today they fail fast with an explicit "not implemented yet" error.
+- `--enable-trigger-cdc` and `--teardown-cdc` are also reserved for `v2` and currently fail fast with explicit guidance.
 
 Replication start selection:
 - `--start-from=auto` (default) uses checkpoint/resume behavior.
 - `--start-from=binlog-file:pos` requires `--resume=false` plus explicit `--start-file` and `--start-pos`.
-- `--start-from=gtid` is reserved and currently fails fast with explicit guidance.
+- `--start-from=gtid` is reserved for `v2` and currently fails fast with explicit guidance.
 
 Replication window control:
 - `--max-events=0` (default) applies all available events in the selected window.
@@ -197,16 +226,20 @@ dbmigrate report --state-dir ./state --json --fail-on-conflict=false
 
 Current report behavior:
 - Reads local state artifacts when present:
+  - `collation-precheck.json`
+  - `verify-data-report.json`
   - `data-baseline-checkpoint.json`
   - `replication-checkpoint.json`
   - `replication-conflict-report.json`
 - Emits status:
-  - `ok` when no conflict report failure is present
-  - `attention_required` when a replication conflict failure is present
+  - `ok` when no incompatible precheck artifact or active conflict artifact is present
+  - `attention_required` when an incompatible precheck artifact or active replication conflict artifact is present
   - `empty` when no known state artifacts are found
+- Verify-data artifacts can keep `status=ok` when verification passed but representation-sensitive tables still deserve evidence retention.
 - Stale conflict reports are auto-ignored when replication checkpoint position has advanced beyond report `applied_end_*`, or (for legacy artifacts) when checkpoint `updated_at` is newer than conflict `generated_at`.
 - Includes remediation proposals from conflict reports in the `proposals` section.
-- Fails by default (`exit 3`) when report status is `attention_required` (active replication conflict report). Use `--fail-on-conflict=false` to emit report without failing.
+- Includes remediation proposals from incompatible precheck and verify-data artifacts when present.
+- Fails by default (`exit 2`) when report status is `attention_required`. Use `--fail-on-conflict=false` to emit report without failing.
 
 ## Verification modes
 
@@ -288,6 +321,7 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 
 ## Documentation
 
+- [v1 release plan](docs/v1-release-plan.md)
 - [Development plan](docs/development-plan.md)
 - [Known migration problems](docs/known-problems.md)
 - [Operator risk checklist](docs/risk-checklist.md)

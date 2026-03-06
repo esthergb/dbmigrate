@@ -1,8 +1,8 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Prepare the exact v1 release-hardening checklist and execution plan.
-  - Success means the remaining v1 work is sequenced, concrete, and ready to execute as focused PR-sized increments plus release validation runs.
+  - Execute PR 1 from the v1 release plan: support-surface cleanup.
+  - Success means public docs, starting with `README.md`, match the actual v1/v2/v3 scope and stop overstating support.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
@@ -29,11 +29,12 @@ Last updated: 2026-03-07
     - v2: everything the CLI currently surfaces but does not fully implement yet
     - v3: v2 plus managed/cloud deployment paths
 - State:
-  - Current branch: `codex/chore/v1-release-plan`.
+  - Current branch: `codex/chore/v1-support-surface`.
   - PR `#65` is merged.
   - PR `#66` is merged.
-  - PR `#67` is open for the tracked v1 release plan doc.
-  - Branch created from updated `main` to add a tracked v1 release-hardening plan doc.
+  - PR `#67` is merged.
+  - PR `#68` is open for the v1 support-surface cleanup.
+  - Branch created from updated `main` to perform docs-only v1 support-surface cleanup.
   - Working tree contains continuity-only PR-state refresh.
 - Done:
   - Phases 57-62 are merged into `main`.
@@ -114,9 +115,9 @@ Last updated: 2026-03-07
   - Added tracked planning doc:
     - `docs/v1-release-plan.md`
 - Now:
-  - Record PR state for the v1 release plan doc and wait for CI/review.
+  - Record PR state for the v1 support-surface cleanup and wait for CI/review.
 - Next:
-  - Review the plan and start the first v1 hardening branch when requested.
+  - After merge, start the next v1 hardening item from the release plan.
 - Open questions (UNCONFIRMED if needed):
   - None on product scope; the remaining question is release execution order for v1 hardening.
 - Working set (files/ids/commands):
@@ -131,7 +132,7 @@ Last updated: 2026-03-07
     - `datasets/phase64_verify_source_mysql84.sql`
     - `datasets/phase64_verify_dest_mariadb12.sql`
     - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`; open PR `#67`; branch `codex/chore/v1-release-plan`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`, merged PR `#67`; open PR `#68`; branch `codex/chore/v1-support-surface`.
   - Commands:
     - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
