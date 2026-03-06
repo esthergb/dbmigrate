@@ -34,8 +34,11 @@ Reference:
 
 - [ ] Capture server/database/table/column charset and collation inventories.
 - [ ] Check for unsupported destination collations.
+- [ ] Separate server-unsupported collations from client-library compatibility risk before cutover decisions.
 - [ ] Check for mixed/cross-collation expression risk in routines/views.
 - [ ] Define mapping/normalization policy before migration.
+- [ ] Rehearse representative clients when using newer collation families such as `utf8mb4_0900_*` or `utf8mb4_uca1400_*`.
+- [ ] Review `collation-precheck.json` / `dbmigrate report` output before approving schema apply.
 
 Reference:
 

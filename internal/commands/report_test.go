@@ -59,7 +59,7 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected report to fail by default when conflict report requires attention")
 	}
-	if !strings.Contains(err.Error(), "unresolved replication conflicts") {
+	if !strings.Contains(err.Error(), "incompatible precheck or unresolved replication conflict artifacts") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -140,6 +140,88 @@ func TestRunReportJSONIncludesReplicationShapeProposals(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(payload.Proposals, " | "), "worker count will not split one huge commit") {
 		t.Fatalf("expected chunking proposal, got %#v", payload.Proposals)
+	}
+}
+
+func TestRunReportJSONIncludesCollationArtifactAndProposals(t *testing.T) {
+	tmp := t.TempDir()
+
+	report := collationPrecheckReport{
+		Name:                         "collation-compatibility",
+		Incompatible:                 true,
+		SourceVersion:                "8.4.8 MySQL Community Server - GPL",
+		DestVersion:                  "10.6.17-MariaDB",
+		SourceServerCollation:        "utf8mb4_0900_ai_ci",
+		DestServerCollation:          "utf8mb4_general_ci",
+		UnsupportedDestinationCount:  2,
+		ClientCompatibilityRiskCount: 1,
+	}
+	if err := persistCollationPrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist collation artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected incompatible collation precheck to fail report by default")
+	}
+	if !strings.Contains(err.Error(), "incompatible precheck") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if !payload.Summary.Artifacts.CollationPrecheck {
+		t.Fatal("expected collation precheck artifact in summary")
+	}
+	if payload.Summary.CollationPrecheck == nil {
+		t.Fatal("expected collation precheck summary")
+	}
+	if payload.Summary.CollationPrecheck.UnsupportedDestinationCount != 2 {
+		t.Fatalf("unexpected unsupported destination count: %#v", payload.Summary.CollationPrecheck)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if len(payload.Proposals) != 2 {
+		t.Fatalf("expected 2 collation proposals, got %#v", payload.Proposals)
+	}
+	if !strings.Contains(strings.Join(payload.Proposals, " | "), "server-side incompatibility") {
+		t.Fatalf("expected server-side incompatibility proposal, got %#v", payload.Proposals)
+	}
+}
+
+func TestRunReportJSONAllowsIncompatiblePrecheckOverride(t *testing.T) {
+	tmp := t.TempDir()
+
+	report := collationPrecheckReport{
+		Name:                        "collation-compatibility",
+		Incompatible:                true,
+		UnsupportedDestinationCount: 1,
+	}
+	if err := persistCollationPrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist collation artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, []string{"--fail-on-conflict=false"}, &out); err != nil {
+		t.Fatalf("expected override to succeed, got %v", err)
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
 	}
 }
 
@@ -322,7 +404,7 @@ func TestRunReportTextNoArtifacts(t *testing.T) {
 	if !strings.Contains(text, "status=empty") {
 		t.Fatalf("expected empty status, got %q", text)
 	}
-	if !strings.Contains(text, "artifacts(data_baseline=false replication_checkpoint=false replication_conflict=false)") {
+	if !strings.Contains(text, "artifacts(collation_precheck=false data_baseline=false replication_checkpoint=false replication_conflict=false)") {
 		t.Fatalf("expected artifact summary, got %q", text)
 	}
 }

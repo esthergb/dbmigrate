@@ -681,6 +681,19 @@ This document converts the local simulation roadmap in [migration-replication-co
 - Exit criteria:
   - invisible-column and GIPK downgrade behavior is backed by local matrix evidence instead of remaining `UNCONFIRMED`
 
+## Phase 63: Collation client-compatibility and handshake-risk track
+
+- Scope:
+  - `unsupported_collations_mysql_to_mariadb`
+  - `unsupported_collations_mariadb_to_mysql`
+  - client-side collation and handshake incompatibility where the server accepts the schema but the application stack does not
+- Deliverables:
+  - precheck/report output that distinguishes server-side unsupported collations from client-side compatibility risk
+  - fixtures and rehearsal coverage for `utf8mb4_0900_ai_ci` and `utf8mb4_uca1400_ai_ci`
+  - operator guidance that separates storage-collation drift from connection-handshake or client-library drift
+- Exit criteria:
+  - collation compatibility is surfaced as a first-class planning result with explicit server-versus-client risk framing instead of a generic charset warning
+
 ## Follow-on cloud track
 
 - Keep these out of the local PR sequence unless local approximations become genuinely useful:
