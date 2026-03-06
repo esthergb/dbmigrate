@@ -32,8 +32,9 @@ Last updated: 2026-03-07
   - Current branch: `codex/chore/v1-release-plan`.
   - PR `#65` is merged.
   - PR `#66` is merged.
+  - PR `#67` is open for the tracked v1 release plan doc.
   - Branch created from updated `main` to add a tracked v1 release-hardening plan doc.
-  - Working tree contains docs-only planning updates.
+  - Working tree contains continuity-only PR-state refresh.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -110,8 +111,10 @@ Last updated: 2026-03-07
     - `noise_risk_mismatches=0`
   - CI failure identified and fixed on PR `#66` before merge:
     - `golangci-lint` reported `internal/verify/data/verify.go:400:6: func listTableColumns is unused`
+  - Added tracked planning doc:
+    - `docs/v1-release-plan.md`
 - Now:
-  - Add `docs/v1-release-plan.md` with the concrete v1 release-hardening checklist and execution plan.
+  - Record PR state for the v1 release plan doc and wait for CI/review.
 - Next:
   - Review the plan and start the first v1 hardening branch when requested.
 - Open questions (UNCONFIRMED if needed):
@@ -128,7 +131,7 @@ Last updated: 2026-03-07
     - `datasets/phase64_verify_source_mysql84.sql`
     - `datasets/phase64_verify_dest_mariadb12.sql`
     - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`; branch `main`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`; open PR `#67`; branch `codex/chore/v1-release-plan`.
   - Commands:
     - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
