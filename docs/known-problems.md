@@ -210,6 +210,28 @@ Observed failure patterns:
 - Throughput/lag metrics and progress reporting at table and stream level.
 - Safety limits (`--max-events`, `--max-lag-seconds`, bounded worker queues).
 
+### 7.1 Metadata-lock queue amplification during DDL windows
+
+Evidence:
+
+- MySQL metadata locking explains why DDL waits on active transactions and why object-level locks matter even without obvious row-lock pressure.
+  - https://dev.mysql.com/doc/refman/8.4/en/metadata-locking.html
+- MariaDB documents the same metadata-lock class and separate instrumentation options.
+  - https://mariadb.com/kb/en/metadata-locking/
+  - https://mariadb.com/docs/server/reference/plugins/other-plugins/metadata-lock-info-plugin
+
+Observed failure patterns:
+
+- `ALTER TABLE` or `RENAME TABLE` waits on an older transaction.
+- Later ordinary reads/writes queue behind the waiting DDL, so the outage blast radius grows.
+- Operators misclassify the incident as generic slowness or row-locking and retry the DDL instead of identifying the blocker.
+
+`dbmigrate` safeguards:
+
+- Replication apply classifies DDL lock-timeout failures with metadata-lock wording as `metadata_lock_timeout`, not only `retryable_transaction_error`.
+- Operator rehearsal script: `scripts/run-metadata-lock-scenario.sh`.
+- Runbook guidance prefers blocker identification and waiting-DDL abort decisions over blind retries.
+
 ---
 
 ## Additional high-impact checks to bake into preflight

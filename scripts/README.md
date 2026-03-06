@@ -12,6 +12,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 
 - `run-migration-test.sh`: shared runner with robust orchestration.
 - `run-compat-probes.sh`: compatibility probes executed on source/destination services before migration.
+- `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -57,6 +58,18 @@ Run one scenario:
 ./scripts/test-mariadb10-to-mariadb11.sh
 ```
 
+Run the Phase 57 metadata-lock rehearsal against a single service:
+
+```bash
+docker compose up -d mysql84
+./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84
+```
+
+```bash
+docker compose up -d mariadb11
+./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11
+```
+
 Run all scenarios sequentially:
 
 ```bash
@@ -92,3 +105,21 @@ Scenario failures are expected when source/destination engine/version combinatio
 The runner always executes `report --json --fail-on-conflict=false`, so each failure keeps a structured artifact trail for analysis.
 
 Compatibility probes intentionally include statements that fail on some engines/versions to surface known SQL/DDL behavior differences.
+
+## Metadata-lock rehearsal artifacts
+
+`run-metadata-lock-scenario.sh` is intentionally outside the main migration matrix. It is a focused operator rehearsal for the Phase 57 failure mode where a waiting DDL amplifies into blocked ordinary traffic.
+
+Artifacts written to the chosen output directory:
+
+- `summary.json`: machine-readable scenario summary
+- `server-variables.txt`: relevant server settings
+- `processlist.txt`: point-in-time `SHOW FULL PROCESSLIST` capture
+- `metadata-locks.tsv`: `performance_schema.metadata_locks` capture when available
+- `plugin-attempt.txt`: MariaDB plugin note for deeper lock visibility when relevant
+- `blocker.log`, `ddl.log`, `read.log`: session-level evidence
+
+Interpretation:
+
+- `ddl_exit_code != 0` with `read_elapsed_seconds >= 2` is the expected strong signal for queue amplification.
+- If `metadata_locks_available=false`, rely on `processlist.txt` and consider enabling MariaDB `metadata_lock_info` manually during rehearsal.

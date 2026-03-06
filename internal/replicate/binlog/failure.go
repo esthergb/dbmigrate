@@ -92,6 +92,10 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 		case 1213, 1205:
 			failure.FailureType = "retryable_transaction_error"
 			failure.Remediation = "retry replicate; if recurring, reduce batch size or lock contention on destination"
+			if looksLikeMetadataLockFailure(mysqlErr.Message, event) {
+				failure.FailureType = "metadata_lock_timeout"
+				failure.Remediation = "inspect SHOW FULL PROCESSLIST and performance_schema.metadata_locks (or MariaDB metadata_lock_info), identify the blocking session, abort the waiting DDL if blast radius is growing, then rerun during a drained window"
+			}
 		}
 		return failure
 	}
@@ -103,6 +107,14 @@ func classifyApplySQLError(cause error, event applyEvent, file string, pos uint3
 	}
 
 	return failure
+}
+
+func looksLikeMetadataLockFailure(message string, event applyEvent) bool {
+	if !strings.EqualFold(strings.TrimSpace(event.Operation), "ddl") {
+		return false
+	}
+	upper := strings.ToUpper(message)
+	return strings.Contains(upper, "METADATA LOCK") || strings.Contains(upper, "TABLE METADATA LOCK")
 }
 
 func buildValueSample(columns []string, values []any) []string {

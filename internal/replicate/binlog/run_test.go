@@ -118,6 +118,31 @@ func TestClassifyApplySQLErrorSchemaDrift(t *testing.T) {
 	}
 }
 
+func TestClassifyApplySQLErrorMetadataLockTimeout(t *testing.T) {
+	failure := classifyApplySQLError(
+		&mysqlDriver.MySQLError{Number: 1205, Message: "Lock wait timeout exceeded; try restarting transaction; waiting for table metadata lock"},
+		applyEvent{
+			Operation: "ddl",
+			TableName: "app.items",
+			Query:     "ALTER TABLE `app`.`items` ADD COLUMN phase57_probe INT NULL",
+		},
+		"mysql-bin.000001",
+		420,
+		"mysql-bin.000001",
+		400,
+	)
+
+	if failure.FailureType != "metadata_lock_timeout" {
+		t.Fatalf("unexpected failure type: %s", failure.FailureType)
+	}
+	if failure.SQLErrorCode != 1205 {
+		t.Fatalf("unexpected sql error code: %d", failure.SQLErrorCode)
+	}
+	if !strings.Contains(failure.Remediation, "SHOW FULL PROCESSLIST") {
+		t.Fatalf("unexpected remediation: %s", failure.Remediation)
+	}
+}
+
 func TestBuildValueSampleTruncatesAndLimits(t *testing.T) {
 	longText := strings.Repeat("a", 200)
 	sample := buildValueSample(
