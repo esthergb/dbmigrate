@@ -111,6 +111,10 @@ Replication checkpoint behavior:
   - `empty`: no known artifacts found in `--state-dir`.
 - `proposals` includes remediation guidance from the conflict report to help triage and rerun planning.
 
+Metadata-lock classification:
+- Replication DDL failures that time out while waiting on metadata locks are reported as `failure_type=metadata_lock_timeout` instead of a generic retryable lock error.
+- The remediation text points to `SHOW FULL PROCESSLIST` plus metadata-lock instrumentation so the operator can identify the blocker before blindly retrying.
+
 ## Safety defaults
 
 - Fail fast on known incompatible features.
@@ -118,6 +122,34 @@ Replication checkpoint behavior:
 - Zero-date temporal defaults incompatible with destination strict `sql_mode` fail precheck with explicit auto-fix proposals.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
+
+## Metadata-lock incident triage
+
+Why this matters:
+- A waiting DDL can block later ordinary reads and writes behind it, making the system look generally unhealthy even when the real blocker is one older transaction.
+- The dangerous move is retrying or stacking more DDL before identifying the blocker.
+
+Recommended rehearsal:
+- Start one service with `docker compose up -d <service>`.
+- Run:
+  - `./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84`
+  - or `./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11`
+
+What to inspect:
+- `summary.json`: confirms whether queue amplification was observed.
+- `processlist.txt`: shows the blocking transaction plus waiting DDL and queued reader.
+- `metadata-locks.tsv`: preferred object-level evidence when `performance_schema.metadata_locks` is available.
+- MariaDB note: if metadata-lock instrumentation is unavailable, use processlist evidence and consider enabling `metadata_lock_info` manually for rehearsal.
+
+Operator decision path:
+1. Confirm the waiting DDL is really blocked on metadata lock, not on row-lock contention.
+2. Identify the blocking session and decide whether it is safer to drain/finish it or to kill the waiting DDL.
+3. If ordinary reads/writes are already queueing behind the waiting DDL, abort the waiting DDL first to reduce blast radius.
+4. Re-run schema change only during a drained window with a conservative `lock_wait_timeout`.
+
+Current scope:
+- This is operator guidance and rehearsal support, not automatic lock-killing behavior in `dbmigrate`.
+- For MariaDB, deep metadata-lock visibility may still require manual plugin enablement depending on image/runtime defaults.
 
 ## Rollback strategy (to refine)
 

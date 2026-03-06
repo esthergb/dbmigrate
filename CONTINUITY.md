@@ -1,50 +1,33 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Produce a long-form, updateable historical document of MySQL/MariaDB migration and replication conflicts, including simulation, detection, and mitigations.
-  - Keep work on `main` and avoid code changes; documentation-only output.
-  - Close the current high-priority research queue after the last five topics unless new evidence reveals a genuinely missing conflict class.
+  - Implement Phase 57 (`ddl_metadata_lock_observability_runbooks`) on a dedicated branch.
+  - Success means: metadata-lock incidents become a first-class reported failure mode, a local rehearsal script exists, and operator docs explain diagnosis and safe-abort workflow.
 - Constraints/Assumptions:
   - Docs in English.
-  - Include both official and community sources (forums/Reddit/Stack Overflow), clearly separating authoritative guidance from field reports.
-  - Treat community incidents as reproducible test candidates, not authoritative defaults.
-  - As of 2026-03-06, official Oracle material confirms `MySQL 9.6`; use that as the current `9.x` comparison point.
+  - Keep the phase focused: metadata-lock observability and runbooks only, not broader lock automation.
+  - Do not commit until the user asks.
 - Key decisions:
-  - Create a dedicated living-history document under `docs/`.
-  - Structure each conflict as an operator playbook: why it fails, affected paths, simulation, detection, mitigation, and source links.
+  - Start Phase 57 with one runnable local scenario plus one product-level failure classification, instead of trying to automate lock management.
+  - Reuse existing report/remediation surfaces for operator signal.
 - State:
-  - Branch: `codex/chore/research-closeout-phase61`, pushed to `origin` on 2026-03-06.
-  - No code changes permitted for this task.
+  - Branch: `codex/feat/metadata-lock-phase57`, pushed to `origin` on 2026-03-06.
+  - Phase 57 branch is published and under review.
 - Done:
-  - Reviewed existing research docs: `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`.
-  - Collected official and community references for additional migration and replication failure modes.
-  - Drafted `docs/migration-replication-conflict-history.md` as a living-history report with simulation, detection, mitigation, and source sections.
-  - Extended the report with `MySQL 9.x` scope notes and new issue families: dump-tool skew, `utf8mb3` alias drift, prepared XA blockers, scheduled events, time-zone-table drift, and persisted-config drift.
-  - Added more operational failure classes: binlog retention expiry, cloned replica identity (`server_id`/`server_uuid`), primary-key enforcement and GIPK drift, stale-config startup failures, and obsolete SQL/bootstrap syntax.
-  - Corrected the report to official `MySQL 9.6` scope and added managed-service and failover-specific issues from Cloud SQL, Azure, RDS, and Aurora documentation.
-  - Added community-incident-driven failover and recovery issues: stale DNS / connection pools after failover, skip-counter false recovery, and crash/restart relay metadata failures.
-  - Added schema-change and online-DDL incident coverage, and classified the simulation backlog into `locally simulable`, `cloud-only or cloud-leaning`, and `document unsupported only`.
-  - Added community incidents for auth/plugin breakage, client-collation failures, and dump/import corruption, and converted the locally simulable backlog into an ordered execution roadmap.
-  - Added verification false positives and data-type edge-case research, narrowed several prior open items, created `docs/matrix-pr-plan.md`, and seeded the next research queue with initial evidence.
-  - Executed the queued research pass on backup tools, TLS/SSL transport, stored-object parser drift, large-object streaming limits, and multi-source filtering, and extended `docs/matrix-pr-plan.md` with follow-on phases.
-  - Executed the refreshed queue on DDL algorithm/lock drift, compression/page-format downgrade risk, parallel applier diagnostics, connector/ORM metadata drift, and `LOAD DATA` privilege/path failures, and extended the PR plan again.
-  - Executed the next live queue on external-table edges, generated-column/expression-default drift, effective privilege and role activation, redo/undo capacity with long transactions, and tool-divergence behavior; extended the PR plan through Phase 31.
-  - Executed the next live queue on optimizer-statistics drift, GIS/FULLTEXT edge cases, event scheduler plus time-zone replay, account-export/hash quirks, and proxy/router behavior.
-  - Added a compact navigation block to the main report and executed the next live queue on DDL rebuild costs, charset handshake drift, trigger-order semantics, checksum canonicalization, and filtered replication with stored objects; extended the PR plan through Phase 36.
-  - Executed another live queue pass on optimizer-statistics drift, GIS/FULLTEXT, event replay, account usability/hash export, and proxy/router behavior; extended the PR plan through Phase 41.
-  - Executed the next live queue on optimizer hints/trace, deep GIS/SRS compatibility, event failure runbooks, account lock/expiry policy, and proxy read/write split behavior; extended the PR plan through Phase 46.
-  - Executed the next live queue on stored-object parser/sql-mode edges, temp-table/session-state behavior, GTID reseed/surgery risk, filesystem path semantics, and replication-user/channel rotation; extended the PR plan through Phase 56.
-  - Executed the next live queue on GIPK runtime behavior, stored-object partial-scope interactions, chunking/autocommit semantics, monitoring-agent/exporter compatibility, and non-InnoDB engine behavior; extended the PR plan through Phase 51.
-  - Executed the final queued topics on metadata-lock observability runbooks, backup/restore validation gaps, session time-zone and `NOW()` behavior drift, plugin lifecycle and disabled-feature flags, and replication parallelism versus chunking; extended the PR plan through Phase 61.
-  - Closed the high-priority active research queue with no additional queue items opened.
-  - Committed the docs-only batch as `a61d11f` (`docs: close research queue and extend migration history`) and opened PR `#58`.
+  - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
+  - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
+  - Added focused binlog test coverage for `metadata_lock_timeout`.
+  - Updated `docs/operators-guide.md`, `docs/known-problems.md`, and `scripts/README.md` with Phase 57 runbook and rehearsal guidance.
+  - Verified `go test ./internal/replicate/binlog`.
+  - Verified `scripts/run-metadata-lock-scenario.sh` locally on `mysql84` and `mariadb11`; both reproduced queue amplification with `ddl_exit_code=1`, `ddl_elapsed_seconds=5`, `read_exit_code=0`, `read_elapsed_seconds=4`, and processlist evidence showing both DDL and ordinary reads waiting for table metadata lock.
+  - Committed the Phase 57 batch as `9a5aa6e` (`feat: add metadata lock rehearsal and reporting`) and opened PR `#59`.
 - Now:
-  - Wait for CI and review on PR `#58`.
+  - Wait for CI and review on PR `#59`.
 - Next:
-  - After PR `#58` lands, keep the report dormant unless new field evidence or product scope changes justify reopening the queue.
+  - Decide whether to add matrix-wrapper scripts for the metadata-lock rehearsal in a follow-up, or keep it as a focused operator script only.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether the user wants this report later linked from `README.md` or kept as a standalone research artifact for now.
+  - UNCONFIRMED: whether MariaDB plugin-assisted deep lock visibility should be automated later, or left as manual operator guidance.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`, `docs/migration-replication-conflict-history.md`, `docs/matrix-pr-plan.md`.
-  - IDs: branch `codex/chore/research-closeout-phase61`, commit `a61d11f`, PR `#58`.
-  - Commands: `git pull --ff-only origin main`, targeted web research via official docs and community sources, `gh pr create`.
+  - Files: `CONTINUITY.md`, `internal/replicate/binlog/failure.go`, `internal/replicate/binlog/run_test.go`, `scripts/run-metadata-lock-scenario.sh`, `scripts/README.md`, `docs/operators-guide.md`, `docs/known-problems.md`.
+  - IDs: branch `codex/feat/metadata-lock-phase57`, commit `9a5aa6e`, PR `#59`.
+  - Commands: `go test ./internal/replicate/binlog`, `docker compose up -d mysql84 mariadb11`, `./scripts/run-metadata-lock-scenario.sh mysql84 ./state/metadata-lock/mysql84`, `./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11`, `gh pr create`.
