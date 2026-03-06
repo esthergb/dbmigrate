@@ -33,8 +33,9 @@ Last updated: 2026-03-07
   - PR `#65` is merged.
   - PR `#66` is merged.
   - PR `#67` is merged.
+  - PR `#68` is open for the v1 support-surface cleanup.
   - Branch created from updated `main` to perform docs-only v1 support-surface cleanup.
-  - Working tree contains README/continuity updates for this cleanup.
+  - Working tree contains continuity-only PR-state refresh.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -114,9 +115,9 @@ Last updated: 2026-03-07
   - Added tracked planning doc:
     - `docs/v1-release-plan.md`
 - Now:
-  - Update `README.md` so the public support promise matches v1/v2/v3 reality.
+  - Record PR state for the v1 support-surface cleanup and wait for CI/review.
 - Next:
-  - Commit, push, and open the v1 support-surface cleanup PR.
+  - After merge, start the next v1 hardening item from the release plan.
 - Open questions (UNCONFIRMED if needed):
   - None on product scope; the remaining question is release execution order for v1 hardening.
 - Working set (files/ids/commands):
@@ -131,7 +132,7 @@ Last updated: 2026-03-07
     - `datasets/phase64_verify_source_mysql84.sql`
     - `datasets/phase64_verify_dest_mariadb12.sql`
     - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`, merged PR `#67`; branch `codex/chore/v1-support-surface`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`, merged PR `#67`; open PR `#68`; branch `codex/chore/v1-support-surface`.
   - Commands:
     - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
