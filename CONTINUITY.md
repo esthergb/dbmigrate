@@ -1,81 +1,109 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 62 on `codex/feat/invisible-gipk-phase62`.
-  - Success means hidden-schema downgrade behavior is enforced by product prechecks, backed by local rehearsal evidence, and documented for operators.
+  - Implement Phase 63 on `codex/feat/collation-client-phase63`.
+  - Success means:
+    - `plan` and schema `migrate` distinguish server-unsupported collations from client-compatibility risk,
+    - focused fixtures and a rehearsal script exist for `utf8mb4_0900_ai_ci` and `utf8mb4_uca1400_ai_ci`,
+    - `report` surfaces the collation artifact, separates server-side and client-side proposals, and treats incompatible precheck artifacts as `attention_required`,
+    - local tests/build/rehearsal pass.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - A new branch is authorized because the user explicitly requested the next feature phase.
-  - Commit, push, and PR creation are authorized for Phase 62.
+  - Do not commit, push, or open a PR until the user asks.
 - Key decisions:
-  - Phase 61 shipped transaction-shape telemetry and rehearsal evidence instead of pretending to control replica worker settings directly.
-  - The research queue is closed; execution continues through implementation phases and test/rehearsal coverage.
-  - Phase 62 is defined as the invisible-column and generated invisible primary key downgrade-evidence track.
-  - This phase is chosen because it closes the clearest remaining product-fit `UNCONFIRMED` gap in `docs/migration-replication-conflict-history.md`.
-  - Phase 62 blocks MySQL -> MariaDB schema paths when source uses invisible columns, invisible indexes, or GIPK because local restore evidence shows semantic drift rather than hard SQL failure.
+  - Phase 62 enforces hidden-schema compatibility as product behavior, not just documentation: MySQL invisible columns, invisible indexes, and GIPK are inventory items in `plan` and schema blockers in `migrate` when destination semantics drift.
+  - MariaDB destinations are blocked for these hidden-schema features because local restore evidence shows visibility drift instead of semantic preservation.
+  - Phase 63 is defined as the collation client-compatibility and handshake-risk track.
+  - Phase 63 product boundary:
+    - server-unsupported collations are schema blockers,
+    - client/library compatibility risk remains warning-level evidence,
+    - representative CLI connectivity is useful rehearsal evidence but not proof that every driver stack is safe.
+  - `report` status semantics are tightened:
+    - incompatible precheck artifacts escalate to `attention_required`
+    - warning-only precheck artifacts remain `ok`
+    - default `report` exit code follows that status unless `--fail-on-conflict=false` is set
+  - MariaDB `uca1400_*` and `utf8mb4_uca1400_*` names are treated as the same support family when inventorying destination support.
 - State:
-  - Current branch: `codex/feat/invisible-gipk-phase62`.
-  - Branch was created from updated `main` after merged PR `#63`.
-  - Commit `c634e61` contains the Phase 62 implementation batch.
-  - Branch is pushed to `origin/codex/feat/invisible-gipk-phase62`.
-  - PR `#64` is open: `feat: add invisible schema downgrade precheck`.
-  - CI failure root cause was a dead unused helper (`sortInvisibleGIPKReport`) flagged by `golangci-lint`.
+  - Current branch: `codex/feat/collation-client-phase63`.
+  - Phase 63 implementation is complete locally and uncommitted.
+  - Working tree contains code, fixtures, rehearsal script, docs, and continuity updates for Phase 63.
 - Done:
-  - Phases 57-61 are merged into `main`.
+  - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
   - Phase 58: backup/restore rehearsal and rollback evidence gates.
   - Phase 59: session timezone and `NOW()` behavior rehearsal.
   - Phase 60: plugin lifecycle precheck and rehearsal.
   - Phase 61: replication transaction-shape telemetry, report/remediation output, and rehearsal script.
-  - Research history and PR execution plan are documented in:
-    - `docs/migration-replication-conflict-history.md`
-    - `docs/matrix-pr-plan.md`
-  - `main` was synced after merged PR `#63` before branching Phase 62.
-  - Added Phase 62 precheck and reporting in:
-    - `internal/commands/invisible_gipk_precheck.go`
-    - `internal/commands/plan.go`
-    - `internal/commands/migrate.go`
-  - Added Phase 62 tests:
-    - `internal/commands/invisible_gipk_precheck_test.go`
-    - `internal/commands/migrate_test.go`
-  - Added reusable Phase 62 source fixture:
-    - `datasets/phase62_mysql_hidden_schema.sql`
-  - Added rehearsal script:
-    - `scripts/run-invisible-gipk-rehearsal.sh`
-  - Updated operator and risk docs:
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
-    - `docs/risk-checklist.md`
-    - `scripts/README.md`
-    - `datasets/README.md`
-    - `docs/migration-replication-conflict-history.md`
-  - Verified:
+  - Phase 62: invisible-column and GIPK downgrade precheck, rehearsal fixture/script, and operator docs.
+  - Phase 62 evidence now includes:
+    - `mysql84 -> mysql80`
+    - `mysql84 -> mariadb10`
+    - `mysql84 -> mariadb11`
+  - Phase 63 implementation:
+    - added `internal/commands/collation_precheck.go`
+    - wired collation precheck into `plan`, schema `migrate`, and `report`
+    - added tests:
+      - `internal/commands/collation_precheck_test.go`
+      - updated `internal/commands/migrate_test.go`
+      - updated `internal/commands/report_test.go`
+    - added fixtures:
+      - `datasets/phase63_mysql0900_collation.sql`
+      - `datasets/phase63_mariadb_uca1400_collation.sql`
+    - added rehearsal script:
+      - `scripts/run-collation-rehearsal.sh`
+    - updated docs:
+      - `docs/operators-guide.md`
+      - `docs/known-problems.md`
+      - `docs/risk-checklist.md`
+      - `scripts/README.md`
+      - `datasets/README.md`
+  - Verified locally:
     - `go test ./internal/commands`
     - `go test ./...`
     - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`
-    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`
-    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`
-    - `./bin/dbmigrate migrate --source 'mysql://root:rootpass123@127.0.0.1:23307/' --dest 'mysql://root:rootpass123@127.0.0.1:13307/' --databases phase62_hidden_schema --schema-only --json`
-  - Observed Phase 62 evidence:
-    - `mysql84 -> mysql80`: `plan_exit_code=0`, invisible columns/indexes stayed hidden, included dump preserved GIPK as invisible, and skipped dump removed GIPK entirely.
-    - `mysql84 -> mariadb10`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
-    - `mysql84 -> mariadb11`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
-  - Committed Phase 62 implementation as `c634e61` (`feat: add invisible schema downgrade precheck`).
-  - Pushed branch `codex/feat/invisible-gipk-phase62` to origin.
-  - Opened PR `#64` (`feat: add invisible schema downgrade precheck`).
-  - Verified CI fix locally with:
-    - `go test ./internal/commands`
-    - `golangci-lint run ./...`
+    - `./scripts/run-collation-rehearsal.sh ./state/collation-phase63`
+    - `./bin/dbmigrate report --state-dir ./state/collation-phase63/mysql84-to-mariadb10-0900/state --json` -> exit `2`, `status=attention_required`
+    - `./bin/dbmigrate report --state-dir ./state/collation-phase63/mariadb12-to-mariadb12-uca1400/state --json --fail-on-conflict=false` -> exit `0`, `status=ok`
+  - Observed Phase 63 evidence:
+    - `mysql84 -> mariadb10` with `utf8mb4_0900_ai_ci`:
+      - `plan_exit_code=2`
+      - `restore_exit_code=1`
+      - representative `mariadb10` CLI probe to MySQL 8.4 succeeded
+    - `mariadb12 -> mysql84` with `utf8mb4_uca1400_ai_ci`:
+      - `plan_exit_code=2`
+      - `restore_exit_code=1`
+      - representative `mysql80` CLI probe to MariaDB 12 succeeded
+    - `mariadb12 -> mariadb12` with `utf8mb4_uca1400_ai_ci`:
+      - `plan_exit_code=0`
+      - `restore_exit_code=0`
+      - `client_compatibility_risk_count=7`
+  - Research history and PR execution plan remain documented in:
+    - `docs/migration-replication-conflict-history.md`
+    - `docs/matrix-pr-plan.md`
 - Now:
-  - Push the lint fix to PR `#64` and wait for CI to rerun.
+  - Commit, push, and open the Phase 63 PR.
 - Next:
-  - Fix CI or review feedback on the Phase 62 PR if needed.
+  - Wait for CI and review on the Phase 63 PR.
 - Open questions (UNCONFIRMED if needed):
-  - None blocking.
+  - None currently blocking Phase 63.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/commands/invisible_gipk_precheck.go`, `internal/commands/invisible_gipk_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `datasets/phase62_mysql_hidden_schema.sql`, `scripts/run-invisible-gipk-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/migration-replication-conflict-history.md`, `scripts/README.md`, `datasets/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, open PR `#64`; branch `codex/feat/invisible-gipk-phase62`; commit `c634e61`.
-  - Commands: `git checkout -b codex/feat/invisible-gipk-phase62`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `docker compose -f docker-compose.yml up -d mysql80 mysql84 mariadb10 mariadb11`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`.
+  - Files:
+    - `internal/commands/collation_precheck.go`
+    - `internal/commands/plan.go`
+    - `internal/commands/migrate.go`
+    - `internal/commands/report.go`
+    - `internal/commands/collation_precheck_test.go`
+    - `scripts/run-collation-rehearsal.sh`
+    - `datasets/phase63_mysql0900_collation.sql`
+    - `datasets/phase63_mariadb_uca1400_collation.sql`
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+    - `docs/risk-checklist.md`
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`; branch `codex/feat/collation-client-phase63`.
+  - Commands:
+    - `go test ./internal/commands`
+    - `go test ./...`
+    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
+    - `./scripts/run-collation-rehearsal.sh ./state/collation-phase63`
