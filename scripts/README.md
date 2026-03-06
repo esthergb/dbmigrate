@@ -18,6 +18,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-plugin-lifecycle-rehearsal.sh`: local proof of auth-plugin drift and unsupported storage-engine detection.
 - `run-replication-shape-rehearsal.sh`: local proof that transaction shape matters more than nominal worker count.
 - `run-invisible-gipk-rehearsal.sh`: local proof of invisible-column visibility drift and generated invisible primary key dump behavior.
+- `run-collation-rehearsal.sh`: local proof that server-unsupported collations and client-compatibility risk are different failure classes.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -138,6 +139,13 @@ docker compose up -d mysql84 mariadb11
 ```bash
 docker compose up -d mysql84 mariadb10
 ./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10
+```
+
+Run the Phase 63 collation compatibility and client-risk rehearsal:
+
+```bash
+docker compose up -d mysql80 mysql84 mariadb10 mariadb12
+./scripts/run-collation-rehearsal.sh ./state/collation-phase63
 ```
 
 Run all scenarios sequentially:
@@ -295,3 +303,30 @@ Interpretation:
 - `included_gipk_remains_invisible=true` means the included dump preserved the hidden primary key semantics.
 - `skipped_gipk_column_present=false` means `--skip-generated-invisible-primary-key` removed the hidden key from the logical schema entirely.
 - `visibility_drift_detected=true` means at least one source hidden-schema feature became visible or semantically different on restore.
+
+## Collation compatibility and client-risk rehearsal artifacts
+
+`run-collation-rehearsal.sh` is the focused Phase 63 rehearsal for separating server-side unsupported collations from client/library compatibility risk.
+
+Artifacts written to the chosen output directory:
+
+- `summary.json`: top-level index of the three fixed Phase 63 scenarios
+- per-scenario `summary.json`: plan/restore/client-probe exit codes plus artifact paths
+- `source-collations.tsv`: source schema/table/column collation inventory
+- `plan-output.json`: actual `dbmigrate plan` output for that scenario
+- `report-output.json`: `dbmigrate report` output reading `collation-precheck.json`
+- `dump.sql`: logical dump artifact used for restore rehearsal
+- `import.stderr.log`: direct restore failure evidence when destination server rejects the collation
+- `client-probe.txt`: representative older-client query result against the target server
+
+Scenario set:
+
+- `mysql84 -> mariadb10` using `utf8mb4_0900_ai_ci`
+- `mariadb12 -> mysql84` using `utf8mb4_uca1400_ai_ci`
+- `mariadb12 -> mariadb12` using `utf8mb4_uca1400_ai_ci`
+
+Interpretation:
+
+- `plan_exit_code=2` with `restore_exit_code=1` means the collation is a real server-side incompatibility, not just a client quirk.
+- `plan_exit_code=0` with `client_compatibility_risk_count > 0` means the server accepts the schema but representative application/client rehearsal is still required.
+- `representative_client_probe_exit_code=0` means the tested CLI connected; that is useful evidence, but it is not proof that every production driver will behave the same way.

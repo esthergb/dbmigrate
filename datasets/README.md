@@ -10,6 +10,8 @@ This directory contains SQL datasets used by the migration matrix test scripts.
 4. `populate_mysql80.sql` - MySQL 8.0 compatible dataset.
 5. `populate_mysql84.sql` - MySQL 8.4 compatible dataset.
 6. `phase62_mysql_hidden_schema.sql` - focused MySQL fixture for invisible columns, invisible indexes, and generated invisible primary keys.
+7. `phase63_mysql0900_collation.sql` - focused MySQL fixture for `utf8mb4_0900_ai_ci`.
+8. `phase63_mariadb_uca1400_collation.sql` - focused MariaDB fixture for `utf8mb4_uca1400_ai_ci`.
 
 ## Dataset Design
 
@@ -25,6 +27,8 @@ Focused fixtures:
 
 - `phase62_mysql_hidden_schema.sql` is intentionally narrow and should be used by dedicated rehearsals, not by the full baseline matrix.
 - It requires a MySQL source because it enables `sql_generate_invisible_primary_key`.
+- `phase63_mysql0900_collation.sql` is intentionally narrow and should be used by the dedicated Phase 63 collation rehearsal.
+- `phase63_mariadb_uca1400_collation.sql` is intentionally narrow and should be used by the dedicated Phase 63 collation rehearsal on MariaDB 12+ sources.
 
 ## Usage in Scripts
 

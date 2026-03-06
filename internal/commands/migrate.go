@@ -118,6 +118,20 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 			)
 		}
 
+		collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("collation precheck failed: %w", err)
+		}
+		if collationReport.Incompatible {
+			if err := writeCollationMigratePrecheckReport(out, cfg, collationReport); err != nil {
+				return err
+			}
+			return WithExitCode(
+				ExitCodeDiff,
+				errors.New("schema precheck failed; source collations are unsupported on destination"),
+			)
+		}
+
 		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("schema precheck failed: %w", err)

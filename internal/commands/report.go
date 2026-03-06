@@ -30,6 +30,8 @@ type reportResult struct {
 type reportSummary struct {
 	StateDir                    string                           `json:"state_dir"`
 	Artifacts                   reportArtifacts                  `json:"artifacts"`
+	CollationPrecheck           *collationPrecheckSummary        `json:"collation_precheck,omitempty"`
+	CollationPrecheckFilePath   string                           `json:"collation_precheck_file,omitempty"`
 	DataBaselineCheckpoint      *dataBaselineCheckpointSummary   `json:"data_baseline_checkpoint,omitempty"`
 	ReplicationCheckpoint       *replicationCheckpointSummary    `json:"replication_checkpoint,omitempty"`
 	ReplicationConflictReport   *state.ReplicationConflictReport `json:"replication_conflict_report,omitempty"`
@@ -38,9 +40,21 @@ type reportSummary struct {
 }
 
 type reportArtifacts struct {
+	CollationPrecheck         bool `json:"collation_precheck"`
 	DataBaselineCheckpoint    bool `json:"data_baseline_checkpoint"`
 	ReplicationCheckpoint     bool `json:"replication_checkpoint"`
 	ReplicationConflictReport bool `json:"replication_conflict_report"`
+}
+
+type collationPrecheckSummary struct {
+	Path                         string `json:"path"`
+	Incompatible                 bool   `json:"incompatible"`
+	SourceVersion                string `json:"source_version"`
+	DestVersion                  string `json:"dest_version"`
+	SourceServerCollation        string `json:"source_server_collation,omitempty"`
+	DestServerCollation          string `json:"dest_server_collation,omitempty"`
+	UnsupportedDestinationCount  int    `json:"unsupported_destination_count"`
+	ClientCompatibilityRiskCount int    `json:"client_compatibility_risk_count"`
 }
 
 type dataBaselineCheckpointSummary struct {
@@ -76,10 +90,10 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	}
 
 	status := "ok"
-	if summary.ReplicationConflictReport != nil && summary.ReplicationConflictReport.FailureType != "" && !summary.ReplicationConflictStale {
+	if reportNeedsAttention(summary) {
 		status = "attention_required"
 	}
-	if !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
+	if !summary.Artifacts.CollationPrecheck && !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
 		status = "empty"
 	}
 
@@ -107,10 +121,19 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	if status == "attention_required" && opts.FailOnConflict {
 		return WithExitCode(
 			ExitCodeDiff,
-			errors.New("report detected unresolved replication conflicts (use --fail-on-conflict=false to report without failing)"),
+			errors.New("report detected incompatible precheck or unresolved replication conflict artifacts (use --fail-on-conflict=false to report without failing)"),
 		)
 	}
 	return nil
+}
+
+func reportNeedsAttention(summary reportSummary) bool {
+	if summary.CollationPrecheck != nil && summary.CollationPrecheck.Incompatible {
+		return true
+	}
+	return summary.ReplicationConflictReport != nil &&
+		summary.ReplicationConflictReport.FailureType != "" &&
+		!summary.ReplicationConflictStale
 }
 
 func parseReportOptions(args []string) (reportOptions, error) {
@@ -133,6 +156,29 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 	}
 
 	proposals := make([]string, 0, 2)
+
+	collationPrecheckPath := filepath.Join(stateDir, "collation-precheck.json")
+	if exists, err := fileExists(collationPrecheckPath); err != nil {
+		return reportSummary{}, nil, err
+	} else if exists {
+		report, err := loadCollationPrecheckArtifact(stateDir)
+		if err != nil {
+			return reportSummary{}, nil, err
+		}
+		summary.Artifacts.CollationPrecheck = true
+		summary.CollationPrecheckFilePath = collationPrecheckPath
+		summary.CollationPrecheck = &collationPrecheckSummary{
+			Path:                         collationPrecheckPath,
+			Incompatible:                 report.Incompatible,
+			SourceVersion:                report.SourceVersion,
+			DestVersion:                  report.DestVersion,
+			SourceServerCollation:        report.SourceServerCollation,
+			DestServerCollation:          report.DestServerCollation,
+			UnsupportedDestinationCount:  report.UnsupportedDestinationCount,
+			ClientCompatibilityRiskCount: report.ClientCompatibilityRiskCount,
+		}
+		proposals = append(proposals, collationPrecheckProposals(report)...)
+	}
 
 	dataCheckpointPath := filepath.Join(stateDir, "data-baseline-checkpoint.json")
 	if exists, err := fileExists(dataCheckpointPath); err != nil {
@@ -291,15 +337,32 @@ func fileExists(path string) (bool, error) {
 func writeReportText(out io.Writer, payload reportResult) error {
 	if _, err := fmt.Fprintf(
 		out,
-		"[report] status=%s state_dir=%s artifacts(data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
+		"[report] status=%s state_dir=%s artifacts(collation_precheck=%v data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
 		payload.Status,
 		payload.Summary.StateDir,
+		payload.Summary.Artifacts.CollationPrecheck,
 		payload.Summary.Artifacts.DataBaselineCheckpoint,
 		payload.Summary.Artifacts.ReplicationCheckpoint,
 		payload.Summary.Artifacts.ReplicationConflictReport,
 		len(payload.Proposals),
 	); err != nil {
 		return err
+	}
+
+	if payload.Summary.CollationPrecheck != nil {
+		cp := payload.Summary.CollationPrecheck
+		if _, err := fmt.Fprintf(
+			out,
+			"[report] collation_precheck path=%s incompatible=%v source_server_collation=%q dest_server_collation=%q unsupported_destination=%d client_risks=%d\n",
+			cp.Path,
+			cp.Incompatible,
+			cp.SourceServerCollation,
+			cp.DestServerCollation,
+			cp.UnsupportedDestinationCount,
+			cp.ClientCompatibilityRiskCount,
+		); err != nil {
+			return err
+		}
 	}
 
 	if payload.Summary.DataBaselineCheckpoint != nil {
@@ -392,6 +455,17 @@ func replicationShapeProposals(shape state.ReplicationTransactionShape) []string
 		case "window_cut_before_next_transaction":
 			add("expect checkpoint progress only at transaction boundaries; if windows look stalled, inspect transaction shape before tuning worker counts.")
 		}
+	}
+	return proposals
+}
+
+func collationPrecheckProposals(report collationPrecheckReport) []string {
+	proposals := make([]string, 0, 2)
+	if report.UnsupportedDestinationCount > 0 {
+		proposals = append(proposals, "rewrite unsupported source collations to approved destination equivalents before migrate; this is a server-side incompatibility, not a client quirk.")
+	}
+	if report.ClientCompatibilityRiskCount > 0 {
+		proposals = append(proposals, "rehearse representative drivers and connection startup against the chosen collation set; server acceptance does not guarantee client-library compatibility.")
 	}
 	return proposals
 }

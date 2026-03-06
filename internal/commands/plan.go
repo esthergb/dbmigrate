@@ -106,6 +106,17 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		report.Compatible = false
 	}
 
+	collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+	if err != nil {
+		return fmt.Errorf("collation precheck failed: %w", err)
+	}
+	if len(collationReport.Findings) > 0 {
+		report.Findings = append(report.Findings, collationReport.Findings...)
+	}
+	if collationReport.Incompatible {
+		report.Compatible = false
+	}
+
 	if err := writePlanReport(out, cfg, report); err != nil {
 		return err
 	}

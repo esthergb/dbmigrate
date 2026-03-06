@@ -132,6 +132,17 @@ Observed failure patterns:
 - Preflight: full inventory of server/db/table/column charset+collation.
 - Mapping stage: detect unsupported collations and propose deterministic replacements.
 - Verification mode: explicit collation diff section, optional tolerance flags (`--tolerate-collation-diffs`) while still reporting mismatches.
+- Current Phase 63 behavior:
+  - `plan` inventories selected schema/table/column collations and persists `collation-precheck.json`.
+  - Schema `migrate` fails fast when source collations are unsupported on the destination server.
+  - `report` separates server-side incompatibility from client/library risk:
+    - `unsupported_destination_count`
+    - `client_compatibility_risk_count`
+  - Focused rehearsal support is provided by `scripts/run-collation-rehearsal.sh`.
+- Current local evidence:
+  - `mysql84 -> mariadb10` with `utf8mb4_0900_ai_ci` failed both `plan` and logical restore with `ERROR 1273`.
+  - `mariadb12 -> mysql84` with `utf8mb4_uca1400_ai_ci` failed both `plan` and logical restore with `ERROR 1273`.
+  - `mariadb12 -> mariadb12` stayed schema-compatible but still emitted client-risk warnings for `utf8mb4_uca1400_ai_ci`.
 
 ---
 

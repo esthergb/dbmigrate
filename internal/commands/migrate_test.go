@@ -188,3 +188,37 @@ func TestWriteInvisibleGIPKPrecheckReportText(t *testing.T) {
 		t.Fatalf("expected finding line in report text: %q", text)
 	}
 }
+
+func TestWriteCollationMigratePrecheckReportText(t *testing.T) {
+	report := collationPrecheckReport{
+		Name:                         "collation-compatibility",
+		Incompatible:                 true,
+		SourceServerCollation:        "utf8mb4_0900_ai_ci",
+		DestServerCollation:          "utf8mb4_general_ci",
+		UnsupportedDestinationCount:  1,
+		ClientCompatibilityRiskCount: 1,
+		Findings: []compat.Finding{
+			{
+				Code:     "unsupported_destination_collation",
+				Severity: "error",
+				Message:  "destination does not support utf8mb4_0900_ai_ci",
+				Proposal: "map it",
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := writeCollationMigratePrecheckReport(&out, config.RuntimeConfig{}, report); err != nil {
+		t.Fatalf("write text report: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "precheck=collation-compatibility") {
+		t.Fatalf("unexpected report text: %q", text)
+	}
+	if !strings.Contains(text, "unsupported_destination=1") || !strings.Contains(text, "client_risks=1") {
+		t.Fatalf("expected collation counters in output: %q", text)
+	}
+	if !strings.Contains(text, "code=unsupported_destination_collation") {
+		t.Fatalf("expected finding line in report text: %q", text)
+	}
+}

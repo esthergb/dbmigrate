@@ -50,6 +50,15 @@ Plugin and engine lifecycle precheck:
 - Account findings label visible users as `user-managed`, `administrative`, or `system` so operators can separate application cutover work from bootstrap noise.
 - MySQL `8.4` and newer may report `default_authentication_plugin` as unavailable; treat that as a signal to rely on plugin inventory, not stale variable assumptions.
 
+Collation compatibility precheck:
+- `plan` inventories selected source schema, table, and column collations plus source/destination server defaults.
+- Schema `migrate` runs the same precheck before DDL apply.
+- Server-unsupported collations fail fast before schema apply.
+- Client/library compatibility risk remains warning-level when the server accepts the collation but the application stack may lag behind it.
+- `report` loads `collation-precheck.json` and keeps these two classes separate:
+  - `unsupported_destination_count`
+  - `client_compatibility_risk_count`
+
 Invisible-column and GIPK precheck:
 - `plan` inventories source invisible columns, invisible indexes, and generated invisible primary key tables.
 - Schema `migrate` runs the same precheck before DDL apply.
@@ -128,9 +137,12 @@ Replication checkpoint behavior:
   - `replication-conflict-report.json`
 - Report status values:
   - `ok`: no conflict failure reported.
-  - `attention_required`: replication conflict report contains a failure.
+  - `attention_required`: replication conflict report contains a failure, or an incompatible precheck artifact is present in `--state-dir`.
   - `empty`: no known artifacts found in `--state-dir`.
 - `proposals` includes remediation guidance from the conflict report to help triage and rerun planning.
+- Default `report` exit behavior is now consistent with that status:
+  - incompatible precheck artifacts fail the command by default
+  - warning-only artifacts remain reportable without non-zero exit
 
 Metadata-lock classification:
 - Replication DDL failures that time out while waiting on metadata locks are reported as `failure_type=metadata_lock_timeout` instead of a generic retryable lock error.
@@ -257,6 +269,50 @@ What to inspect:
 Operational rule:
 - Treat unsupported storage engines as a migration blocker until tables are converted or excluded.
 - Treat unsupported auth plugins as a required account-cutover task; do not auto-rewrite them blindly.
+
+## Collation compatibility and client-risk rehearsal
+
+Do not collapse "destination server cannot load this schema" and "some clients may break later" into the same problem.
+
+Recommended rehearsal:
+- Start the required services with `docker compose up -d mysql80 mysql84 mariadb10 mariadb12`.
+- Run:
+  - `./scripts/run-collation-rehearsal.sh ./state/collation-phase63`
+
+What this checks:
+- MySQL `utf8mb4_0900_ai_ci` objects against a MariaDB 10.6 destination.
+- MariaDB `utf8mb4_uca1400_ai_ci` objects against a MySQL 8.4 destination.
+- MariaDB `utf8mb4_uca1400_ai_ci` objects against a MariaDB 12 destination where the server accepts them but older clients may lag.
+- Representative cross-client probes so operator evidence does not stop at server-side DDL behavior.
+
+Observed local evidence for this phase:
+- `mysql84 -> mariadb10` with `utf8mb4_0900_ai_ci`:
+  - `plan_exit_code=2`
+  - `restore_exit_code=1`
+  - restore failed with `ERROR 1273 ... Unknown collation: 'utf8mb4_0900_ai_ci'`
+  - representative `mariadb10` CLI still connected to MySQL 8.4 and read `@@collation_server=utf8mb4_0900_ai_ci`
+- `mariadb12 -> mysql84` with `utf8mb4_uca1400_ai_ci`:
+  - `plan_exit_code=2`
+  - `restore_exit_code=1`
+  - restore failed with `ERROR 1273 ... Unknown collation: 'utf8mb4_uca1400_ai_ci'`
+  - representative `mysql80` CLI still connected to MariaDB 12 and read `@@collation_server=utf8mb4_uca1400_ai_ci`
+- `mariadb12 -> mariadb12` with `utf8mb4_uca1400_ai_ci`:
+  - `plan_exit_code=0`
+  - `restore_exit_code=0`
+  - `client_compatibility_risk_count=7`
+  - representative `mysql80` CLI still connected successfully, so the risk remains application-stack specific rather than universal CLI breakage
+
+What to inspect:
+- `plan-output.json`: exact `dbmigrate plan` findings
+- `report-output.json`: post-plan artifact summary with separate server/client proposals
+- `import.stderr.log`: direct logical-restore failure when the destination server does not support the collation
+- `client-probe.txt`: representative older-client query result against the target server
+- `source-collations.tsv`: source schema/table/column collation inventory
+- `summary.json`: scenario-level machine-readable result
+
+Operational rule:
+- Treat `unsupported_destination_count > 0` as a schema blocker.
+- Treat `client_compatibility_risk_count > 0` as a cutover gate for application/client rehearsal, not as proof that the server-side schema is invalid.
 
 ## Invisible-column and GIPK rehearsal
 
