@@ -122,3 +122,34 @@ func TestWriteMigratePrecheckReportText(t *testing.T) {
 		t.Fatalf("expected finding line in report text: %q", text)
 	}
 }
+
+func TestWritePluginLifecyclePrecheckReportText(t *testing.T) {
+	report := pluginLifecyclePrecheckReport{
+		Name:                 "plugin-lifecycle",
+		Incompatible:         true,
+		NoEngineSubstitution: false,
+		DefaultAuthenticationPluginVariablePresent: false,
+		Findings: []compat.Finding{
+			{
+				Code:     "unsupported_storage_engine_table",
+				Severity: "error",
+				Message:  "table uses aria",
+				Proposal: "convert it",
+			},
+		},
+	}
+	var out bytes.Buffer
+	if err := writePluginLifecyclePrecheckReport(&out, config.RuntimeConfig{}, report); err != nil {
+		t.Fatalf("write text report: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "precheck=plugin-lifecycle") {
+		t.Fatalf("unexpected report text: %q", text)
+	}
+	if !strings.Contains(text, "default_auth_plugin_variable_present=false") {
+		t.Fatalf("expected default auth plugin visibility in output: %q", text)
+	}
+	if !strings.Contains(text, "code=unsupported_storage_engine_table") {
+		t.Fatalf("expected finding line in report text: %q", text)
+	}
+}

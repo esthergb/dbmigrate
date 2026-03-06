@@ -84,6 +84,17 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		report.Compatible = false
 	}
 
+	pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+	if err != nil {
+		return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
+	}
+	if len(pluginReport.Findings) > 0 {
+		report.Findings = append(report.Findings, pluginReport.Findings...)
+	}
+	if pluginReport.Incompatible {
+		report.Compatible = false
+	}
+
 	if err := writePlanReport(out, cfg, report); err != nil {
 		return err
 	}

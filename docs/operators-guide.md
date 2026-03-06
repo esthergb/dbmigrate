@@ -42,6 +42,14 @@ Zero-date default precheck:
 - A reusable fix script is generated at:
   - `--state-dir/precheck-zero-date-fixes.sql`
 
+Plugin and engine lifecycle precheck:
+- `plan` inventories source account plugins, destination active plugins, selected source table engines, and destination engine support.
+- Schema `migrate` runs the same precheck before DDL apply.
+- Unsupported storage engines fail fast before schema apply.
+- Unsupported auth plugins are currently reported as warnings, not schema blockers, because baseline schema/data migration does not recreate accounts yet.
+- Account findings label visible users as `user-managed`, `administrative`, or `system` so operators can separate application cutover work from bootstrap noise.
+- MySQL `8.4` and newer may report `default_authentication_plugin` as unavailable; treat that as a signal to rely on plugin inventory, not stale variable assumptions.
+
 ## Baseline migration execution
 
 - Schema-only:
@@ -120,6 +128,8 @@ Metadata-lock classification:
 - Fail fast on known incompatible features.
 - Downgrade incompatibilities must fail with detailed remediation proposals.
 - Zero-date temporal defaults incompatible with destination strict `sql_mode` fail precheck with explicit auto-fix proposals.
+- Unsupported source storage engines fail precheck before schema apply.
+- Unsupported auth plugins are surfaced explicitly in `plan` findings so account cutover work is not guessed later.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
 
@@ -205,6 +215,33 @@ What to inspect:
 Operational rule:
 - If the app or cutover path depends on local-time rendering, review `TIMESTAMP` and `DATETIME` usage explicitly before claiming compatibility.
 - Prefer UTC discipline and explicit session initialization where possible.
+
+## Plugin lifecycle and unsupported-engine rehearsal
+
+Do not assume plugin and engine compatibility just because connectivity works.
+
+Recommended rehearsal:
+- Start the required services with `docker compose up -d <source-service> <dest-service>`.
+- Run:
+  - `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`
+  - or `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`
+
+What this checks:
+- whether source account plugins are active on the destination
+- whether the destination still exposes `@@default_authentication_plugin`
+- whether selected source tables use engines unsupported on the destination
+- whether `dbmigrate plan` surfaces the expected findings for the exact pair
+
+What to inspect:
+- `plan-output.json`: real `dbmigrate` compatibility output
+- `source-accounts.tsv`: the accounts used for the rehearsal
+- `source-table-engines.tsv`: the selected table-engine inventory
+- `dest-plugins.tsv` and `dest-engines.tsv`: destination capability inventory
+- `summary.json`: machine-readable summary for automation and runbooks
+
+Operational rule:
+- Treat unsupported storage engines as a migration blocker until tables are converted or excluded.
+- Treat unsupported auth plugins as a required account-cutover task; do not auto-rewrite them blindly.
 
 ## Temporary CI operations note (review later)
 

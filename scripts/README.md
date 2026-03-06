@@ -15,6 +15,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-backup-restore-rehearsal.sh`: logical backup/restore rehearsal that distinguishes backup completion, validation, and restore usability.
 - `run-timezone-rehearsal.sh`: local proof of session time-zone drift for `NOW()`, `TIMESTAMP`, and `DATETIME`.
 - `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
+- `run-plugin-lifecycle-rehearsal.sh`: local proof of auth-plugin drift and unsupported storage-engine detection.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -94,6 +95,18 @@ docker compose up -d mysql84
 ```bash
 docker compose up -d mariadb11
 ./scripts/run-timezone-rehearsal.sh mariadb11 ./state/timezone/mariadb11
+```
+
+Run the Phase 60 plugin and engine lifecycle rehearsal against a source/destination pair:
+
+```bash
+docker compose up -d mysql80 mysql84
+./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84
+```
+
+```bash
+docker compose up -d mariadb11 mysql84
+./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84
 ```
 
 Run all scenarios sequentially:
@@ -188,3 +201,23 @@ Interpretation:
 - `timestamp_display_changes=true` means the same stored `TIMESTAMP` rendered differently after a session time-zone change.
 - `datetime_static_under_session_change=true` means the `DATETIME` value did not shift when the session time zone changed.
 - `explicit_now_drift_visible=true` means `NOW()`-driven inserts exposed the expected `TIMESTAMP` versus `DATETIME` semantic split.
+
+## Plugin lifecycle rehearsal artifacts
+
+`run-plugin-lifecycle-rehearsal.sh` is the focused Phase 60 rehearsal for auth-plugin drift, removed default-auth assumptions, and unsupported storage engines.
+
+Artifacts written to the chosen output directory:
+
+- `source-accounts.tsv`: source fixture accounts and their auth plugins
+- `source-table-engines.tsv`: selected source tables and their storage engines
+- `dest-plugins.tsv`: destination active plugin inventory
+- `dest-engines.tsv`: destination engine support inventory
+- `dest-default-auth.txt`: destination `@@default_authentication_plugin` value, or `unavailable`
+- `plan-output.json`: actual `dbmigrate plan` output for the pair
+- `summary.json`: compact statement of whether unsupported auth plugins or storage engines were detected
+
+Interpretation:
+
+- `unsupported_auth_plugins_detected=true` means account plugins visible on source are not active on destination and must be normalized before user/grant cutover work.
+- `unsupported_storage_engines_detected=true` means `plan` and schema `migrate` should fail fast before DDL apply.
+- MySQL `8.4` intentionally reports `dest-default-auth.txt=unavailable` because `default_authentication_plugin` is no longer a usable variable there.

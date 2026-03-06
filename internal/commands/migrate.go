@@ -90,6 +90,20 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 	}()
 
 	if runSchema {
+		pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
+		}
+		if pluginReport.Incompatible {
+			if err := writePluginLifecyclePrecheckReport(out, cfg, pluginReport); err != nil {
+				return err
+			}
+			return WithExitCode(
+				ExitCodeDiff,
+				errors.New("schema precheck failed; source uses storage engines that are unsupported on destination"),
+			)
+		}
+
 		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("schema precheck failed: %w", err)
