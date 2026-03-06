@@ -12,6 +12,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 
 - `run-migration-test.sh`: shared runner with robust orchestration.
 - `run-compat-probes.sh`: compatibility probes executed on source/destination services before migration.
+- `run-backup-restore-rehearsal.sh`: logical backup/restore rehearsal that distinguishes backup completion, validation, and restore usability.
 - `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
@@ -70,6 +71,18 @@ docker compose up -d mariadb11
 ./scripts/run-metadata-lock-scenario.sh mariadb11 ./state/metadata-lock/mariadb11
 ```
 
+Run the Phase 58 backup/restore rehearsal against a single service:
+
+```bash
+docker compose up -d mysql84
+./scripts/run-backup-restore-rehearsal.sh mysql84 ./state/backup-restore/mysql84
+```
+
+```bash
+docker compose up -d mariadb11
+./scripts/run-backup-restore-rehearsal.sh mariadb11 ./state/backup-restore/mariadb11
+```
+
 Run all scenarios sequentially:
 
 ```bash
@@ -123,3 +136,25 @@ Interpretation:
 
 - `ddl_exit_code != 0` with `read_elapsed_seconds >= 2` is the expected strong signal for queue amplification.
 - If `metadata_locks_available=false`, rely on `processlist.txt` and consider enabling MariaDB `metadata_lock_info` manually during rehearsal.
+
+## Backup/restore rehearsal artifacts
+
+`run-backup-restore-rehearsal.sh` is the focused Phase 58 rehearsal for the gap between "backup completed" and "restore is actually usable".
+
+Artifacts written to the chosen output directory:
+
+- `logical-backup.sql`: engine-native logical backup artifact
+- `validation.txt`: artifact-level checks showing whether expected objects are present in the dump
+- `restore-smoke.txt`: post-restore smoke test evidence
+- `summary.json`: machine-readable distinction between backup completion, validation, and restore usability
+- `summary.json` also records the exact dump client and server version used for the rehearsal
+
+Interpretation:
+
+- `backup_completed=true` only means the dump command succeeded.
+- `backup_validated=true` means the artifact contains the expected object definitions.
+- `restore_usable=true` means the dump restored into a shadow schema and passed smoke tests for rows, views, routines, and event presence.
+
+Phase boundary:
+
+- This script is intentionally logical and tool-native. It does not claim to validate physical backup portability across version lines.

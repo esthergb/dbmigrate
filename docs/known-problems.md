@@ -232,6 +232,26 @@ Observed failure patterns:
 - Operator rehearsal script: `scripts/run-metadata-lock-scenario.sh`.
 - Runbook guidance prefers blocker identification and waiting-DDL abort decisions over blind retries.
 
+### 7.2 Backup completion is not restore evidence
+
+Evidence:
+
+- MySQL recovery docs distinguish backup creation from actual recovery steps.
+  - https://dev.mysql.com/doc/refman/8.4/en/recovery-from-backups.html
+- MariaDB backup docs require explicit prepare and restore steps for physical tooling.
+  - https://mariadb.com/kb/en/mariabackup-options/
+
+Observed failure patterns:
+
+- Teams claim rollback is safe because a backup job completed, but the restore path was never exercised.
+- Dumps contain the expected bytes yet still fail operationally because stored objects, events, or restore assumptions were never smoke-tested.
+
+`dbmigrate` safeguards:
+
+- Operator rehearsal script: `scripts/run-backup-restore-rehearsal.sh`.
+- Runbooks now distinguish backup completion, artifact validation, and restore usability.
+- Physical backup tooling remains documented as a separate compatibility class rather than being conflated with logical migration success.
+
 ---
 
 ## Additional high-impact checks to bake into preflight
