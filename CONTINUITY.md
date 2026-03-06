@@ -13,7 +13,7 @@ Last updated: 2026-03-06
   - Reuse the existing precheck/report patterns already used for zero-date validation.
 - State:
   - Branch: `codex/feat/plugin-lifecycle-phase60`.
-  - Phase 60 feature batch is committed locally and ready to push/open as a PR.
+  - Branch is pushed to `origin` and PR `#62` is open.
 - Done:
   - Added `scripts/run-metadata-lock-scenario.sh` to reproduce metadata-lock queue amplification and capture `processlist`, `metadata_locks`, and session logs.
   - Updated replication SQL error classification so DDL timeouts with metadata-lock wording become `failure_type=metadata_lock_timeout` with operator-focused remediation.
@@ -58,13 +58,15 @@ Last updated: 2026-03-06
     - `./bin/dbmigrate migrate --source 'mysql://root:rootpass123@127.0.0.1:13307/' --dest 'mysql://root:rootpass123@127.0.0.1:23307/' --databases phase60_plugin_lifecycle --schema-only --json`
     - result: exit code `2` with `precheck=plugin-lifecycle`
   - Committed the Phase 60 feature batch as `5939782` (`feat: add plugin lifecycle precheck and rehearsal`).
+  - Pushed `codex/feat/plugin-lifecycle-phase60` to `origin`.
+  - Opened PR `#62` (`feat: add plugin lifecycle precheck and rehearsal`).
 - Now:
-  - Push the Phase 60 branch and open the PR.
+  - Await CI/review feedback on PR `#62`.
 - Next:
   - If CI or review finds issues, fix them on the same branch.
 - Open questions (UNCONFIRMED if needed):
   - None blocking. A later follow-up may decide whether to extend the precheck to plugin-backed routines/events beyond account plugins and table engines.
 - Working set (files/ids/commands):
   - Files: `CONTINUITY.md`, `internal/commands/plugin_precheck.go`, `internal/commands/plugin_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `scripts/run-plugin-lifecycle-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/security.md`, `docs/risk-checklist.md`, `scripts/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`; branch `codex/feat/plugin-lifecycle-phase60`; commit `5939782`.
-  - Commands: `docker compose -f docker-compose.yml up -d mysql84 mysql80 mariadb11`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`, `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`, `git push -u origin codex/feat/plugin-lifecycle-phase60`, `gh pr create`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, open PR `#62`; branch `codex/feat/plugin-lifecycle-phase60`; commits `5939782`, `b00266d`.
+  - Commands: `docker compose -f docker-compose.yml up -d mysql84 mysql80 mariadb11`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-plugin-lifecycle-rehearsal.sh mysql80 mysql84 ./state/plugin-lifecycle/mysql80-to-mysql84`, `./scripts/run-plugin-lifecycle-rehearsal.sh mariadb11 mysql84 ./state/plugin-lifecycle/mariadb11-to-mysql84`, `git push -u origin codex/feat/plugin-lifecycle-phase60`, `gh pr create --base main --head codex/feat/plugin-lifecycle-phase60`.
