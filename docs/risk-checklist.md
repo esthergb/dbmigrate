@@ -47,6 +47,7 @@ Reference:
 
 - [ ] Scan for reserved-word identifier collisions on destination version.
 - [ ] Scan for engine-specific constructs (sequences, temporal system-versioning, unsupported syntax).
+- [ ] Inventory invisible columns, invisible indexes, and generated invisible primary keys before any downgrade or MySQL -> MariaDB path.
 - [ ] Decide handling policy for incompatible objects (block, rewrite, manual).
 
 Reference:

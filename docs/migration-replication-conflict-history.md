@@ -1355,7 +1355,10 @@ This document is the long-lived research ledger for failure modes that can break
 
 ## 47. Open research items
 
-- `UNCONFIRMED`: exact downgrade behavior for every invisible-column and generated invisible primary key combination across the full current test matrix still needs matrix execution evidence, even though the official dump/replication semantics are clearer now.
+- `CLOSED 2026-03-06`: local Phase 62 evidence now covers the highest-value hidden-schema downgrade paths in this repo:
+  - `MySQL 8.4 -> MySQL 8.0`: invisible columns and invisible indexes stayed hidden, included dumps preserved GIPK as invisible, and `--skip-generated-invisible-primary-key` removed the hidden PK entirely.
+  - `MySQL 8.4 -> MariaDB 10.6`: invisible columns and invisible indexes became visible on restore, included GIPK stopped being invisible, and skipped dumps removed the hidden PK entirely.
+  - `MySQL 8.4 -> MariaDB 11.0`: invisible columns and invisible indexes became visible on restore, included GIPK stopped being invisible, and skipped dumps removed the hidden PK entirely.
 - `UNCONFIRMED`: the full client-driver blast radius for MariaDB `uca1400` style collations remains incomplete; evidence now includes PHP and Python/mysql-connector style stacks, but not every major Java, Go, and .NET permutation.
 - `UNCONFIRMED`: exact transportable-partition-tablespace cross-engine behavior is low-value for dbmigrate's logical path and is likely to remain documentation-only unless a compelling operator case appears.
 

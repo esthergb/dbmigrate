@@ -50,6 +50,14 @@ Plugin and engine lifecycle precheck:
 - Account findings label visible users as `user-managed`, `administrative`, or `system` so operators can separate application cutover work from bootstrap noise.
 - MySQL `8.4` and newer may report `default_authentication_plugin` as unavailable; treat that as a signal to rely on plugin inventory, not stale variable assumptions.
 
+Invisible-column and GIPK precheck:
+- `plan` inventories source invisible columns, invisible indexes, and generated invisible primary key tables.
+- Schema `migrate` runs the same precheck before DDL apply.
+- MySQL -> MariaDB paths with these hidden-schema features fail fast because local rehearsal evidence shows semantic drift: hidden columns and indexes become visible, and included GIPKs stop being hidden.
+- Compatible MySQL downgrade paths are still reported explicitly so operators keep dump mode intentional:
+  - default dump preserves GIPK on MySQL targets that support it
+  - `--skip-generated-invisible-primary-key` removes the hidden key from logical dumps entirely
+
 ## Baseline migration execution
 
 - Schema-only:
@@ -135,6 +143,7 @@ Metadata-lock classification:
 - Zero-date temporal defaults incompatible with destination strict `sql_mode` fail precheck with explicit auto-fix proposals.
 - Unsupported source storage engines fail precheck before schema apply.
 - Unsupported auth plugins are surfaced explicitly in `plan` findings so account cutover work is not guessed later.
+- Invisible columns, invisible indexes, and GIPK drift fail precheck when the destination cannot preserve hidden-schema semantics.
 - Use conservative conflict policy (`fail`).
 - Use explicit DDL policy via `--apply-ddl={ignore,apply,warn}`.
 - Treat replication worker count as secondary to transaction shape; one huge commit still behaves like one serialization unit.
@@ -248,6 +257,35 @@ What to inspect:
 Operational rule:
 - Treat unsupported storage engines as a migration blocker until tables are converted or excluded.
 - Treat unsupported auth plugins as a required account-cutover task; do not auto-rewrite them blindly.
+
+## Invisible-column and GIPK rehearsal
+
+Do not assume a destination that parses the DDL also preserves the hidden-schema semantics.
+
+Recommended rehearsal:
+- Start the required services with `docker compose up -d <source-service> <dest-service>`.
+- Run:
+  - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`
+  - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`
+  - or `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`
+
+What this checks:
+- whether invisible columns remain invisible after restore
+- whether invisible indexes remain hidden after restore
+- whether included dumps preserve generated invisible primary keys as hidden
+- whether `--skip-generated-invisible-primary-key` removes the hidden PK from the logical schema
+- whether `dbmigrate plan` blocks the destination pair when hidden-schema semantics drift
+
+What to inspect:
+- `source-show-create.txt`: source DDL evidence
+- `dump-included.sql` and `dump-skipped.sql`: the two logical dump shapes
+- `dest-included-show-create.txt` and `dest-skipped-show-create.txt`: destination DDL evidence after restore
+- `plan-output.json`: real compatibility result for the exact pair
+- `summary.json`: machine-readable verdict for preservation versus drift
+
+Operational rule:
+- MySQL -> MariaDB with invisible columns, invisible indexes, or GIPK is blocked by default because the destination materializes hidden schema as visible objects.
+- MySQL -> MySQL is only acceptable when the destination line supports the hidden feature in question and the dump mode is intentional.
 
 ## Replication parallelism and transaction-shape rehearsal
 

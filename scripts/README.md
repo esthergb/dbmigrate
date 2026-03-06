@@ -17,6 +17,7 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-metadata-lock-scenario.sh`: local reproduction of metadata-lock queue amplification with observability artifact capture.
 - `run-plugin-lifecycle-rehearsal.sh`: local proof of auth-plugin drift and unsupported storage-engine detection.
 - `run-replication-shape-rehearsal.sh`: local proof that transaction shape matters more than nominal worker count.
+- `run-invisible-gipk-rehearsal.sh`: local proof of invisible-column visibility drift and generated invisible primary key dump behavior.
 - `test-*.sh`: thin scenario wrappers that call the shared runner.
 
 ## What the Runner Does
@@ -120,6 +121,23 @@ docker compose up -d mysql84
 ```bash
 docker compose up -d mariadb11
 ./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11
+```
+
+Run the Phase 62 invisible-column and GIPK rehearsal against a source/destination pair:
+
+```bash
+docker compose up -d mysql84 mysql80
+./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80
+```
+
+```bash
+docker compose up -d mysql84 mariadb11
+./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11
+```
+
+```bash
+docker compose up -d mysql84 mariadb10
+./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10
 ```
 
 Run all scenarios sequentially:
@@ -253,3 +271,27 @@ Interpretation:
 - `same_total_rows=true` with different transaction counts is the point: identical row volume can create very different replication scheduling pressure.
 - `monolithic_dominates_transaction_shape=true` means one huge transaction would remain one serialization unit for replica-style apply.
 - `chunked_reduces_commit_granularity=true` means smaller commits create more restart-safe and scheduler-friendly units, even before any worker setting is considered.
+
+## Invisible-column and GIPK rehearsal artifacts
+
+`run-invisible-gipk-rehearsal.sh` is the focused Phase 62 rehearsal for hidden-schema downgrade and cross-engine drift.
+
+Artifacts written to the chosen output directory:
+
+- `source-fixture.sql`: rendered Phase 62 source fixture
+- `source-show-create.txt`: source `SHOW CREATE TABLE` evidence for the invisible-column and GIPK tables
+- `source-columns.tsv` and `source-indexes.tsv`: source metadata inventory
+- `dump-included.sql`: default logical dump preserving generated invisible primary keys
+- `dump-skipped.sql`: logical dump produced with `--skip-generated-invisible-primary-key`
+- `dest-included-show-create.txt` and `dest-skipped-show-create.txt`: destination `SHOW CREATE TABLE` evidence for both dump modes
+- `dest-included-columns.tsv` and `dest-skipped-columns.tsv`: destination column inventory after restore
+- `plan-output.json`: real `dbmigrate plan` output for the source/destination pair
+- `summary.json`: compact machine-readable verdict for visibility drift and GIPK include/skip behavior
+
+Interpretation:
+
+- `included_invisible_column_preserved=true` means the destination kept the MySQL invisible-column semantic instead of silently materializing it as visible.
+- `included_invisible_index_preserved=true` means the destination kept the invisible index hidden.
+- `included_gipk_remains_invisible=true` means the included dump preserved the hidden primary key semantics.
+- `skipped_gipk_column_present=false` means `--skip-generated-invisible-primary-key` removed the hidden key from the logical schema entirely.
+- `visibility_drift_detected=true` means at least one source hidden-schema feature became visible or semantically different on restore.

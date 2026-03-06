@@ -669,6 +669,18 @@ This document converts the local simulation roadmap in [migration-replication-co
 - Exit criteria:
   - replication tuning guidance is grounded in transaction shape, not worker count alone
 
+## Phase 62: Invisible-column and GIPK downgrade-evidence track
+
+- Scope:
+  - `invisible_columns_downgrade`
+  - `gipk_divergence`
+- Deliverables:
+  - fixtures and rehearsal coverage for invisible columns, invisible-index visibility drift, and generated invisible primary key dump behavior
+  - downgrade and cross-engine evidence comparing `dump with GIPK included`, `dump with GIPK skipped`, and `older target makes invisible visible`
+  - product-side reporting or precheck output that distinguishes explicit primary keys from generated invisible ones where feasible
+- Exit criteria:
+  - invisible-column and GIPK downgrade behavior is backed by local matrix evidence instead of remaining `UNCONFIRMED`
+
 ## Follow-on cloud track
 
 - Keep these out of the local PR sequence unless local approximations become genuinely useful:

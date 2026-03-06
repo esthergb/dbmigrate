@@ -153,3 +153,38 @@ func TestWritePluginLifecyclePrecheckReportText(t *testing.T) {
 		t.Fatalf("expected finding line in report text: %q", text)
 	}
 }
+
+func TestWriteInvisibleGIPKPrecheckReportText(t *testing.T) {
+	report := invisibleGIPKPrecheckReport{
+		Name:                 "invisible-gipk",
+		Incompatible:         true,
+		SourceVersion:        "8.4.8 MySQL Community Server - GPL",
+		DestVersion:          "11.0.6-MariaDB-ubu2204",
+		InvisibleColumnCount: 1,
+		InvisibleIndexCount:  1,
+		GIPKTableCount:       1,
+		Findings: []compat.Finding{
+			{
+				Code:     "generated_invisible_primary_key_detected",
+				Severity: "error",
+				Message:  "gipk found",
+				Proposal: "materialize it",
+			},
+		},
+	}
+
+	var out bytes.Buffer
+	if err := writeInvisibleGIPKPrecheckReport(&out, config.RuntimeConfig{}, report); err != nil {
+		t.Fatalf("write text report: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "precheck=invisible-gipk") {
+		t.Fatalf("unexpected report text: %q", text)
+	}
+	if !strings.Contains(text, "invisible_columns=1") || !strings.Contains(text, "gipk_tables=1") {
+		t.Fatalf("expected hidden-schema counters in output: %q", text)
+	}
+	if !strings.Contains(text, "code=generated_invisible_primary_key_detected") {
+		t.Fatalf("expected finding line in report text: %q", text)
+	}
+}

@@ -1,77 +1,73 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 61 (`replication_parallelism_vs_chunking_interactions`) on `codex/feat/parallelism-phase61`.
-  - Success means: replication checkpoint/report artifacts surface transaction-shape and serialization risk, the repo gains a runnable rehearsal for monolithic versus chunked workloads, and operator docs explain how to interpret the new signals.
+  - Implement Phase 62 on `codex/feat/invisible-gipk-phase62`.
+  - Success means hidden-schema downgrade behavior is enforced by product prechecks, backed by local rehearsal evidence, and documented for operators.
 - Constraints/Assumptions:
   - Docs remain in English.
-  - Keep Phase 61 focused on replication worker behavior, transaction shape, chunking, commit-order behavior, FK/DDL serialization, and related operator-visible failure modes.
-  - Commit, push, and PR creation are now explicitly authorized for Phase 61.
+  - `Instructions.md` stays tracked.
+  - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
+  - A new branch is authorized because the user explicitly requested the next feature phase.
+  - Do not commit, push, or open a PR until the user asks.
 - Key decisions:
-  - Phase 60 is complete and merged; Phase 61 starts on a fresh branch.
-  - Phase 61 is full implementation, not docs-only: add product-side transaction-shape telemetry plus rehearsal evidence.
-  - Do not fake replica-worker control that the product does not own; surface transaction-shape and serialization risk instead.
+  - Phase 61 shipped transaction-shape telemetry and rehearsal evidence instead of pretending to control replica worker settings directly.
+  - The research queue is closed; execution continues through implementation phases and test/rehearsal coverage.
+  - Phase 62 is defined as the invisible-column and generated invisible primary key downgrade-evidence track.
+  - This phase is chosen because it closes the clearest remaining product-fit `UNCONFIRMED` gap in `docs/migration-replication-conflict-history.md`.
+  - Phase 62 blocks MySQL -> MariaDB schema paths when source uses invisible columns, invisible indexes, or GIPK because local restore evidence shows semantic drift rather than hard SQL failure.
 - State:
-  - Branch: `codex/feat/parallelism-phase61`.
-  - Commit `a5bf985` contains the Phase 61 implementation.
-  - Commit `337ff6b` refreshes continuity for PR publication.
-  - Branch is pushed to `origin/codex/feat/parallelism-phase61`.
-  - PR `#63` is open: `feat: add replication transaction shape telemetry`.
+  - Current branch: `codex/feat/invisible-gipk-phase62`.
+  - Branch was created from updated `main` after merged PR `#63`.
+  - Phase 62 implementation is complete locally and uncommitted.
+  - Working tree contains Phase 62 code, fixture, rehearsal, doc, and ledger updates.
 - Done:
-  - Phases 57, 58, 59, and 60 are merged into `main`.
-  - Phase 60 shipped plugin lifecycle prechecks, rehearsal script, and operator docs via merged PR `#62`.
-  - Created branch `codex/feat/parallelism-phase61` from updated `main` after PR `#62` merged.
-  - Added transaction-shape telemetry to replication artifacts:
-    - `internal/state/replication.go`
-    - `internal/state/replication_conflict.go`
-    - `internal/replicate/binlog/shape.go`
-    - `internal/replicate/binlog/run.go`
-    - `internal/replicate/binlog/load.go`
-    - `internal/replicate/binlog/failure.go`
-  - Replication checkpoint and conflict artifacts now record:
-    - transactions seen/applied
-    - events seen/applied
-    - max and average transaction size
-    - DDL/FK/keyless pressure
-    - `risk_level` and `risk_signals`
-  - `report` now surfaces replication shape data and remediation proposals derived from risk signals.
-  - `replicate` command text output now includes a compact `tx_shape(...)` summary.
-  - Added Phase 61 rehearsal script:
-    - `scripts/run-replication-shape-rehearsal.sh`
-  - Updated docs:
+  - Phases 57-61 are merged into `main`.
+  - Phase 57: metadata-lock rehearsal and reporting.
+  - Phase 58: backup/restore rehearsal and rollback evidence gates.
+  - Phase 59: session timezone and `NOW()` behavior rehearsal.
+  - Phase 60: plugin lifecycle precheck and rehearsal.
+  - Phase 61: replication transaction-shape telemetry, report/remediation output, and rehearsal script.
+  - Research history and PR execution plan are documented in:
+    - `docs/migration-replication-conflict-history.md`
+    - `docs/matrix-pr-plan.md`
+  - `main` was synced after merged PR `#63` before branching Phase 62.
+  - Added Phase 62 precheck and reporting in:
+    - `internal/commands/invisible_gipk_precheck.go`
+    - `internal/commands/plan.go`
+    - `internal/commands/migrate.go`
+  - Added Phase 62 tests:
+    - `internal/commands/invisible_gipk_precheck_test.go`
+    - `internal/commands/migrate_test.go`
+  - Added reusable Phase 62 source fixture:
+    - `datasets/phase62_mysql_hidden_schema.sql`
+  - Added rehearsal script:
+    - `scripts/run-invisible-gipk-rehearsal.sh`
+  - Updated operator and risk docs:
     - `docs/operators-guide.md`
     - `docs/known-problems.md`
     - `docs/risk-checklist.md`
     - `scripts/README.md`
-  - Added/updated tests:
-    - `internal/replicate/binlog/shape_test.go`
-    - `internal/replicate/binlog/run_test.go`
-    - `internal/commands/report_test.go`
-    - `internal/state/replication_test.go`
+    - `datasets/README.md`
+    - `docs/migration-replication-conflict-history.md`
   - Verified:
-    - `go test ./internal/replicate/binlog ./internal/commands ./internal/state`
+    - `go test ./internal/commands`
     - `go test ./...`
     - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`
-    - `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`
-  - Rehearsal results on both MySQL 8.4 and MariaDB 11.0:
-    - `total_rows=1000`
-    - monolithic path: `transaction_count=1`, `max_rows_per_transaction=1000`
-    - chunked path: `transaction_count=20`, `max_rows_per_transaction=50`
-    - `shape_signal.same_total_rows=true`
-    - `shape_signal.monolithic_dominates_transaction_shape=true`
-    - `shape_signal.chunked_reduces_commit_granularity=true`
-  - Committed Phase 61 implementation as `a5bf985` (`feat: add replication transaction shape telemetry`).
-  - Committed continuity refresh as `337ff6b` (`docs: refresh continuity for phase61 pr`).
-  - Pushed branch `codex/feat/parallelism-phase61` to origin.
-  - Opened PR `#63` (`feat: add replication transaction shape telemetry`).
+    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`
+    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`
+    - `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`
+    - `./bin/dbmigrate migrate --source 'mysql://root:rootpass123@127.0.0.1:23307/' --dest 'mysql://root:rootpass123@127.0.0.1:13307/' --databases phase62_hidden_schema --schema-only --json`
+  - Observed Phase 62 evidence:
+    - `mysql84 -> mysql80`: `plan_exit_code=0`, invisible columns/indexes stayed hidden, included dump preserved GIPK as invisible, and skipped dump removed GIPK entirely.
+    - `mysql84 -> mariadb10`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
+    - `mysql84 -> mariadb11`: `plan_exit_code=2`, invisible columns/indexes became visible on restore, included dump kept `my_row_id` but not as invisible, and skipped dump removed GIPK entirely.
 - Now:
-  - Monitor PR `#63` for CI and review feedback.
+  - Await the user's instruction to commit/push/open the Phase 62 PR.
 - Next:
-  - Fix CI or review feedback on the Phase 61 PR if needed.
+  - Commit the branch and open the Phase 62 PR when the user asks.
 - Open questions (UNCONFIRMED if needed):
-  - None blocking. A later follow-up may decide whether to add managed-service or real replica-worker environment probes beyond the current transaction-shape telemetry.
+  - None blocking.
 - Working set (files/ids/commands):
-  - Files: `CONTINUITY.md`, `internal/state/replication.go`, `internal/state/replication_conflict.go`, `internal/replicate/binlog/shape.go`, `internal/replicate/binlog/load.go`, `internal/replicate/binlog/run.go`, `internal/replicate/binlog/failure.go`, `internal/commands/report.go`, `internal/commands/replicate.go`, `scripts/run-replication-shape-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `scripts/README.md`.
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, open PR `#63`; branch `codex/feat/parallelism-phase61`; commits `a5bf985`, `337ff6b`.
-  - Commands: `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `./scripts/run-replication-shape-rehearsal.sh mysql84 ./state/replication-shape/mysql84`, `./scripts/run-replication-shape-rehearsal.sh mariadb11 ./state/replication-shape/mariadb11`.
+  - Files: `CONTINUITY.md`, `internal/commands/invisible_gipk_precheck.go`, `internal/commands/invisible_gipk_precheck_test.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `datasets/phase62_mysql_hidden_schema.sql`, `scripts/run-invisible-gipk-rehearsal.sh`, `docs/operators-guide.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/migration-replication-conflict-history.md`, `scripts/README.md`, `datasets/README.md`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`; branch `codex/feat/invisible-gipk-phase62`.
+  - Commands: `git checkout -b codex/feat/invisible-gipk-phase62`, `go test ./...`, `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`, `docker compose -f docker-compose.yml up -d mysql80 mysql84 mariadb10 mariadb11`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mysql80 ./state/invisible-gipk/mysql84-to-mysql80`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb10 ./state/invisible-gipk/mysql84-to-mariadb10`, `./scripts/run-invisible-gipk-rehearsal.sh mysql84 mariadb11 ./state/invisible-gipk/mysql84-to-mariadb11`.

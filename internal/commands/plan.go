@@ -95,6 +95,17 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		report.Compatible = false
 	}
 
+	invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+	if err != nil {
+		return fmt.Errorf("invisible/gipk precheck failed: %w", err)
+	}
+	if len(invisibleReport.Findings) > 0 {
+		report.Findings = append(report.Findings, invisibleReport.Findings...)
+	}
+	if invisibleReport.Incompatible {
+		report.Compatible = false
+	}
+
 	if err := writePlanReport(out, cfg, report); err != nil {
 		return err
 	}
