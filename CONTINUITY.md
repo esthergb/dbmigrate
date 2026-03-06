@@ -1,13 +1,13 @@
-Last updated: 2026-03-06
+Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Complete Phase 64 from the merged Phase 63 baseline.
-  - Success means verification canonicalization/reporting, fixtures, and rehearsal coverage are implemented, locally verified, then committed and published in a PR.
+  - Prepare the exact v1 release-hardening checklist and execution plan.
+  - Success means the remaining v1 work is sequenced, concrete, and ready to execute as focused PR-sized increments plus release validation runs.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - The user has now asked to implement all of Phase 64, then commit, push, and open the PR.
+  - Phase 64 is already implemented and merged.
 - Key decisions:
   - Phase 62 enforces hidden-schema compatibility as product behavior, not just documentation: MySQL invisible columns, invisible indexes, and GIPK are inventory items in `plan` and schema blockers in `migrate` when destination semantics drift.
   - MariaDB destinations are blocked for these hidden-schema features because local restore evidence shows visibility drift instead of semantic preservation.
@@ -24,12 +24,16 @@ Last updated: 2026-03-06
   - Phase 64 is defined as the verification canonicalization and false-positive control track.
   - Phase 64 must land as one coherent slice: canonicalized data verify behavior, artifact/report surfacing, and a dedicated rehearsal with fixtures.
   - Verification hashing must be session-pinned. Setting session state on pooled `*sql.DB` handles is insufficient for charset/time zone stability.
+  - Product scope is now split explicitly:
+    - v1: only paths that are implemented and genuinely supported
+    - v2: everything the CLI currently surfaces but does not fully implement yet
+    - v3: v2 plus managed/cloud deployment paths
 - State:
-  - Current branch: `codex/feat/verify-canonicalization-phase64`.
+  - Current branch: `codex/chore/v1-release-plan`.
   - PR `#65` is merged.
-  - PR `#66` is open for Phase 64.
-  - Phase 64 implementation is committed and pushed.
-  - Working tree contains the Phase 64 CI fix.
+  - PR `#66` is merged.
+  - Branch created from updated `main` to add a tracked v1 release-hardening plan doc.
+  - Working tree contains docs-only planning updates.
 - Done:
   - Phases 57-62 are merged into `main`.
   - Phase 57: metadata-lock rehearsal and reporting.
@@ -104,14 +108,14 @@ Last updated: 2026-03-06
     - `verify_full_hash_exit_code=0`
     - `representation_risk_tables=4`
     - `noise_risk_mismatches=0`
-  - CI failure identified on PR `#66`:
+  - CI failure identified and fixed on PR `#66` before merge:
     - `golangci-lint` reported `internal/verify/data/verify.go:400:6: func listTableColumns is unused`
 - Now:
-  - Remove the dead helper, rerun lint/tests, and push the PR fix.
+  - Add `docs/v1-release-plan.md` with the concrete v1 release-hardening checklist and execution plan.
 - Next:
-  - Wait for CI rerun and review on the Phase 64 PR.
+  - Review the plan and start the first v1 hardening branch when requested.
 - Open questions (UNCONFIRMED if needed):
-  - None currently blocking Phase 64.
+  - None on product scope; the remaining question is release execution order for v1 hardening.
 - Working set (files/ids/commands):
   - Files:
     - `CONTINUITY.md`
@@ -124,7 +128,7 @@ Last updated: 2026-03-06
     - `datasets/phase64_verify_source_mysql84.sql`
     - `datasets/phase64_verify_dest_mariadb12.sql`
     - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`; open PR `#66`; branch `codex/feat/verify-canonicalization-phase64`.
+  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`; branch `main`.
   - Commands:
     - `go test ./internal/verify/data ./internal/commands`
     - `go test ./...`
