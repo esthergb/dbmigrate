@@ -1,131 +1,48 @@
 Last updated: 2026-03-06
 
 - Goal (incl. success criteria):
-  - Implement Phase 58 precheck artifact hardening:
-    - keep zero-date precheck fail-fast behavior,
-    - generate a deterministic auto-fix SQL artifact in `--state-dir` when incompatibilities are found,
-    - surface artifact path in findings/output for operator execution.
-  - Keep dbmigrate delivered in phased PRs with green CI and explicit compatibility policy.
+  - Produce a long-form, updateable historical document of MySQL/MariaDB migration and replication conflicts, including simulation, detection, and mitigations.
+  - Keep work on `main` and avoid code changes; documentation-only output.
+  - Close the current high-priority research queue after the last five topics unless new evidence reveals a genuinely missing conflict class.
 - Constraints/Assumptions:
-  - MIT license, docs in English, JSON-first.
-  - `--apply-ddl` fixed to `ignore|apply|warn`.
-  - User confirmed `docker-compose.yml`, `configs/`, `datasets/`, and `scripts/` must be included in a dedicated PR after validation/fixes.
-  - User confirmed command standard is `docker compose` (not `docker-compose`).
-  - `Instructions.md` is tracked in `main` and must remain tracked.
+  - Docs in English.
+  - Include both official and community sources (forums/Reddit/Stack Overflow), clearly separating authoritative guidance from field reports.
+  - Treat community incidents as reproducible test candidates, not authoritative defaults.
+  - As of 2026-03-06, official Oracle material confirms `MySQL 9.6`; use that as the current `9.x` comparison point.
 - Key decisions:
-  - Work via `codex/*` branches and PRs to `main`.
-  - Option B matrix is adopted (active-LTS-first).
-  - Compatibility probes are the execution surface for reproducible engine/version behavior deltas.
+  - Create a dedicated living-history document under `docs/`.
+  - Structure each conflict as an operator playbook: why it fails, affected paths, simulation, detection, mitigation, and source links.
 - State:
-  - Current branch: `codex/feat/precheck-autofix-artifact-phase58`.
-  - Phase 56 PR `#55` merged by user.
-  - Phase 57 PR `#56` merged by user.
-  - Phase 58 PR opened: `#57` (<https://github.com/esthergb/dbmigrate/pull/57>).
-  - `main` includes PR #54 merged (testing assets + docs).
-  - Local `reports/` directory exists as local run artifacts and should remain ignored/untracked.
-  - `Instructions.md` remains tracked in `main` (confirmed by user).
-  - FK dependency ordering fix implemented for both schema DDL apply and baseline data copy.
-  - Full exhaustive matrix execution completed with 20/20 scenarios passing on Apple Silicon (`arm64`).
-  - Compatibility probe suite implemented and integrated into scenario runner.
-  - Real-world migration test reported schema apply failure: `Error 1067 Invalid default value for 'comment_date'` on MySQL 8.0 -> 8.4 path.
+  - Branch: `main`, synced with `origin/main` on 2026-03-06.
+  - No code changes permitted for this task.
 - Done:
-  - Phases 0-51 merged.
-  - Phase 47 delivered candidate unconfirmed signaling for `MySQL 8.4.x <-> MariaDB 11.8.x` under `max-compat` with tests.
-  - Phase 48 synchronized README/continuity status with merged reality.
-  - Phase 49 added explicit candidate validation-criteria warning for both cross-engine directions.
-  - Phase 50 added scope-aware candidate findings for full-scope vs partial-scope pilot.
-  - FK ordering limitation in `migrate` resolved in code paths:
-    - schema apply (`internal/schema/copy.go`)
-    - baseline data copy and dry-run data validation ordering (`internal/data/copy.go`)
-  - New ordering tests added in:
-    - `internal/schema/copy_test.go`
-    - `internal/data/copy_test.go`
-  - Verification completed:
-    - `go test ./internal/schema ./internal/data ./internal/commands -count=1`
-    - `go test ./... -count=1`
-    - `bash scripts/test-mariadb10-to-mariadb11.sh`
-    - `bash scripts/test-mysql80-to-mysql84.sh`
-  - PR #53 merged (FK ordering fix).
-  - PR #54 merged (testing assets: `docker-compose.yml`, `configs/`, `datasets/`, `scripts/`, `MIGRATION_TESTING.md`).
-  - Full matrix run completed with detailed evidence generated under `reports/matrix/20260305T213638Z/`.
-  - Official compatibility research completed and documented in `docs/version-compatibility-research.md` with source links.
-  - Added compatibility probe runner `scripts/run-compat-probes.sh` (12 SQL probes covering engine/version differences).
-  - Integrated probes into `scripts/run-migration-test.sh` (step `[4/7]`) with per-scenario artifacts:
-    - `state/<scenario>/compat-probes-source.json`
-    - `state/<scenario>/compat-probes-dest.json`
-  - Updated testing docs (`MIGRATION_TESTING.md`, `scripts/README.md`, `README.md`) to include probe workflow and references.
-  - Re-ran full matrix with probes enabled and generated detailed report:
-    - `reports/matrix-probes/20260305T222006Z/REPORT.md`
-    - `reports/matrix-probes/20260305T222006Z/summary.tsv`
-    - `reports/matrix-probes/20260305T222006Z/probe-matrix.tsv`
-    - `reports/matrix-probes/20260305T222006Z/logs/*.log`
-  - Incident analysis completed for real dump failure:
-    - dump schema includes zero-datetime defaults (`'0000-00-00 00:00:00'`) in multiple table definitions.
-    - destination MySQL sql_mode includes `NO_ZERO_DATE` + strict mode, causing DDL apply failure (`1067`).
-    - reproduced on MySQL 8.4; confirmed DDL succeeds only when session `sql_mode=''`.
-  - Added zero-date/zero-in-date strict-mode probe coverage in `scripts/run-compat-probes.sh` and compatibility research doc:
-    - `zero_datetime_default_strict`
-    - `zero_timestamp_default_strict`
-    - `zero_date_default_strict`
-    - `zero_in_date_default_strict`
-  - Added further `ERROR 1067`-family probe coverage:
-    - `session_sql_mode`
-    - `invalid_calendar_date_default`
-    - `invalid_calendar_datetime_default`
-    - `timestamp_out_of_range_default`
-  - Added `/reports/` to `.gitignore`.
-  - Revalidated compatibility probes across all services:
-    - `mariadb10` (`10.6.25`): `ok=9`, `failed=11`
-    - `mariadb11` (`11.0.6`): `ok=9`, `failed=11`
-    - `mariadb12` (`12.0.2`): `ok=10`, `failed=10`
-    - `mysql80` (`8.0.45`): `ok=10`, `failed=10`
-    - `mysql84` (`8.4.8`): `ok=8`, `failed=12`
-  - Ran full scenario matrix with expanded probe pack:
-    - `reports/matrix-phase56/20260305T224136Z/summary.tsv`
-    - result `20/20` scenarios passed.
-  - Updated docs and runbooks with current process + detailed testing summary:
-    - `README.md`
-    - `MIGRATION_TESTING.md`
-    - `scripts/README.md`
-    - `docs/version-compatibility-research.md`
-  - Implemented zero-date temporal-default precheck with fail-fast behavior and auto-fix proposals:
-    - new helper module: `internal/commands/temporal_precheck.go`
-    - wired into `plan` (`internal/commands/plan.go`)
-    - wired into `migrate` (`internal/commands/migrate.go`)
-  - Added tests:
-    - `internal/commands/temporal_precheck_test.go`
-    - `internal/commands/migrate_test.go` precheck output coverage
-  - Validation completed:
-    - `go test ./internal/commands -count=1`
-    - `go test ./... -count=1`
-    - end-to-end manual reproduction with `mariadb11 -> mysql84` and a real zero-date default table:
-      - `plan` exit code: `2` with detailed findings + auto-fix SQL
-      - `migrate` exit code: `2` with detailed precheck report + auto-fix SQL
-  - Documentation updated for operators:
-    - `README.md` (new precheck section + safety note)
-    - `docs/operators-guide.md` (workflow + safety defaults)
-  - Before merge of PR #56, datasets were updated to include optional zero-date examples (disabled by default):
-    - appended `OPTIONAL ZERO-DATE EXAMPLES (DISABLED BY DEFAULT)` block to all `datasets/populate_*.sql`
-    - updated `datasets/README.md` with enablement guidance and strict `sql_mode` notes
-  - Phase 58 implementation completed locally:
-    - precheck now generates deterministic auto-fix artifact at `--state-dir/precheck-zero-date-fixes.sql`
-    - precheck now cleans stale fix artifact when no zero-date incompatibilities are detected
-    - artifact path is surfaced in plan/migrate findings/output
-  - Phase 58 validation completed:
-    - `go test ./internal/commands -count=1`
-    - `go test ./... -count=1`
-    - manual run verified script creation on incompatible source defaults
-    - manual run verified stale-script cleanup on compatible rerun
-  - Docs updated to describe fix artifact path:
-    - `README.md`
-    - `docs/operators-guide.md`
+  - Reviewed existing research docs: `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`.
+  - Collected official and community references for additional migration and replication failure modes.
+  - Drafted `docs/migration-replication-conflict-history.md` as a living-history report with simulation, detection, mitigation, and source sections.
+  - Extended the report with `MySQL 9.x` scope notes and new issue families: dump-tool skew, `utf8mb3` alias drift, prepared XA blockers, scheduled events, time-zone-table drift, and persisted-config drift.
+  - Added more operational failure classes: binlog retention expiry, cloned replica identity (`server_id`/`server_uuid`), primary-key enforcement and GIPK drift, stale-config startup failures, and obsolete SQL/bootstrap syntax.
+  - Corrected the report to official `MySQL 9.6` scope and added managed-service and failover-specific issues from Cloud SQL, Azure, RDS, and Aurora documentation.
+  - Added community-incident-driven failover and recovery issues: stale DNS / connection pools after failover, skip-counter false recovery, and crash/restart relay metadata failures.
+  - Added schema-change and online-DDL incident coverage, and classified the simulation backlog into `locally simulable`, `cloud-only or cloud-leaning`, and `document unsupported only`.
+  - Added community incidents for auth/plugin breakage, client-collation failures, and dump/import corruption, and converted the locally simulable backlog into an ordered execution roadmap.
+  - Added verification false positives and data-type edge-case research, narrowed several prior open items, created `docs/matrix-pr-plan.md`, and seeded the next research queue with initial evidence.
+  - Executed the queued research pass on backup tools, TLS/SSL transport, stored-object parser drift, large-object streaming limits, and multi-source filtering, and extended `docs/matrix-pr-plan.md` with follow-on phases.
+  - Executed the refreshed queue on DDL algorithm/lock drift, compression/page-format downgrade risk, parallel applier diagnostics, connector/ORM metadata drift, and `LOAD DATA` privilege/path failures, and extended the PR plan again.
+  - Executed the next live queue on external-table edges, generated-column/expression-default drift, effective privilege and role activation, redo/undo capacity with long transactions, and tool-divergence behavior; extended the PR plan through Phase 31.
+  - Executed the next live queue on optimizer-statistics drift, GIS/FULLTEXT edge cases, event scheduler plus time-zone replay, account-export/hash quirks, and proxy/router behavior.
+  - Added a compact navigation block to the main report and executed the next live queue on DDL rebuild costs, charset handshake drift, trigger-order semantics, checksum canonicalization, and filtered replication with stored objects; extended the PR plan through Phase 36.
+  - Executed another live queue pass on optimizer-statistics drift, GIS/FULLTEXT, event replay, account usability/hash export, and proxy/router behavior; extended the PR plan through Phase 41.
+  - Executed the next live queue on optimizer hints/trace, deep GIS/SRS compatibility, event failure runbooks, account lock/expiry policy, and proxy read/write split behavior; extended the PR plan through Phase 46.
+  - Executed the next live queue on stored-object parser/sql-mode edges, temp-table/session-state behavior, GTID reseed/surgery risk, filesystem path semantics, and replication-user/channel rotation; extended the PR plan through Phase 56.
+  - Executed the next live queue on GIPK runtime behavior, stored-object partial-scope interactions, chunking/autocommit semantics, monitoring-agent/exporter compatibility, and non-InnoDB engine behavior; extended the PR plan through Phase 51.
+  - Executed the final queued topics on metadata-lock observability runbooks, backup/restore validation gaps, session time-zone and `NOW()` behavior drift, plugin lifecycle and disabled-feature flags, and replication parallelism versus chunking; extended the PR plan through Phase 61.
+  - Closed the high-priority active research queue with no additional queue items opened.
 - Now:
-  - Wait for user review/merge of Phase 58 PR.
+  - Publish the completed docs-only research batch on a dedicated branch and PR.
 - Next:
-  - After merge confirmation from user, continue next planned phase.
+  - After publishing, keep the report dormant unless new field evidence or product scope changes justify reopening the queue.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: exact stopping criterion for project completion after exhaustive matrix evidence is published.
-  - UNCONFIRMED: timeline/priority order between strict-lts promotion and additional precheck/autofix hardening.
+  - UNCONFIRMED: whether the user wants this report later linked from `README.md` or kept as a standalone research artifact for now.
 - Working set (files/ids/commands):
-  - Files: `internal/commands/temporal_precheck.go`, `internal/commands/plan.go`, `internal/commands/migrate.go`, `internal/commands/migrate_test.go`, `internal/commands/temporal_precheck_test.go`, `README.md`, `docs/operators-guide.md`, `CONTINUITY.md`.
-  - Commands: focused `go test` + full `go test ./...` + manual artifact create/cleanup verification, commit `170fb76`, PR #57.
+  - Files: `CONTINUITY.md`, `docs/known-problems.md`, `docs/risk-checklist.md`, `docs/version-compatibility-research.md`, `docs/migration-replication-conflict-history.md`, `docs/matrix-pr-plan.md`.
+  - Commands: `git pull --ff-only origin main`, targeted web research via official docs and community sources.
