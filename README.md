@@ -59,6 +59,8 @@ These names are intentionally reserved in the CLI surface, but they are not part
 Object scope in `v1`:
 - Default `--include-objects` is `tables,views`.
 - Requesting `routines`, `triggers`, or `events` in `v1` fails fast with incompatibility exit semantics (`exit 2`) and explicit "reserved for v2" guidance.
+- Default `--tls-mode` is `required`.
+- `--tls-mode=preferred` is explicit opt-in and emits a plaintext-fallback warning at runtime.
 
 ## Reserved for v3
 

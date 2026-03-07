@@ -76,6 +76,9 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "invalid configuration: %v\n", err)
 		return exitUsage
 	}
+	if strings.EqualFold(cfg.TLSMode, "preferred") {
+		_, _ = fmt.Fprintln(stderr, "warning: --tls-mode=preferred allows plaintext fallback; use --tls-mode=required for production")
+	}
 
 	if err := handler(ctx, cfg, commandArgs, stdout); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)

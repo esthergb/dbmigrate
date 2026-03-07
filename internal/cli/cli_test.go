@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +38,25 @@ func TestRunPlanJSON(t *testing.T) {
 	}
 	if out.Len() == 0 {
 		t.Fatal("expected command output")
+	}
+}
+
+func TestRunWarnsOnPreferredTLSMode(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	args := []string{
+		"plan",
+		"--source", "mysql://src",
+		"--dest", "mysql://dst",
+		"--dry-run",
+		"--tls-mode", "preferred",
+	}
+	code := Run(context.Background(), args, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "allows plaintext fallback") {
+		t.Fatalf("expected preferred tls warning, got stderr=%q", stderr.String())
 	}
 }
 
