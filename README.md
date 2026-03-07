@@ -293,6 +293,7 @@ go build -trimpath -ldflags="-s -w" -o bin/dbmigrate ./cmd/dbmigrate
 ```bash
 make fmt
 make test
+make release-gate-minimal
 ```
 
 If `golangci-lint` and `govulncheck` are installed:
@@ -300,6 +301,7 @@ If `golangci-lint` and `govulncheck` are installed:
 ```bash
 make lint
 make vulncheck
+make release-gate-full
 ```
 
 ## CI operations note

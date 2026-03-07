@@ -1,4 +1,4 @@
-.PHONY: fmt lint test build vulncheck ci ci-manual
+.PHONY: fmt lint test build vulncheck ci ci-manual release-gate-minimal release-gate-full
 
 fmt:
 	gofmt -w ./cmd ./internal
@@ -19,3 +19,9 @@ ci: fmt lint test vulncheck
 
 ci-manual:
 	./scripts/ci_manual.sh "$(or $(BRANCH),$(shell git branch --show-current))"
+
+release-gate-minimal:
+	./scripts/run-v1-release-gate.sh --mode minimal
+
+release-gate-full:
+	./scripts/run-v1-release-gate.sh --mode full

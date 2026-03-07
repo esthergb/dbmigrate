@@ -22,9 +22,9 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/feat/fast-safe-v1-rescue`.
-  - PR opened: `#74` (`Fast Safe v1 release rescue (strict-lts)`).
-  - Post-PR status: user reported CI failure; root-cause investigation/fix in progress on same branch.
+  - Current branch: `codex/chore/v1-release-gate-automation-phase65`.
+  - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
+  - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
   - Baseline prior state is merged through PR `#73` on `main`.
   - Three new review inputs are present and untracked:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
@@ -40,6 +40,28 @@ Last updated: 2026-03-07
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
 - Done:
+  - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
+  - Added new release gate entrypoint:
+    - `scripts/run-v1-release-gate.sh`
+    - modes:
+      - `minimal`: release build + `go test ./...` + strict-lts smoke (`mysql84 -> mysql84`)
+      - `full`: `minimal` + full strict-lts matrix + focused signoff rehearsal pack
+    - outputs summary/manifest under `state/v1-release-gate/<timestamp>-<mode>/`
+  - Added Make targets:
+    - `release-gate-minimal`
+    - `release-gate-full`
+  - Documented gate runner usage in:
+    - `docs/v1-release-criteria.md`
+    - `README.md`
+  - Validated this phase locally:
+    - `bash -n scripts/run-v1-release-gate.sh`
+    - `go test ./...`
+    - `./scripts/run-v1-release-gate.sh --mode minimal`
+    - latest summary: `state/v1-release-gate/20260307T021739Z-minimal/summary.json`
+  - Merged rescue PR `#74` and fixed post-merge CI lint regression via follow-up commit `0876cc4` on the rescue branch before merge.
+  - Verified on updated `main`:
+    - `go test ./...`
+    - `./scripts/test-v1-mysql84-to-mysql84.sh`
   - Implemented Fast Safe `v1` rescue waves on `codex/feat/fast-safe-v1-rescue`:
     - Wave 0:
       - default `--include-objects` changed to `tables,views`
@@ -148,9 +170,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Inspect failing CI job(s) on PR `#74`, apply minimal fix, rerun local verification, and push.
+  - Prepare this phase for commit and user confirmation.
 - Next:
-  - Recheck PR `#74` checks to confirm green.
+  - Commit this branch and ask user for explicit approval before push/PR.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):

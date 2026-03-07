@@ -70,6 +70,11 @@ The release candidate must satisfy all of the following:
 
 If any one fails, release is blocked.
 
+Recommended local gate runner:
+
+- `./scripts/run-v1-release-gate.sh --mode minimal` for fast pre-PR validation
+- `./scripts/run-v1-release-gate.sh --mode full` for release-manager signoff runs
+
 ## Matrix gate
 
 Run the full frozen `v1` matrix on current `main` or the release candidate branch.
