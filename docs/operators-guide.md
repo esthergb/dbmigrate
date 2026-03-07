@@ -8,6 +8,11 @@
 4. Run verification (`dbmigrate verify`).
 5. Generate machine-readable report (`dbmigrate report --json`).
 
+Current v1 scope guardrails:
+- Default object scope is `--include-objects=tables,views`.
+- Requesting `routines`, `triggers`, or `events` fails fast in `v1` (reserved for `v2`).
+- `--idempotent` is reserved for `v2` and currently fails fast in `v1`.
+
 Compatibility profile selection:
 - `dbmigrate plan --source "<dsn>" --dest "<dsn>" --downgrade-profile strict-lts`
 - Supported values: `strict-lts` (default), `same-major`, `adjacent-minor`, `max-compat`.
@@ -79,7 +84,9 @@ Invisible-column and GIPK precheck:
 Checkpoint and resume:
 - Baseline data copy writes checkpoint state into `--state-dir` (default `./state`).
 - Use `--resume` to continue from checkpoint state after interruption.
-- Current resume strategy restarts incomplete tables safely (truncate/delete fallback) to avoid duplication.
+- Baseline uses consistent source snapshot reads plus keyset pagination (stable PK/unique key order), with resume cursors from checkpoint state.
+- For live baselines, tables without primary key or non-null unique key fail fast as incompatible in `v1`.
+- Baseline checkpoint artifacts include source watermark (`SHOW MASTER STATUS`/`SHOW BINARY LOG STATUS`) for baseline->replicate continuity evidence.
 
 ## Verification execution
 
@@ -97,9 +104,12 @@ Checkpoint and resume:
 Verification behavior:
 - Any diff returns non-zero exit code.
 - `--json` emits structured diff details for automation pipelines.
-- `sample` mode uses `--sample-size` rows per table; `full-hash` hashes full table content.
+- `sample` mode hashes only bounded rows (`--sample-size`) and is intended for fast triage.
+- `hash` mode performs full-table deterministic hash with bounded memory (chunked streaming).
+- `full-hash` mode performs full-table deterministic hash with stricter chunked streaming aggregation (not an alias of `hash`).
+- `hash` and `full-hash` require a stable table order (primary key or non-null unique key) and fail fast when absent.
 - Hash-based verification now canonicalizes rows before hashing:
-  - row hashes are sorted client-side, so SQL collation order no longer drives aggregate hash order
+  - deterministic ordering uses stable key order where required
   - verify sessions are pinned and normalized to `SET NAMES utf8mb4` plus `time_zone='+00:00'`
   - JSON payloads are canonicalized before hashing
 - Verify JSON/text output now distinguishes representation-sensitive tables from real diffs:
@@ -157,10 +167,13 @@ Replication checkpoint behavior:
   - derived `risk_level` and `risk_signals`
 - Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
 - Event application is transaction-batch based; checkpoint advances only after commit.
+- Destination checkpoint state is stored in table `dbmigrate_replication_checkpoint` and written atomically in the same destination transaction as applied row changes.
 - Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
+- Keyless `UPDATE`/`DELETE` replay is blocked as unsafe and fails fast with remediation guidance.
 - `--apply-ddl=apply` is safety-classified: risky DDL (drop/rename/destructive alter patterns) is blocked with remediation guidance.
 - Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.
 - Conflict report JSON includes categorized `failure_type` values (for example `schema_drift`, `conflict_duplicate_key`), `sql_error_code` when surfaced by the destination engine, and contextual samples: `value_sample`, `old_row_sample`, `new_row_sample`, `row_diff_sample`.
+- Conflict report samples are redacted by default; plain-text samples require explicit `--conflict-values=plain`.
 
 ## Report generation
 
@@ -178,6 +191,7 @@ Replication checkpoint behavior:
   - `attention_required`: replication conflict report contains a failure, or an incompatible precheck artifact is present in `--state-dir`.
   - `empty`: no known artifacts found in `--state-dir`.
 - `proposals` includes remediation guidance from the conflict report to help triage and rerun planning.
+- Report marks conflict sample handling explicitly (redacted default vs plain opt-in).
 - Default `report` exit behavior is now consistent with that status:
   - incompatible precheck artifacts fail the command by default
   - warning-only artifacts remain reportable without non-zero exit

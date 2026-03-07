@@ -56,6 +56,10 @@ Release-grade v1 support is limited to exact engine/version pairs validated by t
 
 These names are intentionally reserved in the CLI surface, but they are not part of `v1`.
 
+Object scope in `v1`:
+- Default `--include-objects` is `tables,views`.
+- Requesting `routines`, `triggers`, or `events` in `v1` fails fast with incompatibility exit semantics (`exit 2`) and explicit "reserved for v2" guidance.
+
 ## Reserved for v3
 
 - managed/cloud qualification for platforms such as RDS, Cloud SQL, Azure Database for MySQL, and Aurora-like offerings
@@ -195,8 +199,8 @@ Replication window control:
 - `--max-lag-seconds=N` blocks apply when the transaction-end event lag exceeds `N` seconds (based on binlog event timestamps).
 
 Idempotent replay guard:
-- `--idempotent` enables replay-safety guardrails and requires `--conflict-policy=source-wins` or `--conflict-policy=dest-wins`.
-- Using `--idempotent` with `--conflict-policy=fail` is rejected during validation.
+- `--idempotent` is reserved for `v2` and is currently unsupported in `v1`.
+- Using `--idempotent` fails fast with incompatibility exit semantics (`exit 2`).
 
 Replication preflight requirements:
 - source `log_bin` must be enabled
@@ -207,12 +211,15 @@ Replication checkpoint safety behavior:
 - The summary includes `start`, `source_end`, `applied_end`, and `applied_events`.
 - Checkpoint advances only to `applied_end` (never directly to `source_end`).
 - Apply path is transaction-batch based; checkpoint advances only after destination commit succeeds.
+- Destination checkpoint state is also persisted in `dbmigrate_replication_checkpoint` and written atomically in the same destination transaction as applied row changes.
 - Binlog event loading/decoding now maps row events into destination SQL batches with fail-fast behavior on unsupported patterns.
+- Keyless `UPDATE`/`DELETE` replay is blocked as unsafe and fails fast with remediation guidance.
 - Conflict policy is explicit via `--conflict-policy={fail,source-wins,dest-wins}` (default: `fail`).
 - DDL safety in `--apply-ddl=apply` mode allows only low-risk DDL; risky DDL fails with remediation guidance.
 - On replication failure, a detailed JSON report is written to `--state-dir/replication-conflict-report.json`.
 - On replication success, stale `--state-dir/replication-conflict-report.json` from previous failed runs is removed.
 - Conflict reports include `failure_type` categorization, `sql_error_code` (when available), key/value context (`value_sample`), and row-level context (`old_row_sample`, `new_row_sample`, `row_diff_sample`) for debugging.
+- Conflict artifact samples are `redacted` by default. Use `--conflict-values=plain` only as explicit opt-in in controlled environments.
 
 ## Report command (state artifacts)
 
@@ -239,6 +246,9 @@ Current report behavior:
 - Stale conflict reports are auto-ignored when replication checkpoint position has advanced beyond report `applied_end_*`, or (for legacy artifacts) when checkpoint `updated_at` is newer than conflict `generated_at`.
 - Includes remediation proposals from conflict reports in the `proposals` section.
 - Includes remediation proposals from incompatible precheck and verify-data artifacts when present.
+- Report output distinguishes security handling for conflict samples:
+  - redacted by default
+  - plain-text only when explicitly requested
 - Fails by default (`exit 2`) when report status is `attention_required`. Use `--fail-on-conflict=false` to emit report without failing.
 
 ## Verification modes
@@ -256,9 +266,15 @@ dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data
 # Data verification by deterministic sampled rows hash
 dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode sample --sample-size 1000
 
-# Data verification by deterministic full-table hash mode
+# Data verification by deterministic full-table streaming hash mode
 dbmigrate verify --source "mysql://..." --dest "mysql://..." --verify-level data --data-mode full-hash
 ```
+
+Verify data-mode semantics in `v1`:
+- `sample`: bounded sample only (`--sample-size`), intended for fast triage.
+- `hash`: full-table deterministic hash with bounded memory (chunked/streaming).
+- `full-hash`: full-table deterministic hash with stricter chunked streaming aggregation (not an alias of `hash`).
+- `hash` and `full-hash` fail fast when a table has no primary key or non-null unique key (stable order required for deterministic replay-safe hashing).
 
 ## Configuration file support (phase 2)
 

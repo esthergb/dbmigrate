@@ -9,7 +9,15 @@
 ## TLS
 
 - Use `--tls-mode=required` when possible.
+- Runtime TLS settings are now applied to both SQL command paths and binlog streaming paths.
 - Validate CA/cert/key paths before runtime operations.
+- If a requested TLS requirement cannot be applied on a path, fail fast; do not rely on silent fallback.
+
+## Sensitive artifacts
+
+- Replication conflict report value samples are redacted by default.
+- Plain-text conflict samples are available only via explicit opt-in: `--conflict-values=plain`.
+- Treat plain conflict artifacts as sensitive data and limit retention/access.
 
 ## User and grant migration
 

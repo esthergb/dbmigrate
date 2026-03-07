@@ -55,7 +55,6 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 		"--start-from=binlog-file:pos",
 		"--max-events=250",
 		"--max-lag-seconds=90",
-		"--idempotent",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
 		"--enable-trigger-cdc",
@@ -78,8 +77,8 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	if opts.MaxLagSeconds != 90 {
 		t.Fatalf("expected max-lag-seconds 90, got %d", opts.MaxLagSeconds)
 	}
-	if !opts.Idempotent {
-		t.Fatal("expected idempotent=true")
+	if opts.Idempotent {
+		t.Fatal("expected idempotent=false")
 	}
 	if opts.ApplyDDL != "ignore" {
 		t.Fatalf("expected apply-ddl ignore, got %q", opts.ApplyDDL)
@@ -136,10 +135,13 @@ func TestParseReplicateOptionsInvalidMaxLagSeconds(t *testing.T) {
 	}
 }
 
-func TestParseReplicateOptionsIdempotentRequiresNonFailConflictPolicy(t *testing.T) {
+func TestParseReplicateOptionsIdempotentUnsupportedInV1(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--idempotent"})
 	if err == nil {
-		t.Fatal("expected parse error for idempotent with fail conflict policy")
+		t.Fatal("expected parse error for unsupported idempotent flag")
+	}
+	if !strings.Contains(err.Error(), "unsupported in v1") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

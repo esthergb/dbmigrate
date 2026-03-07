@@ -19,6 +19,7 @@ type replicateOptions struct {
 	MaxEvents        uint64
 	MaxLagSeconds    uint64
 	Idempotent       bool
+	ConflictValues   string
 	ApplyDDL         string
 	ConflictPolicy   string
 	EnableTriggerCDC bool
@@ -43,12 +44,12 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d conflict_values=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
 				opts.StartFrom,
 				opts.MaxEvents,
 				opts.MaxLagSeconds,
-				opts.Idempotent,
+				opts.ConflictValues,
 				opts.EnableTriggerCDC,
 				opts.TeardownCDC,
 				opts.Resume,
@@ -81,7 +82,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		)
 	}
 
-	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
+	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect source: %w", err)
 	}
@@ -89,7 +90,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		_ = sourceDB.Close()
 	}()
 
-	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
+	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect destination: %w", err)
 	}
@@ -103,10 +104,15 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		MaxEvents:      opts.MaxEvents,
 		MaxLagSeconds:  opts.MaxLagSeconds,
 		Idempotent:     opts.Idempotent,
+		ConflictValues: opts.ConflictValues,
 		Resume:         opts.Resume,
 		StartFile:      opts.StartFile,
 		StartPos:       uint32(opts.StartPos),
 		SourceDSN:      cfg.Source,
+		SourceTLSMode:  cfg.TLSMode,
+		SourceCAFile:   cfg.CAFile,
+		SourceCertFile: cfg.CertFile,
+		SourceKeyFile:  cfg.KeyFile,
 	})
 	if err != nil {
 		return fmt.Errorf("replicate run failed: %w", err)
@@ -118,7 +124,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d idempotent=%v apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d conflict_values=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -138,7 +144,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			opts.StartFrom,
 			opts.MaxEvents,
 			opts.MaxLagSeconds,
-			opts.Idempotent,
+			opts.ConflictValues,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
 			summary.CheckpointFile,
@@ -153,6 +159,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		MaxEvents:       0,
 		MaxLagSeconds:   0,
 		Idempotent:      false,
+		ConflictValues:  "redacted",
 		ApplyDDL:        "warn",
 		ConflictPolicy:  "fail",
 		Resume:          true,
@@ -166,6 +173,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.Uint64Var(&opts.MaxEvents, "max-events", 0, "max apply events per run (0 means no explicit limit)")
 	fs.Uint64Var(&opts.MaxLagSeconds, "max-lag-seconds", 0, "max allowed lag in seconds before apply (planned)")
 	fs.BoolVar(&opts.Idempotent, "idempotent", false, "enforce idempotent-safe conflict policy for replay runs")
+	fs.StringVar(&opts.ConflictValues, "conflict-values", "redacted", "conflict report value mode (redacted|plain)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
 	fs.StringVar(&opts.ConflictPolicy, "conflict-policy", "fail", "conflict policy (fail|source-wins|dest-wins)")
 	fs.BoolVar(&opts.EnableTriggerCDC, "enable-trigger-cdc", false, "enable trigger-based CDC setup (planned for capture-triggers/hybrid modes)")
@@ -209,8 +217,14 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	default:
 		return replicateOptions{}, fmt.Errorf("invalid --conflict-policy value %q (expected fail, source-wins, or dest-wins)", opts.ConflictPolicy)
 	}
-	if opts.Idempotent && opts.ConflictPolicy == "fail" {
-		return replicateOptions{}, errors.New("--idempotent requires --conflict-policy=source-wins or --conflict-policy=dest-wins")
+	if opts.Idempotent {
+		return replicateOptions{}, errors.New("--idempotent is reserved for v2 and is unsupported in v1")
+	}
+	switch opts.ConflictValues {
+	case "redacted", "plain":
+		// valid
+	default:
+		return replicateOptions{}, fmt.Errorf("invalid --conflict-values value %q (expected redacted or plain)", opts.ConflictValues)
 	}
 	if opts.StartPos < 4 {
 		return replicateOptions{}, errors.New("start-pos must be >= 4")

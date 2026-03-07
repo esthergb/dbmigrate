@@ -13,14 +13,18 @@ const checkpointVersion = 1
 // TableCheckpoint stores migration progress for one table.
 type TableCheckpoint struct {
 	RowsCopied int64     `json:"rows_copied"`
+	KeyColumns []string  `json:"key_columns,omitempty"`
+	LastKey    []string  `json:"last_key,omitempty"`
 	Done       bool      `json:"done"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // DataCheckpoint stores migration progress for all copied tables.
 type DataCheckpoint struct {
-	Version int                        `json:"version"`
-	Tables  map[string]TableCheckpoint `json:"tables"`
+	Version             int                        `json:"version"`
+	SourceWatermarkFile string                     `json:"source_watermark_file,omitempty"`
+	SourceWatermarkPos  uint32                     `json:"source_watermark_pos,omitempty"`
+	Tables              map[string]TableCheckpoint `json:"tables"`
 }
 
 // NewDataCheckpoint creates an empty checkpoint value.

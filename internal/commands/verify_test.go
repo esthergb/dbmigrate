@@ -74,6 +74,15 @@ func TestParseVerifyOptionsInvalidSampleSize(t *testing.T) {
 	}
 }
 
+func TestVerifyDataExitCode(t *testing.T) {
+	if code := verifyDataExitCode(assertError("incompatible_for_v1_deterministic_hash: app.events")); code != ExitCodeDiff {
+		t.Fatalf("expected ExitCodeDiff, got %d", code)
+	}
+	if code := verifyDataExitCode(assertError("other verify failure")); code != ExitCodeVerifyFailed {
+		t.Fatalf("expected ExitCodeVerifyFailed, got %d", code)
+	}
+}
+
 func TestWriteSchemaVerifyResultText(t *testing.T) {
 	var out bytes.Buffer
 	summary := schemaVerify.Summary{
@@ -245,4 +254,16 @@ func TestVerifyDataArtifactRoundTrip(t *testing.T) {
 	if artifact.DataMode != "hash" || artifact.Summary.TablesCompared != 3 {
 		t.Fatalf("unexpected artifact: %#v", artifact)
 	}
+}
+
+func assertError(message string) error {
+	return &staticError{message: message}
+}
+
+type staticError struct {
+	message string
+}
+
+func (s *staticError) Error() string {
+	return s.message
 }

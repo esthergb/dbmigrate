@@ -22,6 +22,7 @@ type ReplicationConflictReport struct {
 	AppliedEndPos  uint32                      `json:"applied_end_pos"`
 	FailureType    string                      `json:"failure_type"`
 	SQLErrorCode   uint16                      `json:"sql_error_code,omitempty"`
+	ValuesRedacted bool                        `json:"values_redacted,omitempty"`
 	Operation      string                      `json:"operation,omitempty"`
 	TableName      string                      `json:"table_name,omitempty"`
 	Query          string                      `json:"query,omitempty"`

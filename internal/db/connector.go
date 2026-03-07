@@ -2,12 +2,18 @@ package db
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	mysqlDriver "github.com/go-sql-driver/mysql"
@@ -16,6 +22,19 @@ import (
 )
 
 const defaultPort = "3306"
+
+// TLSOptions describes runtime TLS settings.
+type TLSOptions struct {
+	Mode     string
+	CAFile   string
+	CertFile string
+	KeyFile  string
+}
+
+var (
+	tlsRegistryCounter uint64
+	tlsRegistryMu      sync.Mutex
+)
 
 // NormalizeDSN converts URI-style DSNs into go-sql-driver/mysql DSN format.
 func NormalizeDSN(raw string) (string, error) {
@@ -64,7 +83,12 @@ func RedactDSN(raw string) string {
 
 // OpenAndPing opens a MySQL connection and verifies connectivity.
 func OpenAndPing(ctx context.Context, rawDSN string) (*sql.DB, error) {
-	normalized, err := NormalizeDSN(rawDSN)
+	return OpenAndPingWithTLS(ctx, rawDSN, TLSOptions{})
+}
+
+// OpenAndPingWithTLS opens a MySQL connection and verifies connectivity using runtime TLS options.
+func OpenAndPingWithTLS(ctx context.Context, rawDSN string, tlsOptions TLSOptions) (*sql.DB, error) {
+	normalized, err := NormalizeDSNWithTLS(rawDSN, tlsOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +111,31 @@ func OpenAndPing(ctx context.Context, rawDSN string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// NormalizeDSNWithTLS converts URI-style DSNs into driver format and applies runtime TLS options.
+func NormalizeDSNWithTLS(raw string, tlsOptions TLSOptions) (string, error) {
+	cfg, err := BuildDriverConfig(raw, tlsOptions)
+	if err != nil {
+		return "", err
+	}
+	return cfg.FormatDSN(), nil
+}
+
+// BuildDriverConfig parses source DSN and applies runtime TLS options.
+func BuildDriverConfig(raw string, tlsOptions TLSOptions) (*mysqlDriver.Config, error) {
+	normalized, err := NormalizeDSN(raw)
+	if err != nil {
+		return nil, err
+	}
+	cfg, err := mysqlDriver.ParseDSN(normalized)
+	if err != nil {
+		return nil, fmt.Errorf("parse dsn: %w", err)
+	}
+	if err := applyRuntimeTLS(cfg, tlsOptions); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 func uriToDriverDSN(u *url.URL) (string, error) {
@@ -136,4 +185,104 @@ func uriToDriverDSN(u *url.URL) (string, error) {
 	}
 
 	return cfg.FormatDSN(), nil
+}
+
+func applyRuntimeTLS(cfg *mysqlDriver.Config, tlsOptions TLSOptions) error {
+	mode := strings.TrimSpace(strings.ToLower(tlsOptions.Mode))
+	if mode == "" {
+		return nil
+	}
+	hasCustomTLS := strings.TrimSpace(tlsOptions.CAFile) != "" ||
+		strings.TrimSpace(tlsOptions.CertFile) != "" ||
+		strings.TrimSpace(tlsOptions.KeyFile) != ""
+	if mode == "disabled" {
+		if hasCustomTLS {
+			return errors.New("tls-mode=disabled cannot be used with --ca-file/--cert-file/--key-file")
+		}
+		cfg.TLSConfig = "false"
+		cfg.TLS = nil
+		cfg.AllowFallbackToPlaintext = false
+		return nil
+	}
+	if mode != "preferred" && mode != "required" {
+		return fmt.Errorf("invalid tls mode %q", tlsOptions.Mode)
+	}
+
+	if !hasCustomTLS {
+		if mode == "required" {
+			cfg.TLSConfig = "true"
+			cfg.AllowFallbackToPlaintext = false
+		} else {
+			cfg.TLSConfig = "preferred"
+			cfg.AllowFallbackToPlaintext = true
+		}
+		return nil
+	}
+
+	customTLS, err := buildCustomTLSConfig(cfg, tlsOptions, mode)
+	if err != nil {
+		return err
+	}
+
+	name, err := registerTLSConfig(customTLS)
+	if err != nil {
+		return err
+	}
+	cfg.TLS = customTLS
+	cfg.TLSConfig = name
+	cfg.AllowFallbackToPlaintext = mode == "preferred"
+	return nil
+}
+
+func buildCustomTLSConfig(cfg *mysqlDriver.Config, tlsOptions TLSOptions, mode string) (*tls.Config, error) {
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+	host, _, err := net.SplitHostPort(cfg.Addr)
+	if err == nil && strings.TrimSpace(host) != "" {
+		tlsCfg.ServerName = host
+	}
+
+	if strings.TrimSpace(tlsOptions.CAFile) != "" {
+		caBytes, err := os.ReadFile(filepath.Clean(tlsOptions.CAFile))
+		if err != nil {
+			return nil, fmt.Errorf("read ca-file: %w", err)
+		}
+		roots := x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(caBytes) {
+			return nil, errors.New("parse ca-file: no certificates found")
+		}
+		tlsCfg.RootCAs = roots
+	}
+
+	certFile := strings.TrimSpace(tlsOptions.CertFile)
+	keyFile := strings.TrimSpace(tlsOptions.KeyFile)
+	if certFile != "" || keyFile != "" {
+		if certFile == "" || keyFile == "" {
+			return nil, errors.New("both --cert-file and --key-file are required for client TLS auth")
+		}
+		cert, err := tls.LoadX509KeyPair(filepath.Clean(certFile), filepath.Clean(keyFile))
+		if err != nil {
+			return nil, fmt.Errorf("load client cert/key pair: %w", err)
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+	}
+
+	if mode == "required" {
+		tlsCfg.InsecureSkipVerify = false
+	}
+	return tlsCfg, nil
+}
+
+func registerTLSConfig(cfg *tls.Config) (string, error) {
+	if cfg == nil {
+		return "", errors.New("tls config is nil")
+	}
+	name := fmt.Sprintf("dbmigrate_tls_%d", atomic.AddUint64(&tlsRegistryCounter, 1))
+	tlsRegistryMu.Lock()
+	defer tlsRegistryMu.Unlock()
+	if err := mysqlDriver.RegisterTLSConfig(name, cfg); err != nil {
+		return "", fmt.Errorf("register mysql tls config: %w", err)
+	}
+	return name, nil
 }

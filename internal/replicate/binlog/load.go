@@ -2,6 +2,7 @@ package binlog
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 
 	goMySQL "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	mysqlDriver "github.com/go-sql-driver/mysql"
 
 	"github.com/esthergb/dbmigrate/internal/db"
 )
@@ -74,7 +74,7 @@ func loadApplyBatchesFromSource(ctx context.Context, source *sql.DB, window appl
 }
 
 func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) ([]streamEvent, error) {
-	syncCfg, err := sourceSyncerConfig(opts.SourceDSN)
+	syncCfg, err := sourceSyncerConfig(opts.SourceDSN, opts.SourceTLSMode, opts.SourceCAFile, opts.SourceCertFile, opts.SourceKeyFile)
 	if err != nil {
 		return nil, err
 	}
@@ -374,6 +374,15 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 		}
 		return out, nil
 	case streamEventDeleteRows:
+		if len(metadata.KeyOrdinals) == 0 {
+			return nil, &applyFailure{
+				FailureType: "unsafe_keyless_replay",
+				Operation:   "delete",
+				TableName:   targetName,
+				Message:     fmt.Sprintf("keyless DELETE replay is blocked for %s", targetName),
+				Remediation: "add a primary key or non-null unique key on the source table before running binlog replay",
+			}
+		}
 		out := make([]applyEvent, 0, len(event.Rows))
 		keyColumns := extractKeyColumns(metadata)
 		rowColumns := copyStringSlice(metadata.Columns)
@@ -398,6 +407,15 @@ func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy 
 		}
 		return out, nil
 	case streamEventUpdateRows:
+		if len(metadata.KeyOrdinals) == 0 {
+			return nil, &applyFailure{
+				FailureType: "unsafe_keyless_replay",
+				Operation:   "update",
+				TableName:   targetName,
+				Message:     fmt.Sprintf("keyless UPDATE replay is blocked for %s", targetName),
+				Remediation: "add a primary key or non-null unique key on the source table before running binlog replay",
+			}
+		}
 		if len(event.Rows)%2 != 0 {
 			return nil, fmt.Errorf("update rows event has odd row count for %s.%s", event.Schema, event.Table)
 		}
@@ -742,14 +760,15 @@ func classifyDDL(query string) (ddlClassification, bool) {
 	}
 }
 
-func sourceSyncerConfig(rawDSN string) (replication.BinlogSyncerConfig, error) {
-	normalized, err := db.NormalizeDSN(rawDSN)
+func sourceSyncerConfig(rawDSN string, tlsMode string, caFile string, certFile string, keyFile string) (replication.BinlogSyncerConfig, error) {
+	parsed, err := db.BuildDriverConfig(rawDSN, db.TLSOptions{
+		Mode:     tlsMode,
+		CAFile:   caFile,
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	})
 	if err != nil {
-		return replication.BinlogSyncerConfig{}, fmt.Errorf("normalize source dsn for binlog sync: %w", err)
-	}
-	parsed, err := mysqlDriver.ParseDSN(normalized)
-	if err != nil {
-		return replication.BinlogSyncerConfig{}, fmt.Errorf("parse source dsn for binlog sync: %w", err)
+		return replication.BinlogSyncerConfig{}, fmt.Errorf("build source dsn for binlog sync: %w", err)
 	}
 	if parsed.Net != "tcp" {
 		return replication.BinlogSyncerConfig{}, fmt.Errorf("unsupported source network %q for binlog sync", parsed.Net)
@@ -764,14 +783,30 @@ func sourceSyncerConfig(rawDSN string) (replication.BinlogSyncerConfig, error) {
 		return replication.BinlogSyncerConfig{}, fmt.Errorf("parse source port for binlog sync: %w", err)
 	}
 
-	if parsed.TLSConfig != "" && parsed.TLSConfig != "false" && parsed.TLSConfig != "preferred" {
-		return replication.BinlogSyncerConfig{}, fmt.Errorf("unsupported source tls mode %q for binlog sync", parsed.TLSConfig)
-	}
-
 	serverID := deriveServerID(parsed.User, parsed.Addr)
 	flavor := "mysql"
 	if parsedURI, err := url.Parse(rawDSN); err == nil && strings.EqualFold(parsedURI.Scheme, "mariadb") {
 		flavor = "mariadb"
+	}
+
+	var syncTLS *tls.Config
+	switch strings.TrimSpace(strings.ToLower(tlsMode)) {
+	case "", "disabled":
+		syncTLS = nil
+	case "preferred":
+		// Binlog syncer cannot negotiate TLS fallback automatically.
+		// Use TLS only when runtime files produced an explicit config.
+		if parsed.TLS != nil {
+			syncTLS = parsed.TLS.Clone()
+		}
+	case "required":
+		if parsed.TLS != nil {
+			syncTLS = parsed.TLS.Clone()
+		} else {
+			syncTLS = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+	default:
+		return replication.BinlogSyncerConfig{}, fmt.Errorf("invalid source tls mode %q for binlog sync", tlsMode)
 	}
 
 	return replication.BinlogSyncerConfig{
@@ -783,6 +818,7 @@ func sourceSyncerConfig(rawDSN string) (replication.BinlogSyncerConfig, error) {
 		Password:  parsed.Passwd,
 		Charset:   "utf8mb4",
 		ParseTime: true,
+		TLSConfig: syncTLS,
 	}, nil
 }
 

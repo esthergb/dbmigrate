@@ -47,15 +47,16 @@ Local release-decision verification on this branch:
 ```bash
 go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate
 go test ./...
+./scripts/test-v1-mysql84-to-mysql84.sh
+./scripts/test-v1-matrix.sh
+./scripts/run-v1-signoff-rehearsals.sh
 ```
 
-Code-bearing evidence baseline:
+Latest rescue-branch rehearsal archive:
 
-- frozen-matrix evidence revision: `297e989`
-- focused-rehearsal evidence revision: `0bf79f4`
-- current release-decision branch base before this doc: `e409a90`
+- `state/v1-signoff-rehearsals/20260307T020159Z`
 
-The decision is valid because the changes after the evidence revisions were documentation/signoff changes, not product-behavior changes.
+This decision is based on fresh code-plus-evidence reruns on the rescue branch, not on historical evidence reuse.
 
 ## Criteria judgment
 
@@ -116,7 +117,7 @@ Frozen strict-lts results confirmed:
 Judgment:
 
 - focused rehearsal pack is green
-- archived root: `state/v1-signoff-rehearsals/20260307T003408Z`
+- archived root: `state/v1-signoff-rehearsals/20260307T020159Z`
 - expected fail-fast paths failed fast with clear evidence
 - warning-only paths remained non-blocking
 - no unexpected contradiction with operator docs was found

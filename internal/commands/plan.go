@@ -27,12 +27,15 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 	if cfg.Source == "" || cfg.Dest == "" {
 		return errors.New("plan requires both --source and --dest (or config file equivalents)")
 	}
+	if unsupported := unsupportedV1IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
+		return WithExitCode(ExitCodeDiff, reservedV2ObjectsError(cfg.IncludeObjects))
+	}
 
-	_, err := db.NormalizeDSN(cfg.Source)
+	_, err := db.NormalizeDSNWithTLS(cfg.Source, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("invalid source DSN: %w", err)
 	}
-	_, err = db.NormalizeDSN(cfg.Dest)
+	_, err = db.NormalizeDSNWithTLS(cfg.Dest, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("invalid dest DSN: %w", err)
 	}
@@ -41,7 +44,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		return writeResult(out, cfg, "plan", "dry-run", "dry-run: compatibility precheck requires connectivity and is skipped")
 	}
 
-	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
+	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect source: %w", err)
 	}
@@ -49,7 +52,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		_ = sourceDB.Close()
 	}()
 
-	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
+	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect destination: %w", err)
 	}

@@ -11,9 +11,6 @@ exclude-databases:
 include-objects:
   - tables
   - views
-  - routines
-  - triggers
-  - events
 
 concurrency: 4
 verbose: true

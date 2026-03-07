@@ -57,7 +57,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.ConfigFile, "config", "", "optional path to YAML/JSON config file")
 	fs.StringVar(&cfg.databasesRaw, "databases", "", "comma-separated databases")
 	fs.StringVar(&cfg.excludeDatabasesRaw, "exclude-databases", "information_schema,performance_schema,sys,mysql", "comma-separated excluded databases")
-	fs.StringVar(&cfg.includeObjectsRaw, "include-objects", "tables,views,routines,triggers,events", "comma-separated object types")
+	fs.StringVar(&cfg.includeObjectsRaw, "include-objects", "tables,views", "comma-separated object types")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "worker concurrency")
 	fs.BoolVar(&cfg.DryRun, "dry-run", false, "plan actions without applying changes")
 	fs.StringVar(&cfg.DryRunMode, "dry-run-mode", "plan", "dry-run behavior: plan, sandbox")
@@ -90,7 +90,7 @@ func (c *RuntimeConfig) Finalize() {
 		c.ExcludeDatabases = []string{"information_schema", "performance_schema", "sys", "mysql"}
 	}
 	if len(c.IncludeObjects) == 0 {
-		c.IncludeObjects = []string{"tables", "views", "routines", "triggers", "events"}
+		c.IncludeObjects = []string{"tables", "views"}
 	}
 }
 

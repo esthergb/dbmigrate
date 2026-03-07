@@ -166,7 +166,7 @@ func TestLoadApplyBatchesFromSourceEmptyDSN(t *testing.T) {
 }
 
 func TestSourceSyncerConfigFlavorAndHost(t *testing.T) {
-	mysqlCfg, err := sourceSyncerConfig("mysql://user:pass@127.0.0.1:3306/app?tls=preferred")
+	mysqlCfg, err := sourceSyncerConfig("mysql://user:pass@127.0.0.1:3306/app?tls=preferred", "", "", "", "")
 	if err != nil {
 		t.Fatalf("sourceSyncerConfig mysql: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestSourceSyncerConfigFlavorAndHost(t *testing.T) {
 		t.Fatal("expected non-zero server id")
 	}
 
-	mariaCfg, err := sourceSyncerConfig("mariadb://user:pass@db.example:3307/app")
+	mariaCfg, err := sourceSyncerConfig("mariadb://user:pass@db.example:3307/app", "", "", "", "")
 	if err != nil {
 		t.Fatalf("sourceSyncerConfig mariadb: %v", err)
 	}

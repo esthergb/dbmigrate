@@ -1,6 +1,11 @@
 package data
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/esthergb/dbmigrate/internal/state"
+)
 
 func TestBuildInsertSQL(t *testing.T) {
 	sql := buildInsertSQL("app", "users", []string{"id", "name"})
@@ -15,6 +20,54 @@ func TestBuildSelectSQL(t *testing.T) {
 	expected := "SELECT `id`, `name` FROM `app`.`users` LIMIT ? OFFSET ?"
 	if sql != expected {
 		t.Fatalf("unexpected select SQL: %s", sql)
+	}
+}
+
+func TestBuildKeysetSelectSQL(t *testing.T) {
+	withoutCursor := buildKeysetSelectSQL("app", "users", []string{"id", "name"}, []string{"id"}, false)
+	if withoutCursor != "SELECT `id`, `name` FROM `app`.`users` ORDER BY `id` LIMIT ?" {
+		t.Fatalf("unexpected keyset SQL without cursor: %s", withoutCursor)
+	}
+
+	withCursor := buildKeysetSelectSQL("app", "users", []string{"id", "name"}, []string{"id"}, true)
+	if withCursor != "SELECT `id`, `name` FROM `app`.`users` WHERE (`id`) > (?) ORDER BY `id` LIMIT ?" {
+		t.Fatalf("unexpected keyset SQL with cursor: %s", withCursor)
+	}
+}
+
+func TestCheckpointCursorArgsRequiresMatchingKeyColumns(t *testing.T) {
+	progress := state.TableCheckpoint{
+		KeyColumns: []string{"id"},
+		LastKey:    []string{"42"},
+	}
+	cursor := checkpointCursorArgs(progress, []string{"id"})
+	if len(cursor) != 1 || cursor[0] != "42" {
+		t.Fatalf("unexpected cursor: %#v", cursor)
+	}
+
+	mismatch := checkpointCursorArgs(progress, []string{"tenant_id"})
+	if mismatch != nil {
+		t.Fatalf("expected nil cursor when key columns mismatch, got %#v", mismatch)
+	}
+}
+
+func TestKeyArgsToStringsNormalizesTypes(t *testing.T) {
+	now := time.Date(2026, 3, 7, 12, 30, 0, 0, time.UTC)
+	out := keyArgsToStrings([]any{[]byte("abc"), now, int64(7), nil})
+	if len(out) != 4 {
+		t.Fatalf("unexpected len: %d", len(out))
+	}
+	if out[0] != "abc" {
+		t.Fatalf("unexpected bytes conversion: %q", out[0])
+	}
+	if out[1] != "2026-03-07T12:30:00Z" {
+		t.Fatalf("unexpected time conversion: %q", out[1])
+	}
+	if out[2] != "7" {
+		t.Fatalf("unexpected integer conversion: %q", out[2])
+	}
+	if out[3] != "" {
+		t.Fatalf("unexpected nil conversion: %q", out[3])
 	}
 }
 
