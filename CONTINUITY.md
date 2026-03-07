@@ -105,11 +105,21 @@ Last updated: 2026-03-07
     - `go test ./internal/state ./internal/schema ./internal/data ./internal/verify/schema ./internal/verify/data ./internal/commands`
     - `go vet ./...`
     - `go test ./...`
+  - PR `#85` CI lint failures reproduced locally and fixed:
+    - removed `ineffassign` noise in replication-boundary GTID candidate selection
+    - replaced deprecated `strings.Title` uses in identifier-portability findings
+    - simplified boolean expression flagged by `QF1001`
+    - removed unused helpers in state-lock/state IO code
+  - Validation after the CI fix passed:
+    - `golangci-lint run ./...`
+    - `go test ./internal/commands`
+    - `go vet ./...`
+    - `go test ./...`
 - Now:
-  - Confirm whether the active v1 docs now count as fully covered by either machine-validated prechecks or explicit manual-evidence findings.
+  - Commit and push the lint-only CI fix to the open PR `#85` branch.
 - Next:
-  - If accepted, prepare commit/PR for the validator-completeness slice.
-  - If stricter coverage is still required, only cloud-only/managed or rehearsal-artifact-driven classes should remain.
+  - Re-check PR `#85` status after push and handle any remaining CI noise.
+  - After PR `#85` is green/merged, continue the remaining v1 release-hardening work from `main`.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to add stale-lock detection/lease recovery for `.dbmigrate.lock`, or keep manual cleanup as the explicit v1 tradeoff.
   - UNCONFIRMED: whether the user wants cloud-only / managed-environment unsupported inventories surfaced in `plan` now, even though `v1` support is self-managed only.
@@ -125,3 +135,4 @@ Last updated: 2026-03-07
   - Commands:
     - `go vet ./...`
     - `go test ./...`
+    - `gh pr checks 85`

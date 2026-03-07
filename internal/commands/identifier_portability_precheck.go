@@ -569,7 +569,7 @@ func detectMixedCaseIdentifierIssues(databases []string, objects []inventoryObje
 			Proposal:   fmt.Sprintf("Normalize %s %s to a single-case naming policy before moving it across lower_case_table_names-sensitive environments.", object.ObjectType, qualifyObjectName(object.Database, object.ObjectName)),
 		})
 	}
-	if !(sourceKnown || destKnown) {
+	if !sourceKnown && !destKnown {
 		return issues
 	}
 	if len(issues) == 0 {
@@ -750,7 +750,7 @@ func buildIdentifierPortabilityFindings(report identifierPortabilityPrecheckRepo
 			findings = append(findings, compat.Finding{
 				Code:     "case_fold_collision",
 				Severity: "error",
-				Message:  fmt.Sprintf("%s folded name %q collides across objects %s.", strings.Title(issue.ObjectType), issue.FoldedName, strings.Join(issue.Objects, ", ")),
+				Message:  fmt.Sprintf("%s folded name %q collides across objects %s.", titleLabel(issue.ObjectType), issue.FoldedName, strings.Join(issue.Objects, ", ")),
 				Proposal: issue.Proposal,
 			})
 		}
@@ -808,7 +808,7 @@ func buildIdentifierPortabilityFindings(report identifierPortabilityPrecheckRepo
 			findings = append(findings, compat.Finding{
 				Code:     code,
 				Severity: severity,
-				Message:  fmt.Sprintf("%s %s uses identifier %q that collides with the destination reserved-word set.", strings.Title(issue.ObjectType), qualifyObjectName(issue.Database, issue.ObjectName), issue.Identifier),
+				Message:  fmt.Sprintf("%s %s uses identifier %q that collides with the destination reserved-word set.", titleLabel(issue.ObjectType), qualifyObjectName(issue.Database, issue.ObjectName), issue.Identifier),
 				Proposal: issue.Proposal,
 			})
 		}
@@ -845,6 +845,16 @@ func describeLowerCaseInventory(known bool, value int) string {
 		return "unknown"
 	}
 	return fmt.Sprintf("%d", value)
+}
+
+func titleLabel(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	runes := []rune(trimmed)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
 func writeIdentifierPortabilityPrecheckReport(out io.Writer, cfg config.RuntimeConfig, report identifierPortabilityPrecheckReport) error {

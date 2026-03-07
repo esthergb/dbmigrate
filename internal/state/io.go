@@ -147,10 +147,6 @@ func WritePrivateFileAtomic(path string, raw []byte) error {
 	return nil
 }
 
-func ensurePrivateDir(dir string) error {
-	return EnsurePrivateDir(dir)
-}
-
 func writePrivateFileAtomic(path string, raw []byte) error {
 	return WritePrivateFileAtomic(path, raw)
 }

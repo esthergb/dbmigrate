@@ -79,7 +79,7 @@ func runReplicationBoundaryPrecheck(
 }
 
 func detectGTIDMode(ctx context.Context, db *sql.DB, instance compat.Instance) string {
-	candidates := []string{}
+	var candidates []string
 	switch instance.Engine {
 	case compat.EngineMySQL:
 		candidates = []string{"@@GLOBAL.gtid_mode"}
@@ -97,7 +97,7 @@ func detectGTIDMode(ctx context.Context, db *sql.DB, instance compat.Instance) s
 }
 
 func detectGTIDPosition(ctx context.Context, db *sql.DB, instance compat.Instance) string {
-	candidates := []string{}
+	var candidates []string
 	switch instance.Engine {
 	case compat.EngineMySQL:
 		candidates = []string{"@@GLOBAL.gtid_executed"}
