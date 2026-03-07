@@ -46,6 +46,7 @@ Last updated: 2026-03-07
     - global flag split parsing hardening
     - secure artifact file permissions
     - DSN validation aligned with connector parser
+  - User approved remote actions (push + PR creation) for PR A branch.
 - Done:
   - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
     - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
@@ -190,9 +191,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Prepare PR A commit and request user confirmation for push/PR.
+  - Push PR A branch and open PR against `main`.
 - Next:
-  - Push PR A branch and open PR after user approval.
+  - Wait for CI and review/merge decision.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
