@@ -82,6 +82,156 @@ services:
       timeout: 20s
       retries: 10
 
+  mysql80a:
+    image: mysql:8.0
+    container_name: mysql80a
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "24310:3306"
+    volumes:
+      - mysql80a_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mysql84a:
+    image: mysql:8.4
+    container_name: mysql84a
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "24311:3306"
+    volumes:
+      - mysql84a_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mysql84b:
+    image: mysql:8.4
+    container_name: mysql84b
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "24312:3306"
+    volumes:
+      - mysql84b_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb1011a:
+    image: mariadb:10.11
+    container_name: mariadb1011a
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14311:3306"
+    volumes:
+      - mariadb1011a_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb1011b:
+    image: mariadb:10.11
+    container_name: mariadb1011b
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14312:3306"
+    volumes:
+      - mariadb1011b_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb114a:
+    image: mariadb:11.4
+    container_name: mariadb114a
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14411:3306"
+    volumes:
+      - mariadb114a_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb114b:
+    image: mariadb:11.4
+    container_name: mariadb114b
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14412:3306"
+    volumes:
+      - mariadb114b_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb118a:
+    image: mariadb:11.8
+    container_name: mariadb118a
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14811:3306"
+    volumes:
+      - mariadb118a_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
+  mariadb118b:
+    image: mariadb:11.8
+    container_name: mariadb118b
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass123
+      MYSQL_ROOT_PASSWORD: rootpass123
+    ports:
+      - "14812:3306"
+    volumes:
+      - mariadb118b_data:/var/lib/mysql
+    networks:
+      - dbmigrate_network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -prootpass123 --silent || exit 1"]
+      timeout: 20s
+      retries: 10
+
 volumes:
   mariadb10_data:
     driver: local
@@ -92,6 +242,24 @@ volumes:
   mysql80_data:
     driver: local
   mysql84_data:
+    driver: local
+  mysql80a_data:
+    driver: local
+  mysql84a_data:
+    driver: local
+  mysql84b_data:
+    driver: local
+  mariadb1011a_data:
+    driver: local
+  mariadb1011b_data:
+    driver: local
+  mariadb114a_data:
+    driver: local
+  mariadb114b_data:
+    driver: local
+  mariadb118a_data:
+    driver: local
+  mariadb118b_data:
     driver: local
 
 networks:

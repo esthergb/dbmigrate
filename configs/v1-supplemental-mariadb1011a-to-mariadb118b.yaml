@@ -1,0 +1,25 @@
+# Migration config: MariaDB 10.11 supplemental upgrade evidence -> MariaDB 11.8 destination
+source: mariadb://root:rootpass123@127.0.0.1:14311/?tls=preferred
+dest: mariadb://root:rootpass123@127.0.0.1:14812/?tls=preferred
+
+databases: []
+exclude-databases:
+  - information_schema
+  - performance_schema
+  - sys
+  - mysql
+include-objects:
+  - tables
+  - views
+  - routines
+  - triggers
+  - events
+
+concurrency: 4
+verbose: true
+json: false
+
+tls-mode: preferred
+state-dir: ./state/v1-supplemental/mariadb1011a-to-mariadb118b
+
+downgrade-profile: max-compat

@@ -58,11 +58,11 @@ wait_for_db_health() {
 
 dataset_for_service() {
   case "$1" in
-    mariadb10) echo "$PROJECT_ROOT/datasets/populate_mariadb10.sql" ;;
-    mariadb11) echo "$PROJECT_ROOT/datasets/populate_mariadb11.sql" ;;
+    mariadb10|mariadb1011a|mariadb1011b) echo "$PROJECT_ROOT/datasets/populate_mariadb10.sql" ;;
+    mariadb11|mariadb114a|mariadb114b|mariadb118a|mariadb118b) echo "$PROJECT_ROOT/datasets/populate_mariadb11.sql" ;;
     mariadb12) echo "$PROJECT_ROOT/datasets/populate_mariadb12.sql" ;;
-    mysql80) echo "$PROJECT_ROOT/datasets/populate_mysql80.sql" ;;
-    mysql84) echo "$PROJECT_ROOT/datasets/populate_mysql84.sql" ;;
+    mysql80|mysql80a) echo "$PROJECT_ROOT/datasets/populate_mysql80.sql" ;;
+    mysql84|mysql84a|mysql84b) echo "$PROJECT_ROOT/datasets/populate_mysql84.sql" ;;
     *) echo "unknown service '$1'" >&2; return 1 ;;
   esac
 }
