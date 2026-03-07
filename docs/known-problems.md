@@ -186,7 +186,7 @@ Observed failure patterns:
 
 - Baseline uses source-side consistent snapshot reads (`REPEATABLE READ` + consistent snapshot transaction) for hot-copy stability.
 - Baseline pagination is keyset-based on stable table keys (primary key or non-null unique key), not offset-based.
-- Resume uses checkpoint cursor state (`key_columns`, `last_key`) and destination max-key fallback when needed.
+- Resume uses checkpoint cursor state (`key_columns`, typed `last_key_typed` with legacy `last_key` load compatibility) and destination max-key fallback when needed.
 - Tables without stable key fail fast in live baseline mode as incompatible in `v1`.
 - Baseline checkpoints capture source binlog watermark (`file:pos`) to preserve baseline->replicate continuity evidence.
 

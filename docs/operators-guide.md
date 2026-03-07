@@ -85,7 +85,7 @@ Invisible-column and GIPK precheck:
 Checkpoint and resume:
 - Baseline data copy writes checkpoint state into `--state-dir` (default `./state`).
 - Use `--resume` to continue from checkpoint state after interruption.
-- Baseline uses consistent source snapshot reads plus keyset pagination (stable PK/unique key order), with resume cursors from checkpoint state.
+- Baseline uses consistent source snapshot reads plus keyset pagination (stable PK/unique key order), with typed resume cursors from checkpoint state (`last_key_typed`, legacy `last_key` load-compatible).
 - For live baselines, tables without primary key or non-null unique key fail fast as incompatible in `v1`.
 - Baseline checkpoint artifacts include source watermark (`SHOW MASTER STATUS`/`SHOW BINARY LOG STATUS`) for baseline->replicate continuity evidence.
 

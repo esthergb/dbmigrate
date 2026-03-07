@@ -164,14 +164,19 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 				return summary, fmt.Errorf("incompatible_for_live_baseline: %s has no primary key or non-null unique key; add a stable key before v1 baseline migration", tableKey)
 			}
 
-			cursor := checkpointCursorArgs(progress, keyColumns)
+			cursor, err := checkpointCursorArgs(progress, keyColumns)
+			if err != nil {
+				return summary, fmt.Errorf("decode checkpoint cursor for %s: %w", tableKey, err)
+			}
 			if opts.Resume && progress.RowsCopied > 0 && len(cursor) == 0 {
 				cursor, err = destinationResumeCursor(ctx, dest, databaseName, tableName, keyColumns)
 				if err != nil {
 					return summary, fmt.Errorf("resume cursor for %s: %w", tableKey, err)
 				}
 				if len(cursor) > 0 {
-					progress.LastKey = keyArgsToStrings(cursor)
+					if err := progress.SetCursorValues(cursor); err != nil {
+						return summary, fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
+					}
 					progress.KeyColumns = append([]string(nil), keyColumns...)
 				}
 			}
@@ -193,7 +198,9 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 
 				progress.RowsCopied += int64(len(batch))
 				progress.KeyColumns = append([]string(nil), keyColumns...)
-				progress.LastKey = keyArgsToStrings(lastKey)
+				if err := progress.SetCursorValues(lastKey); err != nil {
+					return summary, fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
+				}
 				progress.UpdatedAt = time.Now().UTC()
 				checkpoint.Tables[tableKey] = progress
 				if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
@@ -796,26 +803,25 @@ func listNotNullColumns(ctx context.Context, queryer sqlQueryer, databaseName st
 	return out, nil
 }
 
-func checkpointCursorArgs(progress state.TableCheckpoint, keyColumns []string) []any {
-	if len(progress.LastKey) == 0 {
-		return nil
+func checkpointCursorArgs(progress state.TableCheckpoint, keyColumns []string) ([]any, error) {
+	cursor, err := progress.CursorValues()
+	if err != nil {
+		return nil, err
+	}
+	if len(cursor) == 0 {
+		return nil, nil
 	}
 	if len(progress.KeyColumns) == len(keyColumns) {
 		for i := range keyColumns {
 			if progress.KeyColumns[i] != keyColumns[i] {
-				return nil
+				return nil, nil
 			}
 		}
 	}
-	if len(progress.LastKey) != len(keyColumns) {
-		return nil
+	if len(cursor) != len(keyColumns) {
+		return nil, nil
 	}
-
-	cursor := make([]any, 0, len(progress.LastKey))
-	for _, value := range progress.LastKey {
-		cursor = append(cursor, value)
-	}
-	return cursor
+	return cursor, nil
 }
 
 func destinationResumeCursor(ctx context.Context, dest *sql.DB, databaseName string, tableName string, keyColumns []string) ([]any, error) {
@@ -852,23 +858,6 @@ func destinationResumeCursor(ctx context.Context, dest *sql.DB, databaseName str
 		return nil, err
 	}
 	return values, nil
-}
-
-func keyArgsToStrings(values []any) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		switch typed := value.(type) {
-		case nil:
-			out = append(out, "")
-		case []byte:
-			out = append(out, string(typed))
-		case time.Time:
-			out = append(out, typed.UTC().Format(time.RFC3339Nano))
-		default:
-			out = append(out, fmt.Sprint(value))
-		}
-	}
-	return out
 }
 
 func querySourceWatermark(ctx context.Context, queryer sqlQueryer) (string, uint32, error) {
