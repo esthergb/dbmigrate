@@ -1,8 +1,8 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Complete the final `v1` release decision/signoff bundle for the implemented and genuinely supported self-managed paths.
-  - Success means the frozen matrix evidence, focused rehearsal evidence, and release-criteria judgment are assembled into a final release-approved or release-blocked decision record.
+  - Implement the `Fast Safe v1 Release Rescue (Strict-LTS)` plan to close critical production blockers before release.
+  - Success means no deceptive v1 surface area, consistent baseline copy on hot systems, atomic replication checkpointing, scalable verify semantics, TLS wired end-to-end, redacted conflict artifacts by default, and CI/docs aligned.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
@@ -22,9 +22,14 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-release-decision`.
-  - PR `#67`, PR `#68`, PR `#69`, PR `#70`, PR `#71`, and PR `#72` are merged.
-  - Local `main` is fast-forwarded through the focused signoff rehearsal evidence merge.
+  - Current branch: `codex/feat/fast-safe-v1-rescue`.
+  - PR opened: `#74` (`Fast Safe v1 release rescue (strict-lts)`).
+  - Post-PR status: user reported CI failure; root-cause investigation/fix in progress on same branch.
+  - Baseline prior state is merged through PR `#73` on `main`.
+  - Three new review inputs are present and untracked:
+    - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
+    - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
+    - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
   - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
   - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
   - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
@@ -33,8 +38,47 @@ Last updated: 2026-03-07
   - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
-  - Final release decision doc is drafted at `docs/v1-release-decision.md`.
+  - Final release decision doc now exists at `docs/v1-release-decision.md`.
 - Done:
+  - Implemented Fast Safe `v1` rescue waves on `codex/feat/fast-safe-v1-rescue`:
+    - Wave 0:
+      - default `--include-objects` changed to `tables,views`
+      - requesting `routines/triggers/events` now fails fast (`ExitCodeDiff`) as reserved `v2`
+      - `--idempotent` now fails fast as reserved `v2`
+    - Wave 1:
+      - baseline copy uses pinned source connection + consistent snapshot transaction
+      - keyset pagination by stable key (PK/non-null unique), no offset pagination in baseline path
+      - checkpoint cursor resume (`key_columns`, `last_key`) and source watermark capture in checkpoint
+      - live baseline fails fast for tables without stable key
+    - Wave 2:
+      - replication apply/checkpoint is atomic via destination table `dbmigrate_replication_checkpoint`
+      - resume prefers destination checkpoint table when present
+      - keyless `UPDATE/DELETE` replay fails fast as unsafe
+    - Wave 3:
+      - `verify` data modes are now semantically distinct:
+        - `sample`: bounded sample hash
+        - `hash`: full chunked streaming hash (bounded memory)
+        - `full-hash`: full chunked streaming full-hash strategy (not alias)
+      - `hash`/`full-hash` now fail fast without stable key
+    - Wave 4:
+      - TLS runtime options wired through SQL and binlog paths
+      - conflict artifacts are redacted by default; `--conflict-values=plain` is explicit opt-in
+    - Wave 5:
+      - CI now includes release build step
+      - CI includes strict-lts Docker smoke lane (`mysql84 -> mysql84`)
+      - migration test harness always rebuilds binary before execution
+    - Wave 6:
+      - reran strict-lts matrix scripts and focused signoff rehearsals on this branch
+      - latest signoff rehearsal archive: `state/v1-signoff-rehearsals/20260307T020159Z`
+  - Fixed regression found during matrix rerun:
+    - baseline watermark capture now degrades safely to `watermark=unavailable:0` when binlog status is unavailable (not a hard migrate failure).
+  - Updated all local config fixtures to v1 object scope (`tables,views`) to match fail-fast surface gating.
+  - Updated docs to match current behavior:
+    - `README.md`
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+    - `docs/risk-checklist.md`
+    - `docs/security.md`
   - Added and merged:
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
@@ -102,11 +146,11 @@ Last updated: 2026-03-07
   - Ran final release-decision verification on this branch:
     - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
     - `go test ./...`
+  - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Publish the final `v1` signoff / release-decision PR.
+  - Inspect failing CI job(s) on PR `#74`, apply minimal fix, rerun local verification, and push.
 - Next:
-  - Merge the final signoff PR if CI stays green.
-  - After merge, `v1` technical signoff is complete pending release-owner ratification.
+  - Recheck PR `#74` checks to confirm green.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
@@ -118,6 +162,9 @@ Last updated: 2026-03-07
     - `docs/v1-release-criteria.md`
     - `docs/v1-rehearsal-evidence.md`
     - `docs/v1-release-decision.md`
+    - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
+    - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
+    - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
     - `docker-compose.yml`
     - `scripts/run-metadata-lock-scenario.sh`
     - `scripts/run-backup-restore-rehearsal.sh`
@@ -135,6 +182,7 @@ Last updated: 2026-03-07
     - merged PR `#70`
     - merged PR `#71`
     - merged PR `#72`
+    - merged PR `#73`
   - Commands:
     - `go test ./...`
     - `./scripts/test-v1-matrix.sh`

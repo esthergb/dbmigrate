@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,14 @@ type CopySummary struct {
 	RowsCopied     int64
 	Batches        int
 	CheckpointFile string
+	WatermarkFile  string
+	WatermarkPos   uint32
+}
+
+type sqlQueryer interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
 // DryRunValidationOptions controls DML dry-run validation in sandbox schemas.
@@ -57,14 +66,9 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 		return CopySummary{}, errors.New("chunk size must be >= 1")
 	}
 
-	databases, err := listDatabases(ctx, source)
-	if err != nil {
-		return CopySummary{}, fmt.Errorf("list source databases: %w", err)
-	}
-	selected := schema.SelectDatabases(databases, opts.IncludeDatabases, opts.ExcludeDatabases)
-
 	checkpointFile := filepath.Join(stateDir, "data-baseline-checkpoint.json")
 	checkpoint := state.NewDataCheckpoint()
+	var err error
 	if opts.Resume {
 		checkpoint, err = state.LoadDataCheckpoint(checkpointFile)
 		if err != nil {
@@ -72,9 +76,49 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 		}
 	}
 
+	sourceConn, err := source.Conn(ctx)
+	if err != nil {
+		return CopySummary{}, fmt.Errorf("pin source connection: %w", err)
+	}
+	defer func() {
+		_ = sourceConn.Close()
+	}()
+
+	if _, err := sourceConn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+		return CopySummary{}, fmt.Errorf("set source transaction isolation: %w", err)
+	}
+	if _, err := sourceConn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
+		return CopySummary{}, fmt.Errorf("start consistent snapshot transaction: %w", err)
+	}
+	defer func() {
+		_, _ = sourceConn.ExecContext(context.Background(), "ROLLBACK")
+	}()
+
+	if checkpoint.SourceWatermarkFile == "" {
+		watermarkFile, watermarkPos, watermarkErr := querySourceWatermark(ctx, sourceConn)
+		if watermarkErr != nil {
+			checkpoint.SourceWatermarkFile = "unavailable"
+			checkpoint.SourceWatermarkPos = 0
+		} else {
+			checkpoint.SourceWatermarkFile = watermarkFile
+			checkpoint.SourceWatermarkPos = watermarkPos
+		}
+		if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
+			return CopySummary{}, err
+		}
+	}
+
+	databases, err := listDatabases(ctx, sourceConn)
+	if err != nil {
+		return CopySummary{}, fmt.Errorf("list source databases: %w", err)
+	}
+	selected := schema.SelectDatabases(databases, opts.IncludeDatabases, opts.ExcludeDatabases)
+
 	summary := CopySummary{CheckpointFile: checkpointFile}
+	summary.WatermarkFile = checkpoint.SourceWatermarkFile
+	summary.WatermarkPos = checkpoint.SourceWatermarkPos
 	for _, databaseName := range selected {
-		tableNames, err := listBaseTables(ctx, source, databaseName)
+		tableNames, err := listBaseTables(ctx, sourceConn, databaseName)
 		if err != nil {
 			return summary, fmt.Errorf("list source tables for %s: %w", databaseName, err)
 		}
@@ -97,22 +141,7 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 				summary.Completed++
 				continue
 			}
-
-			if opts.Resume && progress.RowsCopied > 0 {
-				if err := resetDestinationTable(ctx, dest, databaseName, tableName); err != nil {
-					return summary, fmt.Errorf("reset destination table %s: %w", tableKey, err)
-				}
-				progress.RowsCopied = 0
-				progress.Done = false
-				progress.UpdatedAt = time.Now().UTC()
-				checkpoint.Tables[tableKey] = progress
-				if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
-					return summary, err
-				}
-				summary.Restarted++
-			}
-
-			columns, err := listTableColumns(ctx, source, databaseName, tableName)
+			columns, err := listTableColumns(ctx, sourceConn, databaseName, tableName)
 			if err != nil {
 				return summary, fmt.Errorf("list columns for %s: %w", tableKey, err)
 			}
@@ -127,11 +156,30 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 				continue
 			}
 
-			selectSQL := buildSelectSQL(databaseName, tableName, columns)
+			keyColumns, err := listStableKeyColumns(ctx, sourceConn, databaseName, tableName)
+			if err != nil {
+				return summary, fmt.Errorf("stable key check for %s: %w", tableKey, err)
+			}
+			if len(keyColumns) == 0 {
+				return summary, fmt.Errorf("incompatible_for_live_baseline: %s has no primary key or non-null unique key; add a stable key before v1 baseline migration", tableKey)
+			}
+
+			cursor := checkpointCursorArgs(progress, keyColumns)
+			if opts.Resume && progress.RowsCopied > 0 && len(cursor) == 0 {
+				cursor, err = destinationResumeCursor(ctx, dest, databaseName, tableName, keyColumns)
+				if err != nil {
+					return summary, fmt.Errorf("resume cursor for %s: %w", tableKey, err)
+				}
+				if len(cursor) > 0 {
+					progress.LastKey = keyArgsToStrings(cursor)
+					progress.KeyColumns = append([]string(nil), keyColumns...)
+				}
+			}
+
 			insertSQL := buildInsertSQL(databaseName, tableName, columns)
-			offset := int64(0)
 			for {
-				batch, err := fetchBatch(ctx, source, selectSQL, opts.ChunkSize, offset, len(columns))
+				selectSQL := buildKeysetSelectSQL(databaseName, tableName, columns, keyColumns, len(cursor) > 0)
+				batch, lastKey, err := fetchKeysetBatch(ctx, sourceConn, selectSQL, opts.ChunkSize, cursor, columns, keyColumns)
 				if err != nil {
 					return summary, fmt.Errorf("fetch batch for %s: %w", tableKey, err)
 				}
@@ -143,8 +191,9 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 					return summary, fmt.Errorf("apply batch for %s: %w", tableKey, err)
 				}
 
-				offset += int64(len(batch))
-				progress.RowsCopied = offset
+				progress.RowsCopied += int64(len(batch))
+				progress.KeyColumns = append([]string(nil), keyColumns...)
+				progress.LastKey = keyArgsToStrings(lastKey)
 				progress.UpdatedAt = time.Now().UTC()
 				checkpoint.Tables[tableKey] = progress
 				if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
@@ -153,6 +202,7 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 
 				summary.RowsCopied += int64(len(batch))
 				summary.Batches++
+				cursor = lastKey
 
 				if len(batch) < opts.ChunkSize {
 					break
@@ -219,7 +269,7 @@ func ValidateBaselineDataDryRun(ctx context.Context, source *sql.DB, dest *sql.D
 	return summary, nil
 }
 
-func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
+func listDatabases(ctx context.Context, db sqlQueryer) ([]string, error) {
 	rows, err := db.QueryContext(ctx, "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA ORDER BY SCHEMA_NAME")
 	if err != nil {
 		return nil, err
@@ -242,7 +292,7 @@ func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return out, nil
 }
 
-func listBaseTables(ctx context.Context, db *sql.DB, databaseName string) ([]string, error) {
+func listBaseTables(ctx context.Context, db sqlQueryer, databaseName string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT TABLE_NAME
 		FROM information_schema.TABLES
@@ -270,7 +320,7 @@ func listBaseTables(ctx context.Context, db *sql.DB, databaseName string) ([]str
 	return orderTableNamesByForeignKeys(ctx, db, databaseName, out)
 }
 
-func orderTableNamesByForeignKeys(ctx context.Context, db *sql.DB, databaseName string, tableNames []string) ([]string, error) {
+func orderTableNamesByForeignKeys(ctx context.Context, db sqlQueryer, databaseName string, tableNames []string) ([]string, error) {
 	if len(tableNames) < 2 {
 		return tableNames, nil
 	}
@@ -378,7 +428,7 @@ func sortTableNamesByDependencies(tableNames []string, dependencies map[string]m
 	return append(ordered, remaining...)
 }
 
-func listTableColumns(ctx context.Context, db *sql.DB, databaseName string, tableName string) ([]string, error) {
+func listTableColumns(ctx context.Context, db sqlQueryer, databaseName string, tableName string) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT COLUMN_NAME
 		FROM information_schema.COLUMNS
@@ -419,6 +469,33 @@ func buildSelectSQL(databaseName string, tableName string, columns []string) str
 	)
 }
 
+func buildKeysetSelectSQL(databaseName string, tableName string, columns []string, keyColumns []string, withCursor bool) string {
+	selectColumns := make([]string, 0, len(columns))
+	for _, col := range columns {
+		selectColumns = append(selectColumns, quoteIdentifier(col))
+	}
+	orderColumns := make([]string, 0, len(keyColumns))
+	for _, col := range keyColumns {
+		orderColumns = append(orderColumns, quoteIdentifier(col))
+	}
+	base := fmt.Sprintf(
+		"SELECT %s FROM %s.%s",
+		strings.Join(selectColumns, ", "),
+		quoteIdentifier(databaseName),
+		quoteIdentifier(tableName),
+	)
+	if withCursor {
+		return fmt.Sprintf(
+			"%s WHERE (%s) > (%s) ORDER BY %s LIMIT ?",
+			base,
+			strings.Join(orderColumns, ", "),
+			strings.Join(repeat("?", len(keyColumns)), ", "),
+			strings.Join(orderColumns, ", "),
+		)
+	}
+	return fmt.Sprintf("%s ORDER BY %s LIMIT ?", base, strings.Join(orderColumns, ", "))
+}
+
 func buildInsertSQL(databaseName string, tableName string, columns []string) string {
 	colParts := make([]string, 0, len(columns))
 	placeholders := make([]string, 0, len(columns))
@@ -435,7 +512,7 @@ func buildInsertSQL(databaseName string, tableName string, columns []string) str
 	)
 }
 
-func fetchBatch(ctx context.Context, db *sql.DB, selectSQL string, chunkSize int, offset int64, expectedColumns int) ([][]any, error) {
+func fetchBatch(ctx context.Context, db sqlQueryer, selectSQL string, chunkSize int, offset int64, expectedColumns int) ([][]any, error) {
 	rows, err := db.QueryContext(ctx, selectSQL, chunkSize, offset)
 	if err != nil {
 		return nil, err
@@ -469,6 +546,74 @@ func fetchBatch(ctx context.Context, db *sql.DB, selectSQL string, chunkSize int
 		return nil, err
 	}
 	return batch, nil
+}
+
+func fetchKeysetBatch(
+	ctx context.Context,
+	queryer sqlQueryer,
+	selectSQL string,
+	chunkSize int,
+	cursor []any,
+	columns []string,
+	keyColumns []string,
+) ([][]any, []any, error) {
+	keyIndexes := make([]int, 0, len(keyColumns))
+	for _, keyColumn := range keyColumns {
+		keyIndex := -1
+		for i, column := range columns {
+			if column == keyColumn {
+				keyIndex = i
+				break
+			}
+		}
+		if keyIndex < 0 {
+			return nil, nil, fmt.Errorf("key column %q is not present in selected column list", keyColumn)
+		}
+		keyIndexes = append(keyIndexes, keyIndex)
+	}
+
+	args := make([]any, 0, len(cursor)+1)
+	args = append(args, cursor...)
+	args = append(args, chunkSize)
+	rows, err := queryer.QueryContext(ctx, selectSQL, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	batch := make([][]any, 0, chunkSize)
+	lastKey := make([]any, 0, len(keyColumns))
+	for rows.Next() {
+		rowValues := make([]any, len(columns))
+		scanValues := make([]any, len(columns))
+		for i := range rowValues {
+			scanValues[i] = &rowValues[i]
+		}
+		if err := rows.Scan(scanValues...); err != nil {
+			return nil, nil, err
+		}
+
+		for i, val := range rowValues {
+			if raw, ok := val.([]byte); ok {
+				copied := make([]byte, len(raw))
+				copy(copied, raw)
+				rowValues[i] = copied
+			}
+		}
+		batch = append(batch, rowValues)
+
+		keyValues := make([]any, 0, len(keyIndexes))
+		for _, keyIndex := range keyIndexes {
+			keyValues = append(keyValues, rowValues[keyIndex])
+		}
+		lastKey = keyValues
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	return batch, lastKey, nil
 }
 
 func applyBatch(ctx context.Context, db *sql.DB, insertSQL string, batch [][]any) error {
@@ -556,17 +701,280 @@ func ensureDestinationTablesAreEmpty(ctx context.Context, db *sql.DB, databaseNa
 	return nil
 }
 
-func resetDestinationTable(ctx context.Context, db *sql.DB, databaseName string, tableName string) error {
-	truncate := fmt.Sprintf("TRUNCATE TABLE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
-	if _, err := db.ExecContext(ctx, truncate); err == nil {
+func listStableKeyColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]string, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
+		FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		ORDER BY
+			CASE WHEN INDEX_NAME = 'PRIMARY' THEN 0 ELSE 1 END,
+			NON_UNIQUE,
+			INDEX_NAME,
+			SEQ_IN_INDEX
+	`, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	indexes := map[string][]string{}
+	nonUnique := map[string]int{}
+	orderedIndexes := make([]string, 0, 4)
+	for rows.Next() {
+		var indexName string
+		var uniqueFlag int
+		var columnName string
+		var seq int
+		if err := rows.Scan(&indexName, &uniqueFlag, &columnName, &seq); err != nil {
+			return nil, err
+		}
+		if _, ok := indexes[indexName]; !ok {
+			orderedIndexes = append(orderedIndexes, indexName)
+		}
+		indexes[indexName] = append(indexes[indexName], columnName)
+		nonUnique[indexName] = uniqueFlag
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	notNullColumns, err := listNotNullColumns(ctx, queryer, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, indexName := range orderedIndexes {
+		if nonUnique[indexName] != 0 {
+			continue
+		}
+		columns := indexes[indexName]
+		if len(columns) == 0 {
+			continue
+		}
+		eligible := true
+		for _, col := range columns {
+			if _, ok := notNullColumns[col]; !ok {
+				eligible = false
+				break
+			}
+		}
+		if !eligible {
+			continue
+		}
+		return columns, nil
+	}
+
+	return nil, nil
+}
+
+func listNotNullColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) (map[string]struct{}, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT COLUMN_NAME
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND IS_NULLABLE = 'NO'
+	`, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	out := map[string]struct{}{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func checkpointCursorArgs(progress state.TableCheckpoint, keyColumns []string) []any {
+	if len(progress.LastKey) == 0 {
+		return nil
+	}
+	if len(progress.KeyColumns) == len(keyColumns) {
+		for i := range keyColumns {
+			if progress.KeyColumns[i] != keyColumns[i] {
+				return nil
+			}
+		}
+	}
+	if len(progress.LastKey) != len(keyColumns) {
 		return nil
 	}
 
-	deleteAll := fmt.Sprintf("DELETE FROM %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
-	if _, err := db.ExecContext(ctx, deleteAll); err != nil {
-		return err
+	cursor := make([]any, 0, len(progress.LastKey))
+	for _, value := range progress.LastKey {
+		cursor = append(cursor, value)
 	}
-	return nil
+	return cursor
+}
+
+func destinationResumeCursor(ctx context.Context, dest *sql.DB, databaseName string, tableName string, keyColumns []string) ([]any, error) {
+	orderColumns := make([]string, 0, len(keyColumns))
+	for _, keyColumn := range keyColumns {
+		orderColumns = append(orderColumns, quoteIdentifier(keyColumn))
+	}
+	query := fmt.Sprintf(
+		"SELECT %s FROM %s.%s ORDER BY %s LIMIT 1",
+		strings.Join(orderColumns, ", "),
+		quoteIdentifier(databaseName),
+		quoteIdentifier(tableName),
+		strings.Join(orderColumns, " DESC, ")+" DESC",
+	)
+	rows, err := dest.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	}
+	values := make([]any, len(keyColumns))
+	scan := make([]any, len(keyColumns))
+	for i := range values {
+		scan[i] = &values[i]
+	}
+	if err := rows.Scan(scan...); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
+func keyArgsToStrings(values []any) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		switch typed := value.(type) {
+		case nil:
+			out = append(out, "")
+		case []byte:
+			out = append(out, string(typed))
+		case time.Time:
+			out = append(out, typed.UTC().Format(time.RFC3339Nano))
+		default:
+			out = append(out, fmt.Sprint(value))
+		}
+	}
+	return out
+}
+
+func querySourceWatermark(ctx context.Context, queryer sqlQueryer) (string, uint32, error) {
+	queries := []string{"SHOW MASTER STATUS", "SHOW BINARY LOG STATUS"}
+	for _, query := range queries {
+		file, pos, err := querySourceWatermarkWithSQL(ctx, queryer, query)
+		if err == nil {
+			return file, pos, nil
+		}
+	}
+	return "", 0, errors.New("unable to query source binlog watermark")
+}
+
+func querySourceWatermarkWithSQL(ctx context.Context, queryer sqlQueryer, query string) (string, uint32, error) {
+	rows, err := queryer.QueryContext(ctx, query)
+	if err != nil {
+		return "", 0, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	columns, err := rows.Columns()
+	if err != nil {
+		return "", 0, err
+	}
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return "", 0, err
+		}
+		return "", 0, errors.New("empty binlog status result")
+	}
+	values := make([]any, len(columns))
+	scan := make([]any, len(columns))
+	for i := range values {
+		scan[i] = &values[i]
+	}
+	if err := rows.Scan(scan...); err != nil {
+		return "", 0, err
+	}
+	file := ""
+	var pos uint32
+	for i, rawColumn := range columns {
+		column := strings.ToLower(strings.TrimSpace(rawColumn))
+		switch column {
+		case "file", "log_name":
+			file = stringifySQLValue(values[i])
+		case "position", "pos":
+			value, parseErr := parseUint32Value(values[i])
+			if parseErr != nil {
+				return "", 0, parseErr
+			}
+			pos = value
+		}
+	}
+	if strings.TrimSpace(file) == "" || pos == 0 {
+		return "", 0, errors.New("binlog watermark columns not found")
+	}
+	return file, pos, nil
+}
+
+func stringifySQLValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case []byte:
+		return string(typed)
+	case string:
+		return typed
+	default:
+		return fmt.Sprint(value)
+	}
+}
+
+func parseUint32Value(value any) (uint32, error) {
+	switch typed := value.(type) {
+	case int64:
+		return uint32(typed), nil
+	case uint64:
+		return uint32(typed), nil
+	case int:
+		return uint32(typed), nil
+	case uint:
+		return uint32(typed), nil
+	case []byte:
+		parsed, err := strconv.ParseUint(string(typed), 10, 32)
+		if err != nil {
+			return 0, err
+		}
+		return uint32(parsed), nil
+	case string:
+		parsed, err := strconv.ParseUint(typed, 10, 32)
+		if err != nil {
+			return 0, err
+		}
+		return uint32(parsed), nil
+	default:
+		return 0, fmt.Errorf("unsupported numeric type %T", value)
+	}
+}
+
+func repeat(value string, n int) []string {
+	items := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		items = append(items, value)
+	}
+	return items
 }
 
 func quoteIdentifier(name string) string {

@@ -89,8 +89,11 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	if payload.Summary.ReplicationConflictReport.FailureType != "schema_drift" {
 		t.Fatalf("unexpected failure type: %q", payload.Summary.ReplicationConflictReport.FailureType)
 	}
-	if len(payload.Proposals) != 1 {
+	if len(payload.Proposals) != 2 {
 		t.Fatalf("unexpected proposals length: %d", len(payload.Proposals))
+	}
+	if !strings.Contains(strings.Join(payload.Proposals, " | "), "plain-text") {
+		t.Fatalf("expected plain-text conflict proposal, got %#v", payload.Proposals)
 	}
 }
 

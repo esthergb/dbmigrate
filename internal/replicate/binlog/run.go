@@ -18,6 +18,7 @@ import (
 type Options struct {
 	ApplyDDL       string
 	ConflictPolicy string
+	ConflictValues string
 	MaxEvents      uint64
 	MaxLagSeconds  uint64
 	Idempotent     bool
@@ -25,6 +26,10 @@ type Options struct {
 	StartFile      string
 	StartPos       uint32
 	SourceDSN      string
+	SourceTLSMode  string
+	SourceCAFile   string
+	SourceCertFile string
+	SourceKeyFile  string
 }
 
 // Summary reports checkpoint update results.
@@ -88,15 +93,20 @@ type txRunner interface {
 }
 
 var (
-	checkSourcePreflightFn = checkSourcePreflight
-	queryBinlogPositionFn  = queryBinlogPosition
-	loadApplyBatchesFn     = loadApplyBatchesFromSource
-	beginDestinationTxFn   = beginDestinationTx
-	applyWindowFn          = applyWindowTransactional
-	timeNowFn              = time.Now
-	saveConflictReportFn   = state.SaveReplicationConflictReport
-	removeConflictReportFn = removeConflictReport
+	checkSourcePreflightFn             = checkSourcePreflight
+	queryBinlogPositionFn              = queryBinlogPosition
+	loadApplyBatchesFn                 = loadApplyBatchesFromSource
+	beginDestinationTxFn               = beginDestinationTx
+	applyWindowFn                      = applyWindowTransactional
+	timeNowFn                          = time.Now
+	saveConflictReportFn               = state.SaveReplicationConflictReport
+	removeConflictReportFn             = removeConflictReport
+	ensureDestinationCheckpointTableFn = ensureDestinationCheckpointTable
+	saveDestinationCheckpointTxFn      = saveDestinationCheckpointTx
+	loadDestinationCheckpointFn        = loadDestinationCheckpoint
 )
+
+const destinationCheckpointTable = "dbmigrate_replication_checkpoint"
 
 // Run updates replication checkpoint based on current source binlog position.
 func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options) (Summary, error) {
@@ -104,6 +114,9 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		return Summary{}, errors.New("source and destination connections are required")
 	}
 	opts.ConflictPolicy = normalizeConflictPolicy(opts.ConflictPolicy)
+	if strings.TrimSpace(opts.ConflictValues) == "" {
+		opts.ConflictValues = "redacted"
+	}
 	if err := validateApplyDDL(opts.ApplyDDL); err != nil {
 		return Summary{}, err
 	}
@@ -127,6 +140,17 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 			return Summary{}, err
 		}
 		checkpoint = loaded
+		dbCheckpoint, found, err := loadDestinationCheckpointFn(ctx, dest)
+		if err != nil {
+			return Summary{}, fmt.Errorf("load destination replication checkpoint: %w", err)
+		}
+		if found {
+			checkpoint.BinlogFile = dbCheckpoint.File
+			checkpoint.BinlogPos = dbCheckpoint.Pos
+			if strings.TrimSpace(dbCheckpoint.ApplyDDL) != "" {
+				checkpoint.ApplyDDL = dbCheckpoint.ApplyDDL
+			}
+		}
 	}
 
 	startFile := opts.StartFile
@@ -444,6 +468,20 @@ func normalizeBinlogFormat(value any) string {
 }
 
 func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB, window applyWindow, opts Options) (applyResult, error) {
+	if err := ensureDestinationCheckpointTableFn(ctx, dest); err != nil {
+		return applyResult{}, &applyFailure{
+			FailureType: "destination_checkpoint_table",
+			File:        window.StartFile,
+			Pos:         window.StartPos,
+			Operation:   "ensure_checkpoint_table",
+			Message:     "prepare destination replication checkpoint table",
+			Cause:       err,
+			Remediation: "verify destination DDL permissions and rerun replicate",
+			AppliedFile: window.StartFile,
+			AppliedPos:  window.StartPos,
+		}
+	}
+
 	batches, err := loadApplyBatchesFn(ctx, source, window, opts)
 	if err != nil {
 		var failure *applyFailure
@@ -623,6 +661,22 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 			}
 		}
 
+		if err := saveDestinationCheckpointTxFn(ctx, tx, batch.EndFile, batch.EndPos, opts.ApplyDDL); err != nil {
+			_ = tx.Rollback()
+			return applyResult{}, &applyFailure{
+				FailureType: "destination_checkpoint_write",
+				File:        batch.EndFile,
+				Pos:         batch.EndPos,
+				Operation:   "checkpoint_write",
+				Message:     "write destination replication checkpoint in transaction",
+				Cause:       err,
+				Remediation: "verify destination write permissions for checkpoint table and rerun replicate",
+				AppliedFile: lastFile,
+				AppliedPos:  lastPos,
+				Shape:       shapeTracker.snapshot(),
+			}
+		}
+
 		if err := tx.Commit(); err != nil {
 			_ = tx.Rollback()
 			return applyResult{}, &applyFailure{
@@ -651,6 +705,62 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 		AppliedEvents: appliedEvents,
 		Shape:         shapeTracker.snapshot(),
 	}, nil
+}
+
+type destinationCheckpoint struct {
+	File     string
+	Pos      uint32
+	ApplyDDL string
+}
+
+func ensureDestinationCheckpointTable(ctx context.Context, dest *sql.DB) error {
+	ddl := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s (
+			checkpoint_id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+			binlog_file VARCHAR(255) NOT NULL,
+			binlog_pos BIGINT UNSIGNED NOT NULL,
+			apply_ddl VARCHAR(16) NOT NULL,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+		) ENGINE=InnoDB
+	`, destinationCheckpointTable)
+	_, err := dest.ExecContext(ctx, ddl)
+	return err
+}
+
+func saveDestinationCheckpointTx(ctx context.Context, tx txRunner, file string, pos uint32, applyDDL string) error {
+	query := fmt.Sprintf(`
+		INSERT INTO %s (checkpoint_id, binlog_file, binlog_pos, apply_ddl)
+		VALUES (1, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			binlog_file = VALUES(binlog_file),
+			binlog_pos = VALUES(binlog_pos),
+			apply_ddl = VALUES(apply_ddl),
+			updated_at = CURRENT_TIMESTAMP
+	`, destinationCheckpointTable)
+	_, err := tx.ExecContext(ctx, query, file, pos, applyDDL)
+	return err
+}
+
+func loadDestinationCheckpoint(ctx context.Context, dest *sql.DB) (destinationCheckpoint, bool, error) {
+	if err := ensureDestinationCheckpointTable(ctx, dest); err != nil {
+		return destinationCheckpoint{}, false, err
+	}
+	query := fmt.Sprintf("SELECT binlog_file, binlog_pos, apply_ddl FROM %s WHERE checkpoint_id = 1", destinationCheckpointTable)
+	var file string
+	var pos uint64
+	var applyDDL string
+	err := dest.QueryRowContext(ctx, query).Scan(&file, &pos, &applyDDL)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return destinationCheckpoint{}, false, nil
+		}
+		return destinationCheckpoint{}, false, err
+	}
+	return destinationCheckpoint{
+		File:     file,
+		Pos:      uint32(pos),
+		ApplyDDL: applyDDL,
+	}, true, nil
 }
 
 func estimateLagSeconds(eventTimestamp uint32, now time.Time) uint64 {
@@ -710,5 +820,39 @@ func buildConflictReport(opts Options, startFile string, startPos uint32, source
 		}
 	}
 
+	if opts.ConflictValues != "plain" {
+		report.ValuesRedacted = true
+		report.ValueSample = redactSamples(report.ValueSample)
+		report.OldRowSample = redactSamples(report.OldRowSample)
+		report.NewRowSample = redactSamples(report.NewRowSample)
+		report.RowDiffSample = redactSamples(report.RowDiffSample)
+	}
+
 	return report
+}
+
+func redactSamples(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if strings.HasPrefix(trimmed, "... +") && strings.HasSuffix(trimmed, "more") {
+			out = append(out, trimmed)
+			continue
+		}
+		if strings.Contains(trimmed, ":") {
+			parts := strings.SplitN(trimmed, ":", 2)
+			out = append(out, parts[0]+":<redacted>")
+			continue
+		}
+		if strings.Contains(trimmed, "=") {
+			parts := strings.SplitN(trimmed, "=", 2)
+			out = append(out, parts[0]+"=<redacted>")
+			continue
+		}
+		out = append(out, "<redacted>")
+	}
+	return out
 }

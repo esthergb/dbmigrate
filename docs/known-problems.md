@@ -163,11 +163,32 @@ Observed failure patterns:
 
 - Current Phase 64 behavior:
   - verify hashing runs on pinned, normalized sessions (`SET NAMES utf8mb4`, `time_zone='+00:00'`)
-  - row hashes are sorted client-side before aggregate hashing
+  - hash/full-hash use stable-key ordered chunked streaming aggregation with bounded memory
+  - hash/full-hash fail fast when a table has no primary key or non-null unique key
   - JSON payloads are canonicalized before hashing
   - verify artifacts record canonicalization assumptions and representation-sensitive table risk
   - `report` treats real verify diffs as `attention_required`, but keeps warning-only representation risk in `ok`
 - Rehearsal support is provided by `scripts/run-verify-canonicalization-rehearsal.sh`.
+
+### 3.2 Hot baseline copy can miss/duplicate rows with offset pagination
+
+Evidence:
+
+- `LIMIT/OFFSET` pagination is unstable under concurrent writes and deletes in live systems.
+- Interrupted baselines that restart from table head can duplicate already copied rows.
+
+Observed failure patterns:
+
+- rows inserted/deleted during copy windows shift offsets and produce omissions/duplicates.
+- restart logic that replays from table start can conflict with partially copied destination tables.
+
+`dbmigrate` safeguards:
+
+- Baseline uses source-side consistent snapshot reads (`REPEATABLE READ` + consistent snapshot transaction) for hot-copy stability.
+- Baseline pagination is keyset-based on stable table keys (primary key or non-null unique key), not offset-based.
+- Resume uses checkpoint cursor state (`key_columns`, `last_key`) and destination max-key fallback when needed.
+- Tables without stable key fail fast in live baseline mode as incompatible in `v1`.
+- Baseline checkpoints capture source binlog watermark (`file:pos`) to preserve baseline->replicate continuity evidence.
 
 ---
 

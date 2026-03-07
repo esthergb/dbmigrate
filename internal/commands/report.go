@@ -276,6 +276,13 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 		if !summary.ReplicationConflictStale && report.Remediation != "" {
 			proposals = append(proposals, report.Remediation)
 		}
+		if !summary.ReplicationConflictStale {
+			if report.ValuesRedacted {
+				proposals = append(proposals, "replication conflict samples are redacted by default; rerun replicate with --conflict-values=plain only in controlled environments when raw values are required.")
+			} else {
+				proposals = append(proposals, "replication conflict samples are plain-text; treat replication-conflict-report.json as sensitive data.")
+			}
+		}
 	}
 
 	if len(proposals) == 0 && summary.Artifacts.ReplicationConflictReport && !summary.ReplicationConflictStale {
@@ -464,10 +471,11 @@ func writeReportText(out io.Writer, payload reportResult) error {
 		report := payload.Summary.ReplicationConflictReport
 		if _, err := fmt.Fprintf(
 			out,
-			"[report] replication_conflict file=%s failure_type=%s stale=%v table=%s operation=%s message=%s\n",
+			"[report] replication_conflict file=%s failure_type=%s stale=%v values_redacted=%v table=%s operation=%s message=%s\n",
 			payload.Summary.ReplicationConflictFilePath,
 			report.FailureType,
 			payload.Summary.ReplicationConflictStale,
+			report.ValuesRedacted,
 			report.TableName,
 			report.Operation,
 			report.Message,

@@ -56,6 +56,9 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 
 	runSchema := opts.SchemaOnly || (!opts.SchemaOnly && !opts.DataOnly)
 	runData := opts.DataOnly || (!opts.SchemaOnly && !opts.DataOnly)
+	if unsupported := unsupportedV1IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
+		return WithExitCode(ExitCodeDiff, reservedV2ObjectsError(cfg.IncludeObjects))
+	}
 	includeTables := hasObject(cfg.IncludeObjects, "tables")
 	includeViews := hasObject(cfg.IncludeObjects, "views")
 
@@ -73,7 +76,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		return writeResult(out, cfg, "migrate", "dry-run", message)
 	}
 
-	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
+	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect source: %w", err)
 	}
@@ -81,7 +84,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		_ = sourceDB.Close()
 	}()
 
-	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
+	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect destination: %w", err)
 	}
@@ -181,12 +184,15 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 
 		dataSummary, err = data.CopyBaselineData(ctx, sourceDB, destDB, cfg.StateDir, dataOptions)
 		if err != nil {
+			if strings.Contains(err.Error(), "incompatible_for_live_baseline") {
+				return WithExitCode(ExitCodeDiff, fmt.Errorf("data migration failed: %w", err))
+			}
 			return fmt.Errorf("data migration failed: %w", err)
 		}
 	}
 
 	message := fmt.Sprintf(
-		"migration completed: schema(databases=%d tables=%d views=%d statements=%d) data(databases=%d tables=%d completed=%d rows=%d batches=%d restarted=%d checkpoint=%s)",
+		"migration completed: schema(databases=%d tables=%d views=%d statements=%d) data(databases=%d tables=%d completed=%d rows=%d batches=%d restarted=%d checkpoint=%s watermark=%s:%d)",
 		schemaSummary.Databases,
 		schemaSummary.Tables,
 		schemaSummary.Views,
@@ -198,6 +204,8 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		dataSummary.Batches,
 		dataSummary.Restarted,
 		dataSummary.CheckpointFile,
+		dataSummary.WatermarkFile,
+		dataSummary.WatermarkPos,
 	)
 	return writeResult(out, cfg, "migrate", "ok", message)
 }
@@ -243,7 +251,7 @@ func runMigrateDryRunSandbox(
 		return errors.New("data migration requires tables in --include-objects")
 	}
 
-	sourceDB, err := db.OpenAndPing(ctx, cfg.Source)
+	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect source: %w", err)
 	}
@@ -251,7 +259,7 @@ func runMigrateDryRunSandbox(
 		_ = sourceDB.Close()
 	}()
 
-	destDB, err := db.OpenAndPing(ctx, cfg.Dest)
+	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
 	if err != nil {
 		return fmt.Errorf("connect destination: %w", err)
 	}

@@ -24,6 +24,20 @@ const (
 	diffKindTableHashMismatch    = "table_hash_mismatch"
 )
 
+const (
+	defaultHashChunkSize     = 2000
+	defaultFullHashChunkSize = 500
+	defaultSampleSize        = 1000
+)
+
+type hashMode string
+
+const (
+	hashModeSample   hashMode = "sample"
+	hashModeHash     hashMode = "hash"
+	hashModeFullHash hashMode = "full-hash"
+)
+
 type sqlQueryer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -173,7 +187,7 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 			TextByteNormalized:  true,
 			JSONNormalized:      true,
 			SampleFullScan:      false,
-			AggregateStrategy:   "sorted_row_hashes_utf8mb4_session",
+			AggregateStrategy:   "ordered_key_chunked_streaming_sha256",
 		},
 	}
 	if err := prepareVerifySession(ctx, sourceConn); err != nil {
@@ -213,7 +227,81 @@ func VerifyHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options)
 
 // VerifyFullHash compares full-table deterministic content hashes for all selected tables.
 func VerifyFullHash(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Summary, error) {
-	return VerifyHash(ctx, source, dest, opts)
+	if source == nil || dest == nil {
+		return Summary{}, errors.New("source and destination connections are required")
+	}
+
+	sourceConn, err := source.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin source verify connection: %w", err)
+	}
+	defer func() {
+		_ = sourceConn.Close()
+	}()
+	destConn, err := dest.Conn(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("pin destination verify connection: %w", err)
+	}
+	defer func() {
+		_ = destConn.Close()
+	}()
+
+	sourceDatabases, err := listDatabases(ctx, sourceConn)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list source databases: %w", err)
+	}
+	destDatabases, err := listDatabases(ctx, destConn)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list destination databases: %w", err)
+	}
+
+	unionDatabases := unionAndSort(sourceDatabases, destDatabases)
+	selectedDatabases := baseSchema.SelectDatabases(unionDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
+
+	summary := Summary{
+		Databases: len(selectedDatabases),
+		Canonicalization: CanonicalizationSummary{
+			RowOrderIndependent: true,
+			SessionTimeZone:     "+00:00",
+			TextByteNormalized:  true,
+			JSONNormalized:      true,
+			SampleFullScan:      false,
+			AggregateStrategy:   "ordered_key_chunked_fullhash_sha256",
+		},
+	}
+	if err := prepareVerifySession(ctx, sourceConn); err != nil {
+		return summary, fmt.Errorf("prepare source verify session: %w", err)
+	}
+	if err := prepareVerifySession(ctx, destConn); err != nil {
+		return summary, fmt.Errorf("prepare destination verify session: %w", err)
+	}
+	riskProfiles, err := tableRiskProfiles(ctx, sourceConn, selectedDatabases)
+	if err != nil {
+		return summary, fmt.Errorf("read source table risk profiles: %w", err)
+	}
+	summary.TableRisks = flattenTableRisks(riskProfiles)
+	summary.RepresentationRiskTables = len(summary.TableRisks)
+	for _, databaseName := range selectedDatabases {
+		sourceHashes, err := tableFullHashesForDatabase(ctx, sourceConn, databaseName)
+		if err != nil {
+			return summary, fmt.Errorf("read source table full hashes for %s: %w", databaseName, err)
+		}
+		destHashes, err := tableFullHashesForDatabase(ctx, destConn, databaseName)
+		if err != nil {
+			return summary, fmt.Errorf("read destination table full hashes for %s: %w", databaseName, err)
+		}
+
+		diffs, compared, missingDest, missingSource, mismatches, noiseRisk := diffTableHashes(databaseName, sourceHashes, destHashes, riskProfiles[databaseName])
+		summary.Diffs = append(summary.Diffs, diffs...)
+		summary.TablesCompared += compared
+		summary.MissingInDestination += missingDest
+		summary.MissingInSource += missingSource
+		summary.HashMismatches += mismatches
+		summary.NoiseRiskMismatches += noiseRisk
+	}
+
+	sortDiffs(summary.Diffs)
+	return summary, nil
 }
 
 // VerifySample compares deterministic per-table sample hashes between source and destination.
@@ -255,12 +343,12 @@ func VerifySample(ctx context.Context, source *sql.DB, dest *sql.DB, opts Option
 	summary := Summary{
 		Databases: len(selectedDatabases),
 		Canonicalization: CanonicalizationSummary{
-			RowOrderIndependent: true,
+			RowOrderIndependent: false,
 			SessionTimeZone:     "+00:00",
 			TextByteNormalized:  true,
 			JSONNormalized:      true,
-			SampleFullScan:      true,
-			AggregateStrategy:   "sorted_row_hashes_then_limit_utf8mb4_session",
+			SampleFullScan:      false,
+			AggregateStrategy:   "ordered_key_limited_streaming_sha256",
 		},
 	}
 	if err := prepareVerifySession(ctx, sourceConn); err != nil {
@@ -338,29 +426,25 @@ func tableCountsForDatabase(ctx context.Context, queryer sqlQueryer, databaseNam
 }
 
 func tableHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string) (map[string]string, error) {
-	tableNames, err := listBaseTables(ctx, queryer, databaseName)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]string{}
-	for _, tableName := range tableNames {
-		tableHash, err := hashTable(ctx, queryer, databaseName, tableName)
-		if err != nil {
-			return nil, err
-		}
-		out[tableName] = tableHash
-	}
-	return out, nil
+	return tableModeHashesForDatabase(ctx, queryer, databaseName, hashModeHash, 0)
+}
+
+func tableFullHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string) (map[string]string, error) {
+	return tableModeHashesForDatabase(ctx, queryer, databaseName, hashModeFullHash, 0)
 }
 
 func tableSampleHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string, sampleSize int) (map[string]string, error) {
+	return tableModeHashesForDatabase(ctx, queryer, databaseName, hashModeSample, sampleSize)
+}
+
+func tableModeHashesForDatabase(ctx context.Context, queryer sqlQueryer, databaseName string, mode hashMode, sampleSize int) (map[string]string, error) {
 	tableNames, err := listBaseTables(ctx, queryer, databaseName)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]string{}
 	for _, tableName := range tableNames {
-		tableHash, err := hashTableSample(ctx, queryer, databaseName, tableName, sampleSize)
+		tableHash, err := hashTableByMode(ctx, queryer, databaseName, tableName, mode, sampleSize)
 		if err != nil {
 			return nil, err
 		}
@@ -437,18 +521,7 @@ func countRows(ctx context.Context, queryer sqlQueryer, databaseName string, tab
 	return out, nil
 }
 
-func hashTable(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) (string, error) {
-	return hashTableWithLimit(ctx, queryer, databaseName, tableName, 0)
-}
-
-func hashTableSample(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string, sampleSize int) (string, error) {
-	if sampleSize < 1 {
-		return hashTableWithLimit(ctx, queryer, databaseName, tableName, 0)
-	}
-	return hashTableWithLimit(ctx, queryer, databaseName, tableName, sampleSize)
-}
-
-func hashTableWithLimit(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string, limit int) (string, error) {
+func hashTableByMode(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string, mode hashMode, sampleSize int) (string, error) {
 	columns, err := listTableColumnInfo(ctx, queryer, databaseName, tableName)
 	if err != nil {
 		return "", err
@@ -458,8 +531,47 @@ func hashTableWithLimit(ctx context.Context, queryer sqlQueryer, databaseName st
 		return hex.EncodeToString(empty[:]), nil
 	}
 
+	keyColumns, err := listStableKeyColumns(ctx, queryer, databaseName, tableName)
+	if err != nil {
+		return "", err
+	}
+	if mode != hashModeSample && len(keyColumns) == 0 {
+		return "", incompatibleStableKeyError(databaseName, tableName)
+	}
+
+	switch mode {
+	case hashModeSample:
+		return hashOrderedSampleTable(ctx, queryer, databaseName, tableName, columns, keyColumns, sampleSize)
+	case hashModeHash:
+		return hashChunkedTable(ctx, queryer, databaseName, tableName, columns, keyColumns, defaultHashChunkSize, hashModeHash)
+	case hashModeFullHash:
+		return hashChunkedTable(ctx, queryer, databaseName, tableName, columns, keyColumns, defaultFullHashChunkSize, hashModeFullHash)
+	default:
+		return "", fmt.Errorf("unsupported hash mode %q", mode)
+	}
+}
+
+func hashOrderedSampleTable(
+	ctx context.Context,
+	queryer sqlQueryer,
+	databaseName string,
+	tableName string,
+	columns []columnInfo,
+	keyColumns []string,
+	sampleSize int,
+) (string, error) {
+	if sampleSize < 1 {
+		sampleSize = defaultSampleSize
+	}
+
 	query := buildSelectSQL(databaseName, tableName, columns)
-	rows, err := queryer.QueryContext(ctx, query)
+	if len(keyColumns) > 0 {
+		query = buildOrderedSelectSQL(databaseName, tableName, columns, keyColumns, true)
+	} else {
+		query = query + " LIMIT ?"
+	}
+
+	rows, err := queryer.QueryContext(ctx, query, sampleSize)
 	if err != nil {
 		return "", err
 	}
@@ -467,7 +579,149 @@ func hashTableWithLimit(ctx context.Context, queryer sqlQueryer, databaseName st
 		_ = rows.Close()
 	}()
 
-	rowHashes := make([]string, 0, 32)
+	return hashStreamedRows(rows, columns, hashModeSample)
+}
+
+func hashChunkedTable(
+	ctx context.Context,
+	queryer sqlQueryer,
+	databaseName string,
+	tableName string,
+	columns []columnInfo,
+	keyColumns []string,
+	chunkSize int,
+	mode hashMode,
+) (string, error) {
+	if chunkSize < 1 {
+		chunkSize = defaultHashChunkSize
+	}
+
+	keyIndexes, err := keyColumnIndexes(columns, keyColumns)
+	if err != nil {
+		return "", err
+	}
+
+	tableHasher := sha256.New()
+	cursor := make([]any, 0, len(keyColumns))
+	totalRows := 0
+	chunks := 0
+	for {
+		query := buildKeysetSelectSQL(databaseName, tableName, columns, keyColumns, len(cursor) > 0)
+		args := make([]any, 0, len(cursor)+1)
+		args = append(args, cursor...)
+		args = append(args, chunkSize)
+
+		rows, err := queryer.QueryContext(ctx, query, args...)
+		if err != nil {
+			return "", err
+		}
+
+		chunkHasher := sha256.New()
+		chunkRows := 0
+		lastKey := make([]any, 0, len(keyColumns))
+		for rows.Next() {
+			rowValues := make([]any, len(columns))
+			scanValues := make([]any, len(columns))
+			for i := range rowValues {
+				scanValues[i] = &rowValues[i]
+			}
+			if err := rows.Scan(scanValues...); err != nil {
+				_ = rows.Close()
+				return "", err
+			}
+			for i, value := range rowValues {
+				if raw, ok := value.([]byte); ok {
+					copied := make([]byte, len(raw))
+					copy(copied, raw)
+					rowValues[i] = copied
+				}
+			}
+
+			rowDigest, err := rowDigestForHash(rowValues, columns)
+			if err != nil {
+				_ = rows.Close()
+				return "", err
+			}
+
+			if mode == hashModeHash {
+				if _, err := tableHasher.Write([]byte("r:")); err != nil {
+					_ = rows.Close()
+					return "", err
+				}
+				if _, err := tableHasher.Write(rowDigest); err != nil {
+					_ = rows.Close()
+					return "", err
+				}
+				if _, err := tableHasher.Write([]byte{'\n'}); err != nil {
+					_ = rows.Close()
+					return "", err
+				}
+			} else {
+				if _, err := chunkHasher.Write(rowDigest); err != nil {
+					_ = rows.Close()
+					return "", err
+				}
+				if _, err := chunkHasher.Write([]byte{'\n'}); err != nil {
+					_ = rows.Close()
+					return "", err
+				}
+			}
+
+			lastKey = keyCursorFromRow(rowValues, keyIndexes)
+			chunkRows++
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return "", err
+		}
+		_ = rows.Close()
+
+		if chunkRows == 0 {
+			break
+		}
+		if mode == hashModeFullHash {
+			if _, err := fmt.Fprintf(tableHasher, "chunk:%d rows:%d digest:", chunks, chunkRows); err != nil {
+				return "", err
+			}
+			if _, err := tableHasher.Write(chunkHasher.Sum(nil)); err != nil {
+				return "", err
+			}
+			if _, err := tableHasher.Write([]byte{'\n'}); err != nil {
+				return "", err
+			}
+		}
+
+		totalRows += chunkRows
+		chunks++
+		cursor = lastKey
+		if chunkRows < chunkSize {
+			break
+		}
+	}
+
+	if _, err := fmt.Fprintf(tableHasher, "mode:%s rows:%d chunks:%d\n", mode, totalRows, chunks); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(tableHasher.Sum(nil)), nil
+}
+
+func rowDigestForHash(rowValues []any, columns []columnInfo) ([]byte, error) {
+	normalized := make([]string, len(rowValues))
+	for i, value := range rowValues {
+		normalized[i] = normalizeHashValue(value, columns[i])
+	}
+	raw, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, err
+	}
+	rowSum := sha256.Sum256(raw)
+	return rowSum[:], nil
+}
+
+func hashStreamedRows(rows *sql.Rows, columns []columnInfo, mode hashMode) (string, error) {
+	hasher := sha256.New()
+	rowCount := 0
+
 	for rows.Next() {
 		rowValues := make([]any, len(columns))
 		scanValues := make([]any, len(columns))
@@ -477,35 +731,70 @@ func hashTableWithLimit(ctx context.Context, queryer sqlQueryer, databaseName st
 		if err := rows.Scan(scanValues...); err != nil {
 			return "", err
 		}
-
-		normalized := make([]string, len(rowValues))
 		for i, value := range rowValues {
-			normalized[i] = normalizeHashValue(value, columns[i])
+			if raw, ok := value.([]byte); ok {
+				copied := make([]byte, len(raw))
+				copy(copied, raw)
+				rowValues[i] = copied
+			}
 		}
-		raw, err := json.Marshal(normalized)
+
+		rowDigest, err := rowDigestForHash(rowValues, columns)
 		if err != nil {
 			return "", err
 		}
-		rowSum := sha256.Sum256(raw)
-		rowHashes = append(rowHashes, hex.EncodeToString(rowSum[:]))
-	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
-	sort.Strings(rowHashes)
-	if limit > 0 && len(rowHashes) > limit {
-		rowHashes = rowHashes[:limit]
-	}
-	hasher := sha256.New()
-	for _, rowHash := range rowHashes {
-		if _, err := hasher.Write([]byte(rowHash)); err != nil {
+		if _, err := hasher.Write([]byte("r:")); err != nil {
+			return "", err
+		}
+		if _, err := hasher.Write(rowDigest); err != nil {
 			return "", err
 		}
 		if _, err := hasher.Write([]byte{'\n'}); err != nil {
 			return "", err
 		}
+		rowCount++
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if _, err := fmt.Fprintf(hasher, "mode:%s rows:%d\n", mode, rowCount); err != nil {
+		return "", err
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func keyColumnIndexes(columns []columnInfo, keyColumns []string) ([]int, error) {
+	indexes := make([]int, 0, len(keyColumns))
+	for _, keyColumn := range keyColumns {
+		index := -1
+		for i, column := range columns {
+			if column.Name == keyColumn {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			return nil, fmt.Errorf("key column %q is not present in selected column list", keyColumn)
+		}
+		indexes = append(indexes, index)
+	}
+	return indexes, nil
+}
+
+func keyCursorFromRow(rowValues []any, keyIndexes []int) []any {
+	cursor := make([]any, 0, len(keyIndexes))
+	for _, keyIndex := range keyIndexes {
+		cursor = append(cursor, rowValues[keyIndex])
+	}
+	return cursor
+}
+
+func incompatibleStableKeyError(databaseName string, tableName string) error {
+	return fmt.Errorf(
+		"incompatible_for_v1_deterministic_hash: %s.%s has no primary key or non-null unique key; add a stable key before using hash/full-hash verify modes",
+		databaseName,
+		tableName,
+	)
 }
 
 func buildSelectSQL(databaseName string, tableName string, columns []columnInfo) string {
@@ -520,6 +809,142 @@ func buildSelectSQL(databaseName string, tableName string, columns []columnInfo)
 		quoteIdentifier(databaseName),
 		quoteIdentifier(tableName),
 	)
+}
+
+func buildOrderedSelectSQL(databaseName string, tableName string, columns []columnInfo, keyColumns []string, withLimit bool) string {
+	base := buildSelectSQL(databaseName, tableName, columns)
+	orderColumns := make([]string, 0, len(keyColumns))
+	for _, column := range keyColumns {
+		orderColumns = append(orderColumns, quoteIdentifier(column))
+	}
+	query := base + " ORDER BY " + strings.Join(orderColumns, ", ")
+	if withLimit {
+		query += " LIMIT ?"
+	}
+	return query
+}
+
+func buildKeysetSelectSQL(databaseName string, tableName string, columns []columnInfo, keyColumns []string, withCursor bool) string {
+	base := buildSelectSQL(databaseName, tableName, columns)
+	orderColumns := make([]string, 0, len(keyColumns))
+	for _, column := range keyColumns {
+		orderColumns = append(orderColumns, quoteIdentifier(column))
+	}
+	if withCursor {
+		return fmt.Sprintf(
+			"%s WHERE (%s) > (%s) ORDER BY %s LIMIT ?",
+			base,
+			strings.Join(orderColumns, ", "),
+			strings.Join(repeat("?", len(keyColumns)), ", "),
+			strings.Join(orderColumns, ", "),
+		)
+	}
+	return fmt.Sprintf("%s ORDER BY %s LIMIT ?", base, strings.Join(orderColumns, ", "))
+}
+
+func listStableKeyColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) ([]string, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
+		FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		ORDER BY
+			CASE WHEN INDEX_NAME = 'PRIMARY' THEN 0 ELSE 1 END,
+			NON_UNIQUE,
+			INDEX_NAME,
+			SEQ_IN_INDEX
+	`, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	indexes := map[string][]string{}
+	nonUnique := map[string]int{}
+	orderedIndexes := make([]string, 0, 4)
+	for rows.Next() {
+		var indexName string
+		var uniqueFlag int
+		var columnName string
+		var seq int
+		if err := rows.Scan(&indexName, &uniqueFlag, &columnName, &seq); err != nil {
+			return nil, err
+		}
+		if _, ok := indexes[indexName]; !ok {
+			orderedIndexes = append(orderedIndexes, indexName)
+		}
+		indexes[indexName] = append(indexes[indexName], columnName)
+		nonUnique[indexName] = uniqueFlag
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	notNullColumns, err := listNotNullColumns(ctx, queryer, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, indexName := range orderedIndexes {
+		if nonUnique[indexName] != 0 {
+			continue
+		}
+		columns := indexes[indexName]
+		if len(columns) == 0 {
+			continue
+		}
+		eligible := true
+		for _, column := range columns {
+			if _, ok := notNullColumns[column]; !ok {
+				eligible = false
+				break
+			}
+		}
+		if eligible {
+			return columns, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func listNotNullColumns(ctx context.Context, queryer sqlQueryer, databaseName string, tableName string) (map[string]struct{}, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT COLUMN_NAME
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND IS_NULLABLE = 'NO'
+	`, databaseName, tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	out := map[string]struct{}{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func repeat(value string, count int) []string {
+	if count <= 0 {
+		return nil
+	}
+	out := make([]string, count)
+	for i := 0; i < count; i++ {
+		out[i] = value
+	}
+	return out
 }
 
 func normalizeHashValue(value any, info columnInfo) string {

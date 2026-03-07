@@ -94,6 +94,34 @@ func TestBuildSelectSQL(t *testing.T) {
 	}
 }
 
+func TestBuildOrderedSelectSQL(t *testing.T) {
+	sql := buildOrderedSelectSQL(
+		"app",
+		"users",
+		[]columnInfo{{Name: "id"}, {Name: "name"}},
+		[]string{"id"},
+		true,
+	)
+	expected := "SELECT `id`, `name` FROM `app`.`users` ORDER BY `id` LIMIT ?"
+	if sql != expected {
+		t.Fatalf("unexpected ordered select SQL: %s", sql)
+	}
+}
+
+func TestBuildKeysetSelectSQL(t *testing.T) {
+	sql := buildKeysetSelectSQL(
+		"app",
+		"users",
+		[]columnInfo{{Name: "id"}, {Name: "name"}},
+		[]string{"id"},
+		true,
+	)
+	expected := "SELECT `id`, `name` FROM `app`.`users` WHERE (`id`) > (?) ORDER BY `id` LIMIT ?"
+	if sql != expected {
+		t.Fatalf("unexpected keyset select SQL: %s", sql)
+	}
+}
+
 func TestNormalizeHashValue(t *testing.T) {
 	if normalizeHashValue(nil, columnInfo{}) != "null:" {
 		t.Fatalf("expected null marker, got %q", normalizeHashValue(nil, columnInfo{}))
@@ -133,5 +161,15 @@ func TestVerifyFullHashRequiresConnections(t *testing.T) {
 	summary, err := VerifyFullHash(context.TODO(), nil, nil, Options{})
 	if err == nil {
 		t.Fatalf("expected error for nil connections, got summary=%+v", summary)
+	}
+}
+
+func TestIncompatibleStableKeyError(t *testing.T) {
+	err := incompatibleStableKeyError("app", "events")
+	if err == nil {
+		t.Fatal("expected incompatible stable key error")
+	}
+	if !strings.Contains(err.Error(), "incompatible_for_v1_deterministic_hash") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

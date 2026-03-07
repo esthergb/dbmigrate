@@ -120,12 +120,8 @@ if [ ! -f "$DATASET_FILE" ]; then
 fi
 seed_source_dataset "$SOURCE_SERVICE" "$DATASET_FILE"
 
-if [ ! -f "$PROJECT_ROOT/bin/dbmigrate" ]; then
-  echo "[6/7] Building dbmigrate..."
-  (cd "$PROJECT_ROOT" && make build)
-else
-  echo "[6/7] dbmigrate binary found, skipping build"
-fi
+echo "[6/7] Building dbmigrate..."
+(cd "$PROJECT_ROOT" && make build)
 
 echo "[7/7] Running migration pipeline..."
 first_failure=0

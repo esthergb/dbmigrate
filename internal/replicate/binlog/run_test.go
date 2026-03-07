@@ -564,16 +564,19 @@ func TestRunWritesSQLErrorCodeInConflictReport(t *testing.T) {
 	if report.FailureType != "schema_drift" {
 		t.Fatalf("unexpected failure type: %s", report.FailureType)
 	}
-	if len(report.ValueSample) != 1 || report.ValueSample[0] != "id=42" {
+	if !report.ValuesRedacted {
+		t.Fatal("expected conflict samples to be redacted by default")
+	}
+	if len(report.ValueSample) != 1 || report.ValueSample[0] != "id=<redacted>" {
 		t.Fatalf("unexpected value sample: %#v", report.ValueSample)
 	}
-	if len(report.OldRowSample) != 2 || report.OldRowSample[1] != "name=legacy" {
+	if len(report.OldRowSample) != 2 || report.OldRowSample[1] != "name=<redacted>" {
 		t.Fatalf("unexpected old row sample: %#v", report.OldRowSample)
 	}
-	if len(report.NewRowSample) != 2 || report.NewRowSample[1] != "name=current" {
+	if len(report.NewRowSample) != 2 || report.NewRowSample[1] != "name=<redacted>" {
 		t.Fatalf("unexpected new row sample: %#v", report.NewRowSample)
 	}
-	if len(report.RowDiffSample) != 1 || report.RowDiffSample[0] != "name:legacy->current" {
+	if len(report.RowDiffSample) != 1 || report.RowDiffSample[0] != "name:<redacted>" {
 		t.Fatalf("unexpected row diff sample: %#v", report.RowDiffSample)
 	}
 }
@@ -992,6 +995,15 @@ func stubRunHooks(t *testing.T) func() {
 	origNow := timeNowFn
 	origSaveReport := saveConflictReportFn
 	origRemoveReport := removeConflictReportFn
+	origEnsureDestinationCheckpointTable := ensureDestinationCheckpointTableFn
+	origSaveDestinationCheckpointTx := saveDestinationCheckpointTxFn
+	origLoadDestinationCheckpoint := loadDestinationCheckpointFn
+
+	ensureDestinationCheckpointTableFn = func(context.Context, *sql.DB) error { return nil }
+	saveDestinationCheckpointTxFn = func(context.Context, txRunner, string, uint32, string) error { return nil }
+	loadDestinationCheckpointFn = func(context.Context, *sql.DB) (destinationCheckpoint, bool, error) {
+		return destinationCheckpoint{}, false, nil
+	}
 
 	return func() {
 		checkSourcePreflightFn = origPreflight
@@ -1002,6 +1014,9 @@ func stubRunHooks(t *testing.T) func() {
 		timeNowFn = origNow
 		saveConflictReportFn = origSaveReport
 		removeConflictReportFn = origRemoveReport
+		ensureDestinationCheckpointTableFn = origEnsureDestinationCheckpointTable
+		saveDestinationCheckpointTxFn = origSaveDestinationCheckpointTx
+		loadDestinationCheckpointFn = origLoadDestinationCheckpoint
 	}
 }
 
