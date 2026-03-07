@@ -47,6 +47,7 @@ Last updated: 2026-03-07
     - explicit operator messaging for downgrade-capable mode
     - docs/tests alignment
   - User approved remote actions (push + PR creation) for PR B branch.
+  - PR `#78` is open for PR B (`fix: default tls mode to required`).
 - Done:
   - Implemented PR B TLS hardening on `codex/fix/v1-prB-tls-default-required`:
     - default global `--tls-mode` changed from `preferred` to `required`
@@ -58,6 +59,8 @@ Last updated: 2026-03-07
   - Validation passed:
     - `go test ./internal/config ./internal/cli`
     - `go test ./...`
+  - Pushed `codex/fix/v1-prB-tls-default-required` to `origin`.
+  - Opened PR `#78` against `main`.
   - PR `#77` merged into `main` and local `main` synced.
   - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
     - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
@@ -204,9 +207,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Push PR B branch and open PR against `main`.
+  - Wait for CI and review feedback on PR `#78`.
 - Next:
-  - Wait for CI and review/merge decision on PR B.
+  - Merge PR `#78` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
