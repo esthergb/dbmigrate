@@ -41,6 +41,7 @@ Last updated: 2026-03-07
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
   - User approved remote actions (push + PR creation) for phase66.
+  - PR `#76` is open for phase66 (`chore: add manual v1 release-gate workflow`).
 - Done:
   - Merged PR `#75` and synced local `main`.
   - Verified on merged `main` after PR `#75`:
@@ -55,6 +56,8 @@ Last updated: 2026-03-07
   - Revalidated phase66 changes locally:
     - `go test ./...`
     - `bash -n scripts/run-v1-release-gate.sh`
+  - Pushed `codex/chore/v1-release-gate-workflow-phase66` to `origin`.
+  - Opened PR `#76` against `main`.
   - Added new release gate entrypoint:
     - `scripts/run-v1-release-gate.sh`
     - modes:
@@ -184,9 +187,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Push phase66 branch and open PR against `main`.
+  - Wait for CI and review feedback on PR `#76`.
 - Next:
-  - Wait for CI + user merge decision.
+  - Merge PR `#76` once checks are green and you confirm.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
