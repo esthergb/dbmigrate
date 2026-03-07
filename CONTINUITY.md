@@ -48,6 +48,7 @@ Last updated: 2026-03-07
     - fail-fast decode errors for corrupted/unsupported cursor artifacts
   - PR `#78` (`fix: default tls mode to required`) is merged.
   - User approved remote actions (push + PR creation) for PR C branch.
+  - PR `#79` is open for PR C (`fix: use typed checkpoint cursors for baseline resume`).
 - Done:
   - PR `#78` merged into `main` and local `main` synced.
   - Implemented PR C typed checkpoint cursor hardening on `codex/fix/v1-prC-typed-checkpoint-cursor`:
@@ -62,6 +63,8 @@ Last updated: 2026-03-07
   - Validation passed:
     - `go test ./internal/state ./internal/data`
     - `go test ./...`
+  - Pushed `codex/fix/v1-prC-typed-checkpoint-cursor` to `origin`.
+  - Opened PR `#79` against `main`.
   - Implemented PR B TLS hardening on `codex/fix/v1-prB-tls-default-required`:
     - default global `--tls-mode` changed from `preferred` to `required`
     - runtime warning added when operators explicitly choose `--tls-mode=preferred` because plaintext fallback is allowed
@@ -220,9 +223,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Push PR C branch and open PR against `main`.
+  - Wait for CI and review feedback on PR `#79`.
 - Next:
-  - Wait for CI and review/merge decision on PR C.
+  - Merge PR `#79` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
