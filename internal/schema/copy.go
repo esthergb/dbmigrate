@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -15,6 +16,8 @@ var systemSchemas = map[string]struct{}{
 	"mysql":              {},
 	"sys":                {},
 }
+
+var definerClauseRe = regexp.MustCompile("(?i)\\bDEFINER\\s*=\\s*`[^`]+`@`[^`]+`")
 
 // CopyOptions controls schema extraction and apply behavior.
 type CopyOptions struct {
@@ -157,6 +160,7 @@ func ValidateSchemaInSandbox(ctx context.Context, source *sql.DB, dest *sql.DB, 
 
 		for _, statement := range statements {
 			rewritten := rewriteSchemaStatementForSandbox(statement, sourceDatabase, sandboxDatabase)
+			rewritten = sanitizeCreateStatementForApply(rewritten)
 			if _, err := conn.ExecContext(ctx, rewritten); err != nil {
 				_ = conn.Close()
 				summary.Failed++
@@ -463,7 +467,8 @@ func applyStatements(ctx context.Context, dest *sql.DB, databaseName string, sta
 	}
 
 	for _, stmt := range statements {
-		if _, err := conn.ExecContext(ctx, stmt); err != nil {
+		sanitized := sanitizeCreateStatementForApply(stmt)
+		if _, err := conn.ExecContext(ctx, sanitized); err != nil {
 			return err
 		}
 	}
@@ -523,4 +528,11 @@ func rewriteSchemaStatementForSandbox(statement string, sourceDatabase string, s
 	sourceQualified := quoteIdentifier(sourceDatabase) + "."
 	sandboxQualified := quoteIdentifier(sandboxDatabase) + "."
 	return strings.ReplaceAll(statement, sourceQualified, sandboxQualified)
+}
+
+func sanitizeCreateStatementForApply(statement string) string {
+	if strings.TrimSpace(statement) == "" {
+		return statement
+	}
+	return definerClauseRe.ReplaceAllString(statement, "DEFINER=CURRENT_USER")
 }
