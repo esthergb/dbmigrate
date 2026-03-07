@@ -20,6 +20,7 @@ Last updated: 2026-03-07
 - State:
   - Current branch: `codex/fix/v1-prF-replication-server-id`.
   - `main` includes merged PRs through `#81`.
+  - PR `#82` is open: `fix: add source server-id override for binlog replication`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -53,9 +54,9 @@ Last updated: 2026-03-07
     - `go test ./internal/commands ./internal/replicate/binlog`
     - `go test ./...`
 - Now:
-  - Publish PR F after user confirmation (received): push branch + open PR.
+  - Monitor PR `#82` CI and address failures if they appear.
 - Next:
-  - Monitor PR CI and address failures quickly.
+  - Merge PR `#82` and continue next v1 hardening slice.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
