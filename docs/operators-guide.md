@@ -170,6 +170,7 @@ Replication checkpoint behavior:
 - Event application is transaction-batch based; checkpoint advances only after commit.
 - Destination checkpoint state is stored in table `dbmigrate_replication_checkpoint` and written atomically in the same destination transaction as applied row changes.
 - Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
+- Mixed DDL + row-event windows fail fast in `v1`; split windows at DDL boundaries and run `migrate --schema-only` before replaying adjacent row batches.
 - Keyless `UPDATE`/`DELETE` replay is blocked as unsafe and fails fast with remediation guidance.
 - `--apply-ddl=apply` is safety-classified: risky DDL (drop/rename/destructive alter patterns) is blocked with remediation guidance.
 - Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.

@@ -22,7 +22,7 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/fix/v1-prC-typed-checkpoint-cursor` (rebased from updated `main`).
+  - Current branch: `codex/fix/v1-prD-replication-ddl-fence` (rebased from updated `main`).
   - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
   - PR `#75` (`chore: automate v1 release gate execution`) is merged.
   - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and pending merge.
@@ -42,14 +42,31 @@ Last updated: 2026-03-07
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
-  - External review triage accepted by user; next execution wave is PR C typed checkpoint cursor hardening:
-    - typed resume cursor persistence for baseline checkpoints
-    - legacy checkpoint compatibility on load
-    - fail-fast decode errors for corrupted/unsupported cursor artifacts
+  - External review triage accepted by user; next execution wave is PR D replication safety hardening:
+    - prevent unsafe replay in windows that include schema-changing DDL when row-event mapping relies on live metadata
+    - fail fast with explicit remediation to split windows and align schema first
   - PR `#78` (`fix: default tls mode to required`) is merged.
-  - User approved remote actions (push + PR creation) for PR C branch.
-  - PR `#79` is open for PR C (`fix: use typed checkpoint cursors for baseline resume`).
+  - PR `#79` (`fix: use typed checkpoint cursors for baseline resume`) is merged.
+  - User approved remote actions (push + PR creation) for PR D branch.
+  - PR `#80` is open for PR D (`fix: fail fast on mixed ddl and row replay windows`).
 - Done:
+  - Implemented PR D replication DDL-window safety fence on `codex/fix/v1-prD-replication-ddl-fence`:
+    - replication apply now fails fast when a replay window mixes schema-changing DDL with row events
+    - added explicit failure classification/remediation for unsafe mixed windows (`ddl_window_unsafe_live_metadata`)
+    - preserved existing DDL-only behavior for `--apply-ddl={ignore,apply,warn}` while blocking mixed DDL+DML windows
+  - Added PR D tests:
+    - DDL-before-row mixed window fails fast
+    - row-before-DDL mixed window fails fast
+  - Updated docs for the new v1 safety fence:
+    - `README.md`
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+  - Validation passed:
+    - `go test ./internal/replicate/binlog`
+    - `go test ./...`
+  - Pushed `codex/fix/v1-prD-replication-ddl-fence` to `origin`.
+  - Opened PR `#80` against `main`.
+  - PR `#79` merged into `main` and local `main` synced.
   - PR `#78` merged into `main` and local `main` synced.
   - Implemented PR C typed checkpoint cursor hardening on `codex/fix/v1-prC-typed-checkpoint-cursor`:
     - added typed cursor checkpoint representation (`last_key_typed`) with type-tagged encoding for `nil`, `[]byte`, `time`, `bool`, signed/unsigned integers, floats, and strings
@@ -64,7 +81,7 @@ Last updated: 2026-03-07
     - `go test ./internal/state ./internal/data`
     - `go test ./...`
   - Pushed `codex/fix/v1-prC-typed-checkpoint-cursor` to `origin`.
-  - Opened PR `#79` against `main`.
+  - Opened PR `#79` against `main` (now merged).
   - Implemented PR B TLS hardening on `codex/fix/v1-prB-tls-default-required`:
     - default global `--tls-mode` changed from `preferred` to `required`
     - runtime warning added when operators explicitly choose `--tls-mode=preferred` because plaintext fallback is allowed
@@ -223,9 +240,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Wait for CI and review feedback on PR `#79`.
+  - Wait for CI and review feedback on PR `#80`.
 - Next:
-  - Merge PR `#79` once checks are green and user confirms.
+  - Merge PR `#80` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
