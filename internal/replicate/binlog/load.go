@@ -82,7 +82,7 @@ func loadApplyBatchesFromSource(ctx context.Context, source *sql.DB, window appl
 }
 
 func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) ([]streamEvent, error) {
-	syncCfg, err := sourceSyncerConfig(opts.SourceDSN, opts.SourceTLSMode, opts.SourceCAFile, opts.SourceCertFile, opts.SourceKeyFile)
+	syncCfg, err := sourceSyncerConfig(opts.SourceDSN, opts.SourceServerID, opts.SourceTLSMode, opts.SourceCAFile, opts.SourceCertFile, opts.SourceKeyFile)
 	if err != nil {
 		return nil, err
 	}
@@ -882,7 +882,7 @@ func classifyDDL(query string) (ddlClassification, bool) {
 	}
 }
 
-func sourceSyncerConfig(rawDSN string, tlsMode string, caFile string, certFile string, keyFile string) (replication.BinlogSyncerConfig, error) {
+func sourceSyncerConfig(rawDSN string, sourceServerID uint32, tlsMode string, caFile string, certFile string, keyFile string) (replication.BinlogSyncerConfig, error) {
 	parsed, err := db.BuildDriverConfig(rawDSN, db.TLSOptions{
 		Mode:     tlsMode,
 		CAFile:   caFile,
@@ -905,7 +905,10 @@ func sourceSyncerConfig(rawDSN string, tlsMode string, caFile string, certFile s
 		return replication.BinlogSyncerConfig{}, fmt.Errorf("parse source port for binlog sync: %w", err)
 	}
 
-	serverID := deriveServerID(parsed.User, parsed.Addr)
+	serverID := sourceServerID
+	if serverID == 0 {
+		serverID = deriveServerID(parsed.User, parsed.Addr)
+	}
 	flavor := "mysql"
 	if parsedURI, err := url.Parse(rawDSN); err == nil && strings.EqualFold(parsedURI.Scheme, "mariadb") {
 		flavor = "mariadb"

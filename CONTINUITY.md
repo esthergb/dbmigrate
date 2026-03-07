@@ -18,9 +18,9 @@ Last updated: 2026-03-07
     - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
   - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prE-replication-buffer-bounds`.
-  - `main` includes merged PRs through `#80`.
-  - PR `#81` is open: `fix: bound replication source-window buffering`.
+  - Current branch: `codex/fix/v1-prF-replication-server-id`.
+  - `main` includes merged PRs through `#81`.
+  - PR `#82` is open: `fix: add source server-id override for binlog replication`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -33,8 +33,9 @@ Last updated: 2026-03-07
     - `#78` TLS default to `required`.
     - `#79` typed baseline checkpoint cursors.
     - `#80` mixed DDL+row replay fail-fast fence.
+    - `#81` bounded source-window buffering during binlog read.
   - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
-  - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds`:
+  - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds` (merged as `#81`):
     - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
     - fail-fast classification `source_window_buffer_limit_exceeded` with remediation guidance
     - added tests for event-limit and byte-limit overflow paths in `internal/replicate/binlog/load_test.go`
@@ -44,10 +45,18 @@ Last updated: 2026-03-07
   - Validation passed:
     - `go test ./internal/replicate/binlog`
     - `go test ./...`
+  - Implemented PR F on `codex/fix/v1-prF-replication-server-id`:
+    - added replicate CLI flag `--source-server-id` (`0` default = derived, explicit `1..4294967295` override)
+    - wired `SourceServerID` through replicate options into binlog syncer configuration
+    - added parser validation for out-of-range values and tests for explicit override behavior
+    - documented server-id override guidance in README and operators guide
+  - Validation passed for PR F:
+    - `go test ./internal/commands ./internal/replicate/binlog`
+    - `go test ./...`
 - Now:
-  - Publish PR E: push branch and open PR after explicit user approval (received).
+  - Monitor PR `#82` CI and address failures if they appear.
 - Next:
-  - Monitor PR `#81` CI and resolve any failures.
+  - Merge PR `#82` and continue next v1 hardening slice.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):

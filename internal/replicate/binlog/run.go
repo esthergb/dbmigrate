@@ -21,6 +21,7 @@ type Options struct {
 	ConflictValues string
 	MaxEvents      uint64
 	MaxLagSeconds  uint64
+	SourceServerID uint32
 	Idempotent     bool
 	Resume         bool
 	StartFile      string
