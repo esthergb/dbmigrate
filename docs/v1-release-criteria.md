@@ -75,6 +75,12 @@ Recommended local gate runner:
 - `./scripts/run-v1-release-gate.sh --mode minimal` for fast pre-PR validation
 - `./scripts/run-v1-release-gate.sh --mode full` for release-manager signoff runs
 
+Optional GitHub-hosted manual runner:
+
+- `v1-release-gate` workflow (`.github/workflows/v1-release-gate.yml`)
+  - input `mode=minimal|full`
+  - uploads `state/v1-release-gate/...` artifacts for audit retention
+
 ## Matrix gate
 
 Run the full frozen `v1` matrix on current `main` or the release candidate branch.

@@ -22,8 +22,9 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-release-gate-automation-phase65`.
+  - Current branch: `codex/chore/v1-release-gate-workflow-phase66`.
   - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
+  - PR `#75` (`chore: automate v1 release gate execution`) is merged.
   - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
   - Baseline prior state is merged through PR `#73` on `main`.
   - Three new review inputs are present and untracked:
@@ -40,7 +41,19 @@ Last updated: 2026-03-07
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
 - Done:
-  - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
+  - Merged PR `#75` and synced local `main`.
+  - Verified on merged `main` after PR `#75`:
+    - `go test ./...`
+    - `./scripts/test-v1-mysql84-to-mysql84.sh`
+  - Started post-merge workflow phase on `codex/chore/v1-release-gate-workflow-phase66`.
+  - Added manual GitHub workflow for release-gate execution:
+    - `.github/workflows/v1-release-gate.yml` (`workflow_dispatch`, `minimal|full`, artifact upload)
+  - Documented manual workflow usage and artifact behavior in:
+    - `README.md`
+    - `docs/v1-release-criteria.md`
+  - Revalidated phase66 changes locally:
+    - `go test ./...`
+    - `bash -n scripts/run-v1-release-gate.sh`
   - Added new release gate entrypoint:
     - `scripts/run-v1-release-gate.sh`
     - modes:
@@ -170,9 +183,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Prepare this phase for commit and user confirmation.
+  - Prepare phase66 commit from workflow/docs/continuity updates.
 - Next:
-  - Commit this branch and ask user for explicit approval before push/PR.
+  - Commit phase66 changes, then request explicit user confirmation before push/PR.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
