@@ -23,6 +23,8 @@ Last updated: 2026-03-07
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
   - Current branch: `codex/feat/fast-safe-v1-rescue`.
+  - PR opened: `#74` (`Fast Safe v1 release rescue (strict-lts)`).
+  - Post-PR status: user reported CI failure; root-cause investigation/fix in progress on same branch.
   - Baseline prior state is merged through PR `#73` on `main`.
   - Three new review inputs are present and untracked:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
@@ -146,10 +148,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Refresh signoff documentation (`docs/v1-release-decision.md`) with the latest rescue-branch evidence roots and final gate status.
+  - Inspect failing CI job(s) on PR `#74`, apply minimal fix, rerun local verification, and push.
 - Next:
-  - Provide user-facing implementation summary, risks, and proposed commit/PR breakdown.
-  - Wait for user confirmation before commit/push/PR.
+  - Recheck PR `#74` checks to confirm green.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):

@@ -680,7 +680,7 @@ func hashChunkedTable(
 			break
 		}
 		if mode == hashModeFullHash {
-			if _, err := tableHasher.Write([]byte(fmt.Sprintf("chunk:%d rows:%d digest:", chunks, chunkRows))); err != nil {
+			if _, err := fmt.Fprintf(tableHasher, "chunk:%d rows:%d digest:", chunks, chunkRows); err != nil {
 				return "", err
 			}
 			if _, err := tableHasher.Write(chunkHasher.Sum(nil)); err != nil {
@@ -699,7 +699,7 @@ func hashChunkedTable(
 		}
 	}
 
-	if _, err := tableHasher.Write([]byte(fmt.Sprintf("mode:%s rows:%d chunks:%d\n", mode, totalRows, chunks))); err != nil {
+	if _, err := fmt.Fprintf(tableHasher, "mode:%s rows:%d chunks:%d\n", mode, totalRows, chunks); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(tableHasher.Sum(nil)), nil
@@ -757,7 +757,7 @@ func hashStreamedRows(rows *sql.Rows, columns []columnInfo, mode hashMode) (stri
 	if err := rows.Err(); err != nil {
 		return "", err
 	}
-	if _, err := hasher.Write([]byte(fmt.Sprintf("mode:%s rows:%d\n", mode, rowCount))); err != nil {
+	if _, err := fmt.Fprintf(hasher, "mode:%s rows:%d\n", mode, rowCount); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil

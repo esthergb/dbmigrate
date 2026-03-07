@@ -977,19 +977,6 @@ func repeat(value string, n int) []string {
 	return items
 }
 
-func resetDestinationTable(ctx context.Context, db *sql.DB, databaseName string, tableName string) error {
-	truncate := fmt.Sprintf("TRUNCATE TABLE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
-	if _, err := db.ExecContext(ctx, truncate); err == nil {
-		return nil
-	}
-
-	deleteAll := fmt.Sprintf("DELETE FROM %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
-	if _, err := db.ExecContext(ctx, deleteAll); err != nil {
-		return err
-	}
-	return nil
-}
-
 func quoteIdentifier(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
