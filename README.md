@@ -216,6 +216,7 @@ Replication checkpoint safety behavior:
 - Destination checkpoint state is also persisted in `dbmigrate_replication_checkpoint` and written atomically in the same destination transaction as applied row changes.
 - Binlog event loading/decoding now maps row events into destination SQL batches with fail-fast behavior on unsupported patterns.
 - Replication fails fast when a replay window mixes DDL and row events; v1 requires schema-aligned windows because row-event mapping currently relies on live metadata.
+- Replication enforces bounded source-window buffering (event count + estimated bytes) while reading binlog events; oversized windows fail fast as `failure_type=source_window_buffer_limit_exceeded` with remediation to shorten replay windows.
 - Keyless `UPDATE`/`DELETE` replay is blocked as unsafe and fails fast with remediation guidance.
 - Conflict policy is explicit via `--conflict-policy={fail,source-wins,dest-wins}` (default: `fail`).
 - DDL safety in `--apply-ddl=apply` mode allows only low-risk DDL; risky DDL fails with remediation guidance.

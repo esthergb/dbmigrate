@@ -1,282 +1,61 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Implement the `Fast Safe v1 Release Rescue (Strict-LTS)` plan to close critical production blockers before release.
-  - Success means no deceptive v1 surface area, consistent baseline copy on hot systems, atomic replication checkpointing, scalable verify semantics, TLS wired end-to-end, redacted conflict artifacts by default, and CI/docs aligned.
+  - Deliver `Fast Safe v1 Release Rescue (Strict-LTS)` and clear production blockers with truthful v1 behavior, safe replication semantics, secure defaults, and verified strict-lts readiness.
+  - Success criteria: strict-lts paths remain green; no misleading v1 flags/claims; checkpoint/resume and replication safety constraints are explicit; TLS and artifact handling are safe by default.
 - Constraints/Assumptions:
-  - Docs remain in English.
-  - `Instructions.md` stays tracked.
-  - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - `v1` scope is limited to implemented and genuinely supported self-managed paths only.
-  - Supplemental upgrade-evidence scenarios exist, but they are not part of the frozen strict-lts release lane.
-  - Before any remote push/PR creation, get explicit user confirmation.
+  - English docs.
+  - Keep `Instructions.md` tracked.
+  - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
+  - `v1` scope is only genuinely implemented/supported self-managed paths.
+  - Ask user before any remote push/PR creation.
 - Key decisions:
-  - Product scope is split explicitly:
-    - `v1`: only implemented and genuinely supported paths
-    - `v2`: surfaced-but-not-implemented CLI paths
-    - `v3`: `v2` plus managed/cloud deployment paths
-  - The frozen `v1` support surface is documented in:
-    - `README.md`
-    - `docs/v1-release-plan.md`
-    - `docs/v1-release-criteria.md`
-  - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
-  - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
+  - Scope contract is fixed:
+    - `v1`: only truly supported implemented paths.
+    - `v2`: surfaced-but-not-implemented CLI capabilities.
+    - `v3`: v2 + managed/cloud environments.
+  - DDL replay safety fence is active in v1:
+    - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
+  - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prD-replication-ddl-fence` (rebased from updated `main`).
-  - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
-  - PR `#75` (`chore: automate v1 release gate execution`) is merged.
-  - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and pending merge.
-  - PR `#77` (`fix: harden v1 safety defaults and parsing`) is merged.
-  - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
-  - Baseline prior state is merged through PR `#73` on `main`.
-  - Three new review inputs are present and untracked:
+  - Current branch: `codex/fix/v1-prE-replication-buffer-bounds`.
+  - `main` includes merged PRs through `#80`.
+  - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
     - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
-  - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
-  - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
-  - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
-    - retargeted to frozen `v1` services: metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, verify canonicalization
-    - collation server-side scenarios retargeted to `v1`-relevant services, while the representative client probe intentionally uses `mysql80a`
-  - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
-  - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
-  - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
-  - Final release decision doc now exists at `docs/v1-release-decision.md`.
-  - External review triage accepted by user; next execution wave is PR D replication safety hardening:
-    - prevent unsafe replay in windows that include schema-changing DDL when row-event mapping relies on live metadata
-    - fail fast with explicit remediation to split windows and align schema first
-  - PR `#78` (`fix: default tls mode to required`) is merged.
-  - PR `#79` (`fix: use typed checkpoint cursors for baseline resume`) is merged.
-  - User approved remote actions (push + PR creation) for PR D branch.
-  - PR `#80` is open for PR D (`fix: fail fast on mixed ddl and row replay windows`).
 - Done:
-  - Implemented PR D replication DDL-window safety fence on `codex/fix/v1-prD-replication-ddl-fence`:
-    - replication apply now fails fast when a replay window mixes schema-changing DDL with row events
-    - added explicit failure classification/remediation for unsafe mixed windows (`ddl_window_unsafe_live_metadata`)
-    - preserved existing DDL-only behavior for `--apply-ddl={ignore,apply,warn}` while blocking mixed DDL+DML windows
-  - Added PR D tests:
-    - DDL-before-row mixed window fails fast
-    - row-before-DDL mixed window fails fast
-  - Updated docs for the new v1 safety fence:
-    - `README.md`
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
+  - Rescue PRs already merged on `main`:
+    - `#74` fast-safe v1 rescue bundle.
+    - `#75` release-gate automation.
+    - `#77` v1 safety hardening (strict config/global flags/file perms/DSN validation).
+    - `#78` TLS default to `required`.
+    - `#79` typed baseline checkpoint cursors.
+    - `#80` mixed DDL+row replay fail-fast fence.
+  - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
+  - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds`:
+    - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
+    - fail-fast classification `source_window_buffer_limit_exceeded` with remediation guidance
+    - added tests for event-limit and byte-limit overflow paths in `internal/replicate/binlog/load_test.go`
+  - Documentation aligned:
+    - `README.md` replication checkpoint safety section
+    - `docs/operators-guide.md` replication checkpoint behavior section
   - Validation passed:
     - `go test ./internal/replicate/binlog`
     - `go test ./...`
-  - Pushed `codex/fix/v1-prD-replication-ddl-fence` to `origin`.
-  - Opened PR `#80` against `main`.
-  - PR `#79` merged into `main` and local `main` synced.
-  - PR `#78` merged into `main` and local `main` synced.
-  - Implemented PR C typed checkpoint cursor hardening on `codex/fix/v1-prC-typed-checkpoint-cursor`:
-    - added typed cursor checkpoint representation (`last_key_typed`) with type-tagged encoding for `nil`, `[]byte`, `time`, `bool`, signed/unsigned integers, floats, and strings
-    - baseline copy now persists and restores checkpoint cursors through typed encode/decode APIs instead of string-only serialization
-    - legacy `last_key` checkpoints are auto-upgraded on load for backward compatibility
-    - corrupted/unsupported typed cursor entries now fail fast with explicit decode errors
-  - Added PR C tests:
-    - typed cursor round-trip and decode semantics in `internal/state/checkpoint_test.go`
-    - legacy checkpoint auto-upgrade coverage in `internal/state/checkpoint_test.go`
-    - baseline cursor decode error propagation and typed cursor argument behavior in `internal/data/copy_test.go`
-  - Validation passed:
-    - `go test ./internal/state ./internal/data`
-    - `go test ./...`
-  - Pushed `codex/fix/v1-prC-typed-checkpoint-cursor` to `origin`.
-  - Opened PR `#79` against `main` (now merged).
-  - Implemented PR B TLS hardening on `codex/fix/v1-prB-tls-default-required`:
-    - default global `--tls-mode` changed from `preferred` to `required`
-    - runtime warning added when operators explicitly choose `--tls-mode=preferred` because plaintext fallback is allowed
-    - docs aligned in `README.md`, `docs/operators-guide.md`, and `docs/security.md`
-  - Added PR B tests:
-    - default `tls-mode=required` assertion in `internal/config/runtime_test.go`
-    - explicit warning behavior for `--tls-mode=preferred` in `internal/cli/cli_test.go`
-  - Validation passed:
-    - `go test ./internal/config ./internal/cli`
-    - `go test ./...`
-  - Pushed `codex/fix/v1-prB-tls-default-required` to `origin`.
-  - Opened PR `#78` against `main` (now merged).
-  - PR `#77` merged into `main` and local `main` synced.
-  - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
-    - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
-    - global flag split hardening with fail-fast on missing global flag values in `internal/cli/cli.go`
-    - artifact file permissions tightened to `0600` for verify/collation artifacts
-    - runtime DSN validation unified with connector parser (`db.NormalizeDSN`) in `internal/config/runtime.go`
-  - Added tests for PR A:
-    - unknown config keys and trailing JSON handling (`internal/config/file_test.go`)
-    - driver-style DSN acceptance and invalid DSN rejection (`internal/config/runtime_test.go`)
-    - global-flag splitter missing-value failure (`internal/cli/cli_test.go`)
-    - secure file mode assertions for verify/collation artifacts (`internal/commands/verify_test.go`, `internal/commands/collation_precheck_test.go`)
-  - Validation passed:
-    - `go test ./internal/config ./internal/cli ./internal/commands`
-    - `go test ./...`
-  - Pushed `codex/fix/v1-prA-safety-hardening` to `origin`.
-  - Opened PR `#77` against `main` (now merged).
-  - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
-  - Added new release gate entrypoint:
-    - `scripts/run-v1-release-gate.sh`
-    - modes:
-      - `minimal`: release build + `go test ./...` + strict-lts smoke (`mysql84 -> mysql84`)
-      - `full`: `minimal` + full strict-lts matrix + focused signoff rehearsal pack
-    - outputs summary/manifest under `state/v1-release-gate/<timestamp>-<mode>/`
-  - Added Make targets:
-    - `release-gate-minimal`
-    - `release-gate-full`
-  - Documented gate runner usage in:
-    - `docs/v1-release-criteria.md`
-    - `README.md`
-  - Validated this phase locally:
-    - `bash -n scripts/run-v1-release-gate.sh`
-    - `go test ./...`
-    - `./scripts/run-v1-release-gate.sh --mode minimal`
-    - latest summary: `state/v1-release-gate/20260307T021739Z-minimal/summary.json`
-  - Merged rescue PR `#74` and fixed post-merge CI lint regression via follow-up commit `0876cc4` on the rescue branch before merge.
-  - Verified on updated `main`:
-    - `go test ./...`
-    - `./scripts/test-v1-mysql84-to-mysql84.sh`
-  - Implemented Fast Safe `v1` rescue waves on `codex/feat/fast-safe-v1-rescue`:
-    - Wave 0:
-      - default `--include-objects` changed to `tables,views`
-      - requesting `routines/triggers/events` now fails fast (`ExitCodeDiff`) as reserved `v2`
-      - `--idempotent` now fails fast as reserved `v2`
-    - Wave 1:
-      - baseline copy uses pinned source connection + consistent snapshot transaction
-      - keyset pagination by stable key (PK/non-null unique), no offset pagination in baseline path
-      - checkpoint cursor resume (`key_columns`, `last_key`) and source watermark capture in checkpoint
-      - live baseline fails fast for tables without stable key
-    - Wave 2:
-      - replication apply/checkpoint is atomic via destination table `dbmigrate_replication_checkpoint`
-      - resume prefers destination checkpoint table when present
-      - keyless `UPDATE/DELETE` replay fails fast as unsafe
-    - Wave 3:
-      - `verify` data modes are now semantically distinct:
-        - `sample`: bounded sample hash
-        - `hash`: full chunked streaming hash (bounded memory)
-        - `full-hash`: full chunked streaming full-hash strategy (not alias)
-      - `hash`/`full-hash` now fail fast without stable key
-    - Wave 4:
-      - TLS runtime options wired through SQL and binlog paths
-      - conflict artifacts are redacted by default; `--conflict-values=plain` is explicit opt-in
-    - Wave 5:
-      - CI now includes release build step
-      - CI includes strict-lts Docker smoke lane (`mysql84 -> mysql84`)
-      - migration test harness always rebuilds binary before execution
-    - Wave 6:
-      - reran strict-lts matrix scripts and focused signoff rehearsals on this branch
-      - latest signoff rehearsal archive: `state/v1-signoff-rehearsals/20260307T020159Z`
-  - Fixed regression found during matrix rerun:
-    - baseline watermark capture now degrades safely to `watermark=unavailable:0` when binlog status is unavailable (not a hard migrate failure).
-  - Updated all local config fixtures to v1 object scope (`tables,views`) to match fail-fast surface gating.
-  - Updated docs to match current behavior:
-    - `README.md`
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
-    - `docs/risk-checklist.md`
-    - `docs/security.md`
-  - Added and merged:
-    - `docs/v1-release-plan.md`
-    - `docs/v1-release-criteria.md`
-  - Updated and merged `README.md` to define explicit `v1 / v2 / v3` scope and tighten `strict-lts` vs `max-compat` wording.
-  - Added and merged the frozen `v1` local service lane:
-    - `mysql84a`, `mysql84b`
-    - `mariadb1011a`, `mariadb1011b`
-    - `mariadb114a`, `mariadb114b`
-    - `mariadb118a`, `mariadb118b`
-  - Added and merged the requested supplemental services/configs/wrappers including `mysql80a`.
-  - Verified before merge:
-    - `go test ./...`
-    - `./scripts/test-v1-mysql84-to-mysql84.sh`
-    - `./scripts/test-v1-mysql84-to-mariadb114.sh`
-    - `./scripts/test-v1-supplemental-matrix.sh`
-  - Observed pre-merge evidence:
-    - frozen strict-lts `mysql84a -> mysql84b` passed end-to-end
-    - frozen strict-lts `mysql84a -> mariadb114b` passed end-to-end
-    - supplemental scenarios also passed end-to-end
-  - Ran the full frozen `v1` matrix on current merged code:
-    - `./scripts/test-v1-matrix.sh`
-  - Frozen `v1` classification result:
-    - supported and passed:
-      - `MySQL 8.4 -> MySQL 8.4`
-      - `MariaDB 10.11 -> MariaDB 10.11`
-      - `MariaDB 11.4 -> MariaDB 11.4`
-      - `MariaDB 11.8 -> MariaDB 11.8`
-      - `MySQL 8.4 -> MariaDB 11.4`
-      - `MariaDB 11.4 -> MySQL 8.4`
-    - blocked by design: none in the frozen strict-lts lane
-    - unexpected regressions: none in the frozen strict-lts lane
-  - Ran the supplemental matrix on current merged code:
-    - `./scripts/test-v1-supplemental-matrix.sh`
-  - Supplemental classification result:
-    - supplemental and passed:
-      - `MariaDB 10.11 -> MariaDB 11.4`
-      - `MariaDB 10.11 -> MariaDB 11.8`
-      - `MariaDB 11.4 -> MariaDB 11.8`
-      - `MySQL 8.0 -> MySQL 8.4`
-    - blocked by design: none in the supplemental lane
-    - unexpected regressions: none in the supplemental lane
-  - Observed full-sweep behavior:
-    - every strict-lts scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - cross-engine strict-lts paths remained warning-heavy for auth-plugin and collation-client risk, but were still semantically successful and classified `report=status=ok`
-    - every supplemental scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-  - Ran an initial focused signoff rehearsal pack on `codex/chore/v1-signoff-rehearsals`:
-    - `./scripts/run-v1-signoff-rehearsals.sh`
-  - Initial signoff pack result:
-    - archived root: `state/v1-signoff-rehearsals/20260307T003054Z`
-    - metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, and verify canonicalization all archived correctly
-    - collation evidence executed but the wrapper returned nonzero before the top-level summary was written
-  - Patched `scripts/run-collation-rehearsal.sh` so `report` exit codes are archived without aborting expected incompatible scenarios.
-  - Reran the full signoff rehearsal pack:
-    - `./scripts/run-v1-signoff-rehearsals.sh`
-  - Clean signoff pack result:
-    - archived root: `state/v1-signoff-rehearsals/20260307T003408Z`
-    - manifest: `state/v1-signoff-rehearsals/20260307T003408Z/manifest.tsv`
-    - top summary: `state/v1-signoff-rehearsals/20260307T003408Z/summary.json`
-    - `failed_steps=0`
-    - unexpected failures: none
-  - Verified current branch before publish:
-    - `go test ./...`
-    - `bash -n scripts/run-plugin-lifecycle-rehearsal.sh scripts/run-invisible-gipk-rehearsal.sh scripts/run-collation-rehearsal.sh scripts/run-verify-canonicalization-rehearsal.sh scripts/run-v1-signoff-rehearsals.sh`
-  - Merged focused rehearsal evidence via PR `#72`.
-  - Ran final release-decision verification on this branch:
-    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `go test ./...`
-  - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Wait for CI and review feedback on PR `#80`.
+  - Prepare PR E commit on this branch.
 - Next:
-  - Merge PR `#80` once checks are green and user confirms.
+  - Ask user confirmation before push + PR.
+  - Push branch and open PR E after approval.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
+  - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
   - Files:
-    - `CONTINUITY.md`
-    - `docs/v1-matrix-evidence.md`
-    - `README.md`
-    - `docs/v1-release-plan.md`
-    - `docs/v1-release-criteria.md`
-    - `docs/v1-rehearsal-evidence.md`
-    - `docs/v1-release-decision.md`
-    - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
-    - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
-    - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
-    - `docker-compose.yml`
-    - `scripts/run-metadata-lock-scenario.sh`
-    - `scripts/run-backup-restore-rehearsal.sh`
-    - `scripts/run-timezone-rehearsal.sh`
-    - `scripts/run-plugin-lifecycle-rehearsal.sh`
-    - `scripts/run-replication-shape-rehearsal.sh`
-    - `scripts/run-invisible-gipk-rehearsal.sh`
-    - `scripts/run-collation-rehearsal.sh`
-    - `scripts/run-verify-canonicalization-rehearsal.sh`
-    - `scripts/run-v1-signoff-rehearsals.sh`
-  - IDs:
-    - merged PR `#67`
-    - merged PR `#68`
-    - merged PR `#69`
-    - merged PR `#70`
-    - merged PR `#71`
-    - merged PR `#72`
-    - merged PR `#73`
+    - `internal/replicate/binlog/load.go`
+    - `internal/replicate/binlog/load_test.go`
+    - `README.md` (only if flags/behavior need doc updates)
+    - `docs/operators-guide.md` (only if behavior contract changes)
   - Commands:
+    - `go test ./internal/replicate/binlog`
     - `go test ./...`
-    - `./scripts/test-v1-matrix.sh`
-    - `./scripts/run-v1-signoff-rehearsals.sh`
-    - `docker compose -f docker-compose.yml config --services`

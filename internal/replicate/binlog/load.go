@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	goMySQL "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
@@ -45,9 +46,16 @@ type tableMetadata struct {
 	HasForeignKeys bool
 }
 
+const (
+	defaultMaxBufferedStreamEvents uint64 = 200_000
+	defaultMaxBufferedStreamBytes  uint64 = 64 * 1024 * 1024
+)
+
 var (
 	streamWindowEventsFn = streamWindowEvents
 	loadTableMetadataFn  = loadTableMetadata
+	maxBufferedEvents    = defaultMaxBufferedStreamEvents
+	maxBufferedBytes     = defaultMaxBufferedStreamBytes
 )
 
 func loadApplyBatchesFromSource(ctx context.Context, source *sql.DB, window applyWindow, opts Options) ([]applyBatch, error) {
@@ -92,6 +100,10 @@ func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) (
 
 	currentFile := window.StartFile
 	events := make([]streamEvent, 0, 256)
+	bufferUsage := streamBufferUsage{
+		MaxEvents: maxBufferedEvents,
+		MaxBytes:  maxBufferedBytes,
+	}
 	for {
 		event, err := streamer.GetEvent(ctx)
 		if err != nil {
@@ -127,6 +139,9 @@ func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) (
 			return nil, err
 		}
 		if include {
+			if err := bufferUsage.record(converted); err != nil {
+				return nil, err
+			}
 			events = append(events, converted)
 		}
 
@@ -136,6 +151,78 @@ func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) (
 	}
 
 	return events, nil
+}
+
+type streamBufferUsage struct {
+	MaxEvents uint64
+	MaxBytes  uint64
+	Events    uint64
+	Bytes     uint64
+}
+
+func (u *streamBufferUsage) record(event streamEvent) error {
+	u.Events++
+	u.Bytes += estimateStreamEventBytes(event)
+
+	eventExceeded := u.MaxEvents > 0 && u.Events > u.MaxEvents
+	bytesExceeded := u.MaxBytes > 0 && u.Bytes > u.MaxBytes
+	if !eventExceeded && !bytesExceeded {
+		return nil
+	}
+
+	target := ""
+	if strings.TrimSpace(event.Schema) != "" && strings.TrimSpace(event.Table) != "" {
+		target = event.Schema + "." + event.Table
+	}
+	return &applyFailure{
+		FailureType: "source_window_buffer_limit_exceeded",
+		File:        event.File,
+		Pos:         event.Pos,
+		Operation:   "read_binlog",
+		TableName:   target,
+		Message: fmt.Sprintf(
+			"source replay window exceeded buffered safety limits before apply (events=%d/%d bytes=%d/%d)",
+			u.Events,
+			u.MaxEvents,
+			u.Bytes,
+			u.MaxBytes,
+		),
+		Remediation: "rerun replicate more frequently to shorten replay windows, or restart from a later checkpoint after reducing pending source churn",
+	}
+}
+
+func estimateStreamEventBytes(event streamEvent) uint64 {
+	estimate := uint64(96 + len(event.File) + len(event.Schema) + len(event.Table) + len(event.Query))
+	for _, row := range event.Rows {
+		estimate += 24
+		for _, value := range row {
+			estimate += estimateValueBytes(value)
+		}
+	}
+	return estimate
+}
+
+func estimateValueBytes(value any) uint64 {
+	switch typed := value.(type) {
+	case nil:
+		return 8
+	case bool:
+		return 8
+	case int, int8, int16, int32, int64:
+		return 8
+	case uint, uint8, uint16, uint32, uint64:
+		return 8
+	case float32, float64:
+		return 8
+	case string:
+		return uint64(len(typed))
+	case []byte:
+		return uint64(len(typed))
+	case time.Time:
+		return 24
+	default:
+		return 64
+	}
 }
 
 func convertReplicationEvent(event *replication.BinlogEvent, file string) (streamEvent, bool, error) {

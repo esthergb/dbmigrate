@@ -3,6 +3,7 @@ package binlog
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -298,6 +299,81 @@ func TestPositionHelpers(t *testing.T) {
 	}
 	if !positionReachedOrPassed("mysql-bin.000002", 500, "mysql-bin.000002", 500) {
 		t.Fatal("expected positionReachedOrPassed to be true")
+	}
+}
+
+func TestStreamBufferUsageFailsWhenEventLimitExceeded(t *testing.T) {
+	origEvents := maxBufferedEvents
+	origBytes := maxBufferedBytes
+	maxBufferedEvents = 2
+	maxBufferedBytes = 1024 * 1024
+	defer func() {
+		maxBufferedEvents = origEvents
+		maxBufferedBytes = origBytes
+	}()
+
+	usage := streamBufferUsage{
+		MaxEvents: maxBufferedEvents,
+		MaxBytes:  maxBufferedBytes,
+	}
+	if err := usage.record(streamEvent{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 10, Query: "BEGIN"}); err != nil {
+		t.Fatalf("record first event: %v", err)
+	}
+	if err := usage.record(streamEvent{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 11, Query: "COMMIT"}); err != nil {
+		t.Fatalf("record second event: %v", err)
+	}
+	err := usage.record(streamEvent{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 12, Query: "ALTER TABLE app.t ADD COLUMN c INT"})
+	if err == nil {
+		t.Fatal("expected stream buffer event-limit failure")
+	}
+	var failure *applyFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("expected applyFailure, got %T", err)
+	}
+	if failure.FailureType != "source_window_buffer_limit_exceeded" {
+		t.Fatalf("unexpected failure type: %s", failure.FailureType)
+	}
+	if failure.Pos != 12 {
+		t.Fatalf("unexpected failure position: %d", failure.Pos)
+	}
+}
+
+func TestStreamBufferUsageFailsWhenByteLimitExceeded(t *testing.T) {
+	origEvents := maxBufferedEvents
+	origBytes := maxBufferedBytes
+	maxBufferedEvents = 10
+	maxBufferedBytes = 180
+	defer func() {
+		maxBufferedEvents = origEvents
+		maxBufferedBytes = origBytes
+	}()
+
+	usage := streamBufferUsage{
+		MaxEvents: maxBufferedEvents,
+		MaxBytes:  maxBufferedBytes,
+	}
+	err := usage.record(streamEvent{
+		Kind:   streamEventWriteRows,
+		File:   "mysql-bin.000001",
+		Pos:    40,
+		Schema: "app",
+		Table:  "items",
+		Rows: [][]any{
+			{int64(1), strings.Repeat("x", 400)},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected stream buffer byte-limit failure")
+	}
+	var failure *applyFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("expected applyFailure, got %T", err)
+	}
+	if failure.FailureType != "source_window_buffer_limit_exceeded" {
+		t.Fatalf("unexpected failure type: %s", failure.FailureType)
+	}
+	if failure.TableName != "app.items" {
+		t.Fatalf("unexpected failure table: %s", failure.TableName)
 	}
 }
 
