@@ -47,6 +47,7 @@ Last updated: 2026-03-07
     - fail fast with explicit remediation to split windows and align schema first
   - PR `#78` (`fix: default tls mode to required`) is merged.
   - PR `#79` (`fix: use typed checkpoint cursors for baseline resume`) is merged.
+  - User approved remote actions (push + PR creation) for PR D branch.
 - Done:
   - Implemented PR D replication DDL-window safety fence on `codex/fix/v1-prD-replication-ddl-fence`:
     - replication apply now fails fast when a replay window mixes schema-changing DDL with row events
@@ -236,9 +237,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Prepare PR D commit and request user approval for push/PR.
+  - Push PR D branch and open PR against `main`.
 - Next:
-  - Push PR D branch and open PR after user approval.
+  - Wait for CI and review/merge decision on PR D.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
