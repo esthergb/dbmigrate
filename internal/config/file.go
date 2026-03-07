@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,7 @@ type FileConfig struct {
 	CAFile           *string  `json:"ca_file" yaml:"ca-file"`
 	CertFile         *string  `json:"cert_file" yaml:"cert-file"`
 	KeyFile          *string  `json:"key_file" yaml:"key-file"`
+	OperationTimeout *string  `json:"operation_timeout" yaml:"operation-timeout"`
 	StateDir         *string  `json:"state_dir" yaml:"state-dir"`
 	DowngradeProfile *string  `json:"downgrade_profile" yaml:"downgrade-profile"`
 }
@@ -80,6 +82,11 @@ func LoadFileConfig(path string) (FileConfig, error) {
 	}
 	if err != nil {
 		return FileConfig{}, fmt.Errorf("parse config file: %w", err)
+	}
+	if out.OperationTimeout != nil {
+		if _, err := parseOperationTimeout(*out.OperationTimeout); err != nil {
+			return FileConfig{}, fmt.Errorf("parse config file: invalid operation-timeout: %w", err)
+		}
 	}
 
 	return out, nil
@@ -136,12 +143,24 @@ func MergeFileConfig(target *RuntimeConfig, fileCfg FileConfig, explicit map[str
 	if _, ok := explicit["key-file"]; !ok && fileCfg.KeyFile != nil {
 		target.KeyFile = *fileCfg.KeyFile
 	}
+	if _, ok := explicit["operation-timeout"]; !ok && fileCfg.OperationTimeout != nil {
+		duration, _ := parseOperationTimeout(*fileCfg.OperationTimeout)
+		target.OperationTimeout = duration
+	}
 	if _, ok := explicit["state-dir"]; !ok && fileCfg.StateDir != nil {
 		target.StateDir = *fileCfg.StateDir
 	}
 	if _, ok := explicit["downgrade-profile"]; !ok && fileCfg.DowngradeProfile != nil {
 		target.DowngradeProfile = *fileCfg.DowngradeProfile
 	}
+}
+
+func parseOperationTimeout(raw string) (time.Duration, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, errors.New("operation-timeout is empty")
+	}
+	return time.ParseDuration(trimmed)
 }
 
 func cloneList(items []string) []string {

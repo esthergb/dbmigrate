@@ -2,6 +2,9 @@
 
 `dbmigrate` is a Go CLI for migration, incremental replication, and consistency verification between MySQL-family databases.
 
+Operational guardrail:
+- Use global `--operation-timeout=<duration>` to bound end-to-end command runtime. `0` disables the deadline.
+
 ## Current status
 
 This repository is in phased development, with merged work through Phase 64.

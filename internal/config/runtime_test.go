@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"testing"
+	"time"
 )
 
 func TestRuntimeConfigValidation(t *testing.T) {
@@ -48,6 +49,11 @@ func TestRuntimeConfigValidation(t *testing.T) {
 	if err := cfg.ValidateBasic(); err == nil {
 		t.Fatal("expected invalid source DSN format error")
 	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan", OperationTimeout: -1 * time.Second}
+	if err := cfg.ValidateBasic(); err == nil {
+		t.Fatal("expected operation-timeout validation error")
+	}
 }
 
 func TestBindGlobalFlagsAndFinalize(t *testing.T) {
@@ -82,5 +88,8 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 	}
 	if cfg.TLSMode != "required" {
 		t.Fatalf("expected default tls-mode required, got %q", cfg.TLSMode)
+	}
+	if cfg.OperationTimeout != 0 {
+		t.Fatalf("expected default operation-timeout 0, got %s", cfg.OperationTimeout)
 	}
 }

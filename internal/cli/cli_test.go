@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -155,6 +156,7 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 		"--dest=mysql://dst",
 		"--downgrade-profile", "max-compat",
 		"--dry-run-mode", "sandbox",
+		"--operation-timeout", "15s",
 		"--schema-only",
 		"--force",
 		"--json",
@@ -190,6 +192,16 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	if !foundDryRunMode {
 		t.Fatalf("expected dry-run-mode in global args, got %v", global)
 	}
+	foundTimeout := false
+	for i := 0; i < len(global)-1; i++ {
+		if global[i] == "--operation-timeout" && global[i+1] == "15s" {
+			foundTimeout = true
+			break
+		}
+	}
+	if !foundTimeout {
+		t.Fatalf("expected operation-timeout in global args, got %v", global)
+	}
 }
 
 func TestSplitGlobalAndCommandArgsMissingValue(t *testing.T) {
@@ -217,6 +229,30 @@ func TestRunMigrateDryRunFullModeWithResume(t *testing.T) {
 	code := Run(context.Background(), args, &out, &out)
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d output=%s", code, out.String())
+	}
+}
+
+func TestApplyOperationTimeoutDisabled(t *testing.T) {
+	ctx := context.Background()
+	got, cancel := applyOperationTimeout(ctx, 0)
+	defer cancel()
+
+	if got != ctx {
+		t.Fatal("expected original context when timeout disabled")
+	}
+}
+
+func TestApplyOperationTimeoutDeadline(t *testing.T) {
+	ctx := context.Background()
+	got, cancel := applyOperationTimeout(ctx, 25*time.Millisecond)
+	defer cancel()
+
+	deadline, ok := got.Deadline()
+	if !ok {
+		t.Fatal("expected deadline on timed context")
+	}
+	if time.Until(deadline) <= 0 {
+		t.Fatal("expected future deadline")
 	}
 }
 
