@@ -7,8 +7,8 @@ if [ "$#" -ne 1 ]; then
 fi
 
 OUTPUT_DIR="$1"
-SOURCE_SERVICE="mysql84"
-DEST_SERVICE="mariadb12"
+SOURCE_SERVICE="${DBMIGRATE_VERIFY_CANONICAL_SOURCE_SERVICE:-mysql84a}"
+DEST_SERVICE="${DBMIGRATE_VERIFY_CANONICAL_DEST_SERVICE:-mariadb114b}"
 SOURCE_DB="phase64_verify"
 DEST_DB="phase64_verify"
 
@@ -31,7 +31,13 @@ client_bin() {
 service_port() {
   case "$1" in
     mariadb12) echo "13308" ;;
+    mariadb114a) echo "14411" ;;
+    mariadb114b) echo "14412" ;;
+    mariadb118a) echo "14811" ;;
+    mariadb118b) echo "14812" ;;
     mysql84) echo "23307" ;;
+    mysql84a) echo "24311" ;;
+    mysql84b) echo "24312" ;;
     *)
       echo "unknown service: $1" >&2
       return 1

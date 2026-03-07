@@ -7,6 +7,13 @@ if [ "$#" -ne 1 ]; then
 fi
 
 OUTPUT_DIR="$1"
+MYSQL0900_SOURCE_SERVICE="${DBMIGRATE_COLLATION_MYSQL0900_SOURCE_SERVICE:-mysql84a}"
+MYSQL0900_DEST_SERVICE="${DBMIGRATE_COLLATION_MYSQL0900_DEST_SERVICE:-mariadb1011a}"
+UCA1400_SOURCE_SERVICE="${DBMIGRATE_COLLATION_UCA1400_SOURCE_SERVICE:-mariadb114a}"
+UCA1400_DEST_SERVICE="${DBMIGRATE_COLLATION_UCA1400_DEST_SERVICE:-mysql84b}"
+UCA1400_RISK_SOURCE_SERVICE="${DBMIGRATE_COLLATION_UCA1400_RISK_SOURCE_SERVICE:-mariadb114a}"
+UCA1400_RISK_DEST_SERVICE="${DBMIGRATE_COLLATION_UCA1400_RISK_DEST_SERVICE:-mariadb114b}"
+COLLATION_CLIENT_PROBE_SERVICE="${DBMIGRATE_COLLATION_CLIENT_PROBE_SERVICE:-mysql80a}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -45,8 +52,16 @@ service_port() {
     mariadb10) echo "13306" ;;
     mariadb11) echo "13307" ;;
     mariadb12) echo "13308" ;;
-    mysql80) echo "23306" ;;
+    mariadb1011a) echo "14311" ;;
+    mariadb1011b) echo "14312" ;;
+    mariadb114a) echo "14411" ;;
+    mariadb114b) echo "14412" ;;
+    mariadb118a) echo "14811" ;;
+    mariadb118b) echo "14812" ;;
+    mysql80|mysql80a) echo "23306" ;;
     mysql84) echo "23307" ;;
+    mysql84a) echo "24311" ;;
+    mysql84b) echo "24312" ;;
     *)
       echo "unknown service: $1" >&2
       return 1
@@ -138,11 +153,14 @@ run_plan_and_report() {
   local plan_exit_code=$?
   set -e
 
+  set +e
   "$PROJECT_ROOT/bin/dbmigrate" report \
     --state-dir "$state_dir" \
     --json >"$report_output"
+  local report_exit_code=$?
+  set -e
 
-  echo "$plan_exit_code"
+  printf '%s\t%s\n' "$plan_exit_code" "$report_exit_code"
 }
 
 run_restore_attempt() {
@@ -191,14 +209,21 @@ capture_collation_inventory() {
 
 mkdir -p "$OUTPUT_DIR"
 
-for service in mysql80 mysql84 mariadb10 mariadb12; do
+for service in \
+  "$COLLATION_CLIENT_PROBE_SERVICE" \
+  "$MYSQL0900_SOURCE_SERVICE" \
+  "$MYSQL0900_DEST_SERVICE" \
+  "$UCA1400_SOURCE_SERVICE" \
+  "$UCA1400_DEST_SERVICE" \
+  "$UCA1400_RISK_SOURCE_SERVICE" \
+  "$UCA1400_RISK_DEST_SERVICE"; do
   echo "Waiting for $service..."
   wait_for_db "$service"
 done
 
-MYSQL0900_DIR="$OUTPUT_DIR/mysql84-to-mariadb10-0900"
-MARIADB_UCA1400_TO_MYSQL_DIR="$OUTPUT_DIR/mariadb12-to-mysql84-uca1400"
-MARIADB_UCA1400_RISK_DIR="$OUTPUT_DIR/mariadb12-to-mariadb12-uca1400"
+MYSQL0900_DIR="$OUTPUT_DIR/${MYSQL0900_SOURCE_SERVICE}-to-${MYSQL0900_DEST_SERVICE}-0900"
+MARIADB_UCA1400_TO_MYSQL_DIR="$OUTPUT_DIR/${UCA1400_SOURCE_SERVICE}-to-${UCA1400_DEST_SERVICE}-uca1400"
+MARIADB_UCA1400_RISK_DIR="$OUTPUT_DIR/${UCA1400_RISK_SOURCE_SERVICE}-to-${UCA1400_RISK_DEST_SERVICE}-uca1400"
 mkdir -p "$MYSQL0900_DIR" "$MARIADB_UCA1400_TO_MYSQL_DIR" "$MARIADB_UCA1400_RISK_DIR"
 
 MYSQL0900_DB="phase63_mysql0900"
@@ -213,23 +238,24 @@ MYSQL0900_CLIENT_PROBE_ERR="$MYSQL0900_DIR/client-probe.stderr.log"
 MYSQL0900_SUMMARY="$MYSQL0900_DIR/summary.json"
 
 prepare_fixture "$MYSQL0900_FIXTURE" "$MYSQL0900_DB" "$MYSQL0900_SOURCE_SQL"
-db_exec mysql84 <"$MYSQL0900_SOURCE_SQL"
-capture_collation_inventory mysql84 "$MYSQL0900_DB" "$MYSQL0900_SOURCE_COLLATIONS"
-mysql0900_plan_exit="$(run_plan_and_report mysql84 mariadb10 "$MYSQL0900_DB" "$MYSQL0900_DIR/state" "$MYSQL0900_PLAN" "$MYSQL0900_REPORT")"
-mysql0900_import_exit="$(run_restore_attempt mysql84 mariadb10 "$MYSQL0900_DB" "$MYSQL0900_DUMP" "$MYSQL0900_IMPORT_LOG")"
-mysql0900_client_probe_exit="$(run_client_probe mariadb10 mysql84 "SELECT @@collation_server, @@character_set_server;" "$MYSQL0900_CLIENT_PROBE" "$MYSQL0900_CLIENT_PROBE_ERR")"
+db_exec "$MYSQL0900_SOURCE_SERVICE" <"$MYSQL0900_SOURCE_SQL"
+capture_collation_inventory "$MYSQL0900_SOURCE_SERVICE" "$MYSQL0900_DB" "$MYSQL0900_SOURCE_COLLATIONS"
+IFS=$'\t' read -r mysql0900_plan_exit mysql0900_report_exit < <(run_plan_and_report "$MYSQL0900_SOURCE_SERVICE" "$MYSQL0900_DEST_SERVICE" "$MYSQL0900_DB" "$MYSQL0900_DIR/state" "$MYSQL0900_PLAN" "$MYSQL0900_REPORT")
+mysql0900_import_exit="$(run_restore_attempt "$MYSQL0900_SOURCE_SERVICE" "$MYSQL0900_DEST_SERVICE" "$MYSQL0900_DB" "$MYSQL0900_DUMP" "$MYSQL0900_IMPORT_LOG")"
+mysql0900_client_probe_exit="$(run_client_probe "$COLLATION_CLIENT_PROBE_SERVICE" "$MYSQL0900_SOURCE_SERVICE" "SELECT @@collation_server, @@character_set_server;" "$MYSQL0900_CLIENT_PROBE" "$MYSQL0900_CLIENT_PROBE_ERR")"
 mysql0900_unsupported_count="$(count_plan_code unsupported_destination_collation "$MYSQL0900_PLAN")"
 mysql0900_client_risk_count="$(count_plan_code client_collation_compatibility_risk "$MYSQL0900_PLAN")"
 
 cat >"$MYSQL0900_SUMMARY" <<JSON
 {
-  "scenario": "mysql84_to_mariadb10_utf8mb4_0900_ai_ci",
-  "source_service": "mysql84",
-  "dest_service": "mariadb10",
+  "scenario": "mysql84_to_mariadb_unsupported_utf8mb4_0900_ai_ci",
+  "source_service": "$(json_escape "$MYSQL0900_SOURCE_SERVICE")",
+  "dest_service": "$(json_escape "$MYSQL0900_DEST_SERVICE")",
   "database": "$(json_escape "$MYSQL0900_DB")",
-  "source_dsn": "$(json_escape "$(dsn_for_service mysql84)")",
-  "dest_dsn": "$(json_escape "$(dsn_for_service mariadb10)")",
+  "source_dsn": "$(json_escape "$(dsn_for_service "$MYSQL0900_SOURCE_SERVICE")")",
+  "dest_dsn": "$(json_escape "$(dsn_for_service "$MYSQL0900_DEST_SERVICE")")",
   "plan_exit_code": $mysql0900_plan_exit,
+  "report_exit_code": $mysql0900_report_exit,
   "restore_exit_code": $mysql0900_import_exit,
   "unsupported_destination_count": ${mysql0900_unsupported_count:-0},
   "client_compatibility_risk_count": ${mysql0900_client_risk_count:-0},
@@ -259,23 +285,24 @@ MARIADB_UCA1400_CLIENT_PROBE_ERR="$MARIADB_UCA1400_TO_MYSQL_DIR/client-probe.std
 MARIADB_UCA1400_SUMMARY="$MARIADB_UCA1400_TO_MYSQL_DIR/summary.json"
 
 prepare_fixture "$MARIADB_UCA1400_FIXTURE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_SOURCE_SQL"
-db_exec mariadb12 <"$MARIADB_UCA1400_SOURCE_SQL"
-capture_collation_inventory mariadb12 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_SOURCE_COLLATIONS"
-mariadb_uca1400_plan_exit="$(run_plan_and_report mariadb12 mysql84 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_TO_MYSQL_DIR/state" "$MARIADB_UCA1400_PLAN" "$MARIADB_UCA1400_REPORT")"
-mariadb_uca1400_import_exit="$(run_restore_attempt mariadb12 mysql84 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_DUMP" "$MARIADB_UCA1400_IMPORT_LOG")"
-mariadb_uca1400_client_probe_exit="$(run_client_probe mysql80 mariadb12 "SELECT @@collation_server, @@character_set_server;" "$MARIADB_UCA1400_CLIENT_PROBE" "$MARIADB_UCA1400_CLIENT_PROBE_ERR")"
+db_exec "$UCA1400_SOURCE_SERVICE" <"$MARIADB_UCA1400_SOURCE_SQL"
+capture_collation_inventory "$UCA1400_SOURCE_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_SOURCE_COLLATIONS"
+IFS=$'\t' read -r mariadb_uca1400_plan_exit mariadb_uca1400_report_exit < <(run_plan_and_report "$UCA1400_SOURCE_SERVICE" "$UCA1400_DEST_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_TO_MYSQL_DIR/state" "$MARIADB_UCA1400_PLAN" "$MARIADB_UCA1400_REPORT")
+mariadb_uca1400_import_exit="$(run_restore_attempt "$UCA1400_SOURCE_SERVICE" "$UCA1400_DEST_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_DUMP" "$MARIADB_UCA1400_IMPORT_LOG")"
+mariadb_uca1400_client_probe_exit="$(run_client_probe "$COLLATION_CLIENT_PROBE_SERVICE" "$UCA1400_SOURCE_SERVICE" "SELECT @@collation_server, @@character_set_server;" "$MARIADB_UCA1400_CLIENT_PROBE" "$MARIADB_UCA1400_CLIENT_PROBE_ERR")"
 mariadb_uca1400_unsupported_count="$(count_plan_code unsupported_destination_collation "$MARIADB_UCA1400_PLAN")"
 mariadb_uca1400_client_risk_count="$(count_plan_code client_collation_compatibility_risk "$MARIADB_UCA1400_PLAN")"
 
 cat >"$MARIADB_UCA1400_SUMMARY" <<JSON
 {
-  "scenario": "mariadb12_to_mysql84_utf8mb4_uca1400_ai_ci",
-  "source_service": "mariadb12",
-  "dest_service": "mysql84",
+  "scenario": "mariadb_uca1400_to_mysql84_unsupported",
+  "source_service": "$(json_escape "$UCA1400_SOURCE_SERVICE")",
+  "dest_service": "$(json_escape "$UCA1400_DEST_SERVICE")",
   "database": "$(json_escape "$MARIADB_UCA1400_DB")",
-  "source_dsn": "$(json_escape "$(dsn_for_service mariadb12)")",
-  "dest_dsn": "$(json_escape "$(dsn_for_service mysql84)")",
+  "source_dsn": "$(json_escape "$(dsn_for_service "$UCA1400_SOURCE_SERVICE")")",
+  "dest_dsn": "$(json_escape "$(dsn_for_service "$UCA1400_DEST_SERVICE")")",
   "plan_exit_code": $mariadb_uca1400_plan_exit,
+  "report_exit_code": $mariadb_uca1400_report_exit,
   "restore_exit_code": $mariadb_uca1400_import_exit,
   "unsupported_destination_count": ${mariadb_uca1400_unsupported_count:-0},
   "client_compatibility_risk_count": ${mariadb_uca1400_client_risk_count:-0},
@@ -304,23 +331,24 @@ MARIADB_UCA1400_RISK_CLIENT_PROBE_ERR="$MARIADB_UCA1400_RISK_DIR/client-probe.st
 MARIADB_UCA1400_RISK_SUMMARY="$MARIADB_UCA1400_RISK_DIR/summary.json"
 
 prepare_fixture "$MARIADB_UCA1400_FIXTURE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_SOURCE_SQL"
-db_exec mariadb12 <"$MARIADB_UCA1400_RISK_SOURCE_SQL"
-capture_collation_inventory mariadb12 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_SOURCE_COLLATIONS"
-mariadb_uca1400_risk_plan_exit="$(run_plan_and_report mariadb12 mariadb12 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_DIR/state" "$MARIADB_UCA1400_RISK_PLAN" "$MARIADB_UCA1400_RISK_REPORT")"
-mariadb_uca1400_risk_import_exit="$(run_restore_attempt mariadb12 mariadb12 "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_DUMP" "$MARIADB_UCA1400_RISK_IMPORT_LOG")"
-mariadb_uca1400_risk_client_probe_exit="$(run_client_probe mysql80 mariadb12 "SELECT @@collation_server, @@character_set_server;" "$MARIADB_UCA1400_RISK_CLIENT_PROBE" "$MARIADB_UCA1400_RISK_CLIENT_PROBE_ERR")"
+db_exec "$UCA1400_RISK_SOURCE_SERVICE" <"$MARIADB_UCA1400_RISK_SOURCE_SQL"
+capture_collation_inventory "$UCA1400_RISK_SOURCE_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_SOURCE_COLLATIONS"
+IFS=$'\t' read -r mariadb_uca1400_risk_plan_exit mariadb_uca1400_risk_report_exit < <(run_plan_and_report "$UCA1400_RISK_SOURCE_SERVICE" "$UCA1400_RISK_DEST_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_DIR/state" "$MARIADB_UCA1400_RISK_PLAN" "$MARIADB_UCA1400_RISK_REPORT")
+mariadb_uca1400_risk_import_exit="$(run_restore_attempt "$UCA1400_RISK_SOURCE_SERVICE" "$UCA1400_RISK_DEST_SERVICE" "$MARIADB_UCA1400_DB" "$MARIADB_UCA1400_RISK_DUMP" "$MARIADB_UCA1400_RISK_IMPORT_LOG")"
+mariadb_uca1400_risk_client_probe_exit="$(run_client_probe "$COLLATION_CLIENT_PROBE_SERVICE" "$UCA1400_RISK_SOURCE_SERVICE" "SELECT @@collation_server, @@character_set_server;" "$MARIADB_UCA1400_RISK_CLIENT_PROBE" "$MARIADB_UCA1400_RISK_CLIENT_PROBE_ERR")"
 mariadb_uca1400_risk_unsupported_count="$(count_plan_code unsupported_destination_collation "$MARIADB_UCA1400_RISK_PLAN")"
 mariadb_uca1400_risk_client_risk_count="$(count_plan_code client_collation_compatibility_risk "$MARIADB_UCA1400_RISK_PLAN")"
 
 cat >"$MARIADB_UCA1400_RISK_SUMMARY" <<JSON
 {
-  "scenario": "mariadb12_to_mariadb12_utf8mb4_uca1400_ai_ci",
-  "source_service": "mariadb12",
-  "dest_service": "mariadb12",
+  "scenario": "mariadb_uca1400_client_risk_only",
+  "source_service": "$(json_escape "$UCA1400_RISK_SOURCE_SERVICE")",
+  "dest_service": "$(json_escape "$UCA1400_RISK_DEST_SERVICE")",
   "database": "$(json_escape "$MARIADB_UCA1400_DB")",
-  "source_dsn": "$(json_escape "$(dsn_for_service mariadb12)")",
-  "dest_dsn": "$(json_escape "$(dsn_for_service mariadb12)")",
+  "source_dsn": "$(json_escape "$(dsn_for_service "$UCA1400_RISK_SOURCE_SERVICE")")",
+  "dest_dsn": "$(json_escape "$(dsn_for_service "$UCA1400_RISK_DEST_SERVICE")")",
   "plan_exit_code": $mariadb_uca1400_risk_plan_exit,
+  "report_exit_code": $mariadb_uca1400_risk_report_exit,
   "restore_exit_code": $mariadb_uca1400_risk_import_exit,
   "unsupported_destination_count": ${mariadb_uca1400_risk_unsupported_count:-0},
   "client_compatibility_risk_count": ${mariadb_uca1400_risk_client_risk_count:-0},
@@ -341,9 +369,9 @@ JSON
 cat >"$OUTPUT_DIR/summary.json" <<JSON
 {
   "scenario": "phase63_collation_compatibility",
-  "mysql84_to_mariadb10_utf8mb4_0900_ai_ci": "$(json_escape "$MYSQL0900_SUMMARY")",
-  "mariadb12_to_mysql84_utf8mb4_uca1400_ai_ci": "$(json_escape "$MARIADB_UCA1400_SUMMARY")",
-  "mariadb12_to_mariadb12_utf8mb4_uca1400_ai_ci": "$(json_escape "$MARIADB_UCA1400_RISK_SUMMARY")"
+  "mysql84_to_mariadb_unsupported_utf8mb4_0900_ai_ci": "$(json_escape "$MYSQL0900_SUMMARY")",
+  "mariadb_uca1400_to_mysql84_unsupported": "$(json_escape "$MARIADB_UCA1400_SUMMARY")",
+  "mariadb_uca1400_client_risk_only": "$(json_escape "$MARIADB_UCA1400_RISK_SUMMARY")"
 }
 JSON
 
