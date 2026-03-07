@@ -1,8 +1,8 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Rerun and archive the focused rehearsal set required by `docs/v1-release-criteria.md` so `v1` signoff has fresh operator-grade evidence, not just matrix evidence.
-  - Success means every required rehearsal has a fresh current-main run, archived output location, and a clean pass/fail classification ready for the final signoff bundle.
+  - Complete the final `v1` release decision/signoff bundle for the implemented and genuinely supported self-managed paths.
+  - Success means the frozen matrix evidence, focused rehearsal evidence, and release-criteria judgment are assembled into a final release-approved or release-blocked decision record.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
@@ -22,9 +22,9 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-signoff-rehearsals`.
-  - PR `#67`, PR `#68`, PR `#69`, PR `#70`, and PR `#71` are merged.
-  - Local `main` is fast-forwarded to include the merged v1 matrix infra lane and matrix evidence report.
+  - Current branch: `codex/chore/v1-release-decision`.
+  - PR `#67`, PR `#68`, PR `#69`, PR `#70`, PR `#71`, and PR `#72` are merged.
+  - Local `main` is fast-forwarded through the focused signoff rehearsal evidence merge.
   - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
   - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
   - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
@@ -33,6 +33,7 @@ Last updated: 2026-03-07
   - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
+  - Final release decision doc is drafted at `docs/v1-release-decision.md`.
 - Done:
   - Added and merged:
     - `docs/v1-release-plan.md`
@@ -97,11 +98,15 @@ Last updated: 2026-03-07
   - Verified current branch before publish:
     - `go test ./...`
     - `bash -n scripts/run-plugin-lifecycle-rehearsal.sh scripts/run-invisible-gipk-rehearsal.sh scripts/run-collation-rehearsal.sh scripts/run-verify-canonicalization-rehearsal.sh scripts/run-v1-signoff-rehearsals.sh`
+  - Merged focused rehearsal evidence via PR `#72`.
+  - Ran final release-decision verification on this branch:
+    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
+    - `go test ./...`
 - Now:
-  - Prepare this branch for commit/PR with the focused signoff evidence and script retargeting.
+  - Publish the final `v1` signoff / release-decision PR.
 - Next:
-  - Commit and publish the signoff-rehearsal evidence branch after user confirmation.
-  - After merge, assemble the final `v1` signoff bundle or release decision PR.
+  - Merge the final signoff PR if CI stays green.
+  - After merge, `v1` technical signoff is complete pending release-owner ratification.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
@@ -112,6 +117,7 @@ Last updated: 2026-03-07
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
     - `docs/v1-rehearsal-evidence.md`
+    - `docs/v1-release-decision.md`
     - `docker-compose.yml`
     - `scripts/run-metadata-lock-scenario.sh`
     - `scripts/run-backup-restore-rehearsal.sh`
@@ -128,6 +134,7 @@ Last updated: 2026-03-07
     - merged PR `#69`
     - merged PR `#70`
     - merged PR `#71`
+    - merged PR `#72`
   - Commands:
     - `go test ./...`
     - `./scripts/test-v1-matrix.sh`
