@@ -40,6 +40,7 @@ Last updated: 2026-03-07
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
+  - User approved remote actions (push + PR creation) for phase66.
 - Done:
   - Merged PR `#75` and synced local `main`.
   - Verified on merged `main` after PR `#75`:
@@ -183,9 +184,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Prepare phase66 commit from workflow/docs/continuity updates.
+  - Push phase66 branch and open PR against `main`.
 - Next:
-  - Commit phase66 changes, then request explicit user confirmation before push/PR.
+  - Wait for CI + user merge decision.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
