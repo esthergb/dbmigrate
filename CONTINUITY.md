@@ -1,13 +1,14 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Align local matrix infrastructure with the frozen `v1` support matrix and add the requested supplemental upgrade-evidence scenarios around adjacent supported lines.
-  - Success means local Docker services, scenario wrappers, and configs exist for the frozen `v1` matrix, plus the requested supplemental wrappers, and all can be exercised without falling back to the legacy 20-scenario matrix.
+  - Execute the full frozen `v1` matrix on current `main` and include the supplemental upgrade-evidence matrix in the same execution workstream.
+  - Success means the release-grade `v1` matrix has fresh execution evidence on current code, and the supplemental upgrade scenarios also have fresh current-main evidence recorded separately.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
   - `v1` scope is limited to implemented and genuinely supported self-managed paths only.
+  - Supplemental upgrade-evidence scenarios exist, but they are not part of the frozen strict-lts release lane.
   - Before any remote push/PR creation, get explicit user confirmation.
 - Key decisions:
   - Product scope is split explicitly:
@@ -18,87 +19,85 @@ Last updated: 2026-03-07
     - `README.md`
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
-  - A true `v1` matrix run must target the frozen `v1` engine/version lines, not the older legacy local matrix.
-  - Keep the legacy matrix intact for historical rehearsals; add new `v1` infra alongside it instead of renaming existing services in place.
-  - Keep the frozen strict-lts release lane distinct from supplemental upgrade-evidence scenarios so release-grade signoff does not get muddied by broader non-frozen paths.
+  - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
+  - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-matrix-infra`.
-  - PR `#67`, PR `#68`, and PR `#69` are merged.
-  - Blocker diagnosis is complete: current local Docker/test infra did not match the frozen `v1` support matrix; this branch now carries the alignment patch and supplemental requested scenarios.
-  - Commit `90fe355` records the infra alignment work locally and is ready to publish.
+  - Current branch: `codex/chore/v1-matrix-execution-phase71`.
+  - PR `#67`, PR `#68`, PR `#69`, and PR `#70` are merged.
+  - Local `main` is fast-forwarded to include the merged v1 matrix infra lane.
+  - Full frozen `v1` matrix execution has been run on this branch against current merged code.
+  - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
 - Done:
   - Added and merged:
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
   - Updated and merged `README.md` to define explicit `v1 / v2 / v3` scope and tighten `strict-lts` vs `max-compat` wording.
-  - Confirmed local infra mismatch:
-    - frozen `v1` docs require exact lines around `MariaDB 10.11.x`, `MariaDB 11.4.x`, `MariaDB 11.8.x`, and `MySQL 8.4.x`
-    - local Docker currently exposes only `mariadb:10.6`, `mariadb:11.0`, `mariadb:12.0`, `mysql:8.0`, and `mysql:8.4`
-    - current `scripts/test-*.sh` wrappers are still the older 20-scenario matrix built around those legacy services
-  - Added parallel frozen-`v1` local services in `docker-compose.yml`:
+  - Added and merged the frozen `v1` local service lane:
     - `mysql84a`, `mysql84b`
-    - `mysql80a`
     - `mariadb1011a`, `mariadb1011b`
     - `mariadb114a`, `mariadb114b`
     - `mariadb118a`, `mariadb118b`
-  - Added exact frozen-`v1` configs:
-    - `configs/v1-mysql84a-to-mysql84b.yaml`
-    - `configs/v1-mariadb1011a-to-mariadb1011b.yaml`
-    - `configs/v1-mariadb114a-to-mariadb114b.yaml`
-    - `configs/v1-mariadb118a-to-mariadb118b.yaml`
-    - `configs/v1-mysql84a-to-mariadb114b.yaml`
-    - `configs/v1-mariadb114a-to-mysql84b.yaml`
-  - Added dedicated frozen-`v1` wrappers:
-    - `scripts/test-v1-*.sh`
-    - `scripts/test-v1-matrix.sh`
-  - Added supplemental upgrade-evidence configs and wrappers:
-    - `configs/v1-supplemental-mariadb1011a-to-mariadb114b.yaml`
-    - `configs/v1-supplemental-mariadb1011a-to-mariadb118b.yaml`
-    - `configs/v1-supplemental-mariadb114a-to-mariadb118b.yaml`
-    - `configs/v1-supplemental-mysql80a-to-mysql84b.yaml`
-    - `scripts/test-v1-supplemental-*.sh`
-    - `scripts/test-v1-supplemental-matrix.sh`
-  - Updated `scripts/run-migration-test.sh` dataset routing so the new service names map to the correct legacy-compatible seed datasets.
-  - Verified locally:
-    - `docker compose -f docker-compose.yml config --services`
+  - Added and merged the requested supplemental services/configs/wrappers including `mysql80a`.
+  - Verified before merge:
     - `go test ./...`
     - `./scripts/test-v1-mysql84-to-mysql84.sh`
     - `./scripts/test-v1-mysql84-to-mariadb114.sh`
     - `./scripts/test-v1-supplemental-matrix.sh`
-    - `docker compose up -d mariadb1011a mariadb118a` plus `SELECT VERSION()` smoke checks
-  - Observed local evidence:
-    - `mysql84a -> mysql84b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mysql84a -> mariadb114b` passed end-to-end with strict-lts matrix match, warning-only plugin/collation findings, and `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mariadb1011a -> mariadb114b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mariadb1011a -> mariadb118b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mariadb114a -> mariadb118b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mysql80a -> mysql84b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
-    - `mariadb1011a` started successfully as `10.11.16-MariaDB-ubu2204`
-    - `mariadb118a` started successfully as `11.8.6-MariaDB-ubu2404`
+  - Observed pre-merge evidence:
+    - frozen strict-lts `mysql84a -> mysql84b` passed end-to-end
+    - frozen strict-lts `mysql84a -> mariadb114b` passed end-to-end
+    - supplemental scenarios also passed end-to-end
+  - Ran the full frozen `v1` matrix on current merged code:
+    - `./scripts/test-v1-matrix.sh`
+  - Frozen `v1` classification result:
+    - supported and passed:
+      - `MySQL 8.4 -> MySQL 8.4`
+      - `MariaDB 10.11 -> MariaDB 10.11`
+      - `MariaDB 11.4 -> MariaDB 11.4`
+      - `MariaDB 11.8 -> MariaDB 11.8`
+      - `MySQL 8.4 -> MariaDB 11.4`
+      - `MariaDB 11.4 -> MySQL 8.4`
+    - blocked by design: none in the frozen strict-lts lane
+    - unexpected regressions: none in the frozen strict-lts lane
+  - Ran the supplemental matrix on current merged code:
+    - `./scripts/test-v1-supplemental-matrix.sh`
+  - Supplemental classification result:
+    - supplemental and passed:
+      - `MariaDB 10.11 -> MariaDB 11.4`
+      - `MariaDB 10.11 -> MariaDB 11.8`
+      - `MariaDB 11.4 -> MariaDB 11.8`
+      - `MySQL 8.0 -> MySQL 8.4`
+    - blocked by design: none in the supplemental lane
+    - unexpected regressions: none in the supplemental lane
+  - Observed full-sweep behavior:
+    - every strict-lts scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - cross-engine strict-lts paths remained warning-heavy for auth-plugin and collation-client risk, but were still semantically successful and classified `report=status=ok`
+    - every supplemental scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
 - Now:
-  - Publish the infra-alignment branch and open the PR.
+  - Publish the dedicated matrix-evidence/report PR from this branch.
 - Next:
-  - Then start the actual full frozen-`v1` matrix execution using `scripts/test-v1-matrix.sh`.
+  - Rerun focused rehearsals required by `docs/v1-release-criteria.md` if they are being treated as stale for release signoff.
+  - After that, assemble the signoff bundle or a focused release-blocker report.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether the same MariaDB 11.x dataset mapping is sufficient for the full `mariadb114*` and `mariadb118*` matrix sweep, or whether a narrower version-specific seed split will be needed after the first complete run.
+  - UNCONFIRMED: whether you want the next branch to be a docs/report PR that captures this frozen-matrix evidence formally, or a broader signoff bundle including the focused rehearsal reruns.
 - Working set (files/ids/commands):
   - Files:
     - `CONTINUITY.md`
-    - `docker-compose.yml`
+    - `docs/v1-matrix-evidence.md`
     - `README.md`
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
-    - `docs/operators-guide.md`
+    - `docker-compose.yml`
     - `scripts/run-migration-test.sh`
-    - `scripts/test-*.sh`
-    - `configs/`
-    - `datasets/README.md`
+    - `scripts/test-v1-matrix.sh`
+    - `configs/v1-*.yaml`
   - IDs:
-    - branch `codex/chore/v1-matrix-infra`
     - merged PR `#67`
     - merged PR `#68`
     - merged PR `#69`
+    - merged PR `#70`
   - Commands:
-    - `docker compose up -d <service>...`
-    - `./scripts/run-migration-test.sh <config> <source-service> <dest-service>`
     - `go test ./...`
+    - `./scripts/test-v1-matrix.sh`
+    - `docker compose -f docker-compose.yml config --services`
