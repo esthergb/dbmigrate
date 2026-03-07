@@ -47,6 +47,7 @@ Last updated: 2026-03-07
     - secure artifact file permissions
     - DSN validation aligned with connector parser
   - User approved remote actions (push + PR creation) for PR A branch.
+  - PR `#77` is open for PR A (`fix: harden v1 safety defaults and parsing`).
 - Done:
   - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
     - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
@@ -61,6 +62,8 @@ Last updated: 2026-03-07
   - Validation passed:
     - `go test ./internal/config ./internal/cli ./internal/commands`
     - `go test ./...`
+  - Pushed `codex/fix/v1-prA-safety-hardening` to `origin`.
+  - Opened PR `#77` against `main`.
   - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
   - Added new release gate entrypoint:
     - `scripts/run-v1-release-gate.sh`
@@ -191,9 +194,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Push PR A branch and open PR against `main`.
+  - Wait for CI and review feedback on PR `#77`.
 - Next:
-  - Wait for CI and review/merge decision.
+  - Merge PR `#77` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
