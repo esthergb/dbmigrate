@@ -41,6 +41,26 @@ func TestRewriteSchemaStatementForSandbox(t *testing.T) {
 	}
 }
 
+func TestSanitizeCreateStatementForApplyRewritesDefiner(t *testing.T) {
+	in := "CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v_users` AS SELECT 1 AS `id`"
+	out := sanitizeCreateStatementForApply(in)
+	if out == in {
+		t.Fatal("expected statement to change")
+	}
+	if out != "CREATE ALGORITHM=UNDEFINED DEFINER=CURRENT_USER SQL SECURITY DEFINER VIEW `v_users` AS SELECT 1 AS `id`" {
+		t.Fatalf("unexpected sanitized statement: %q", out)
+	}
+}
+
+func TestRewriteAndSanitizeForSandbox(t *testing.T) {
+	in := "CREATE ALGORITHM=UNDEFINED DEFINER=`app`@`%` SQL SECURITY DEFINER VIEW `srcdb`.`v1` AS SELECT * FROM `srcdb`.`t1`"
+	rewritten := rewriteSchemaStatementForSandbox(in, "srcdb", "dryrun_srcdb")
+	out := sanitizeCreateStatementForApply(rewritten)
+	if out != "CREATE ALGORITHM=UNDEFINED DEFINER=CURRENT_USER SQL SECURITY DEFINER VIEW `dryrun_srcdb`.`v1` AS SELECT * FROM `dryrun_srcdb`.`t1`" {
+		t.Fatalf("unexpected rewritten+sanitized statement: %q", out)
+	}
+}
+
 func TestSortTableNamesByDependencies(t *testing.T) {
 	tableNames := []string{"cart_items", "users", "orders"}
 	dependencies := map[string]map[string]struct{}{

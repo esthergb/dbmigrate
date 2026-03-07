@@ -163,6 +163,9 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --data-only --chun
 dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 ```
 
+Schema apply behavior:
+- View DDL `DEFINER=` clauses from source are sanitized to `DEFINER=CURRENT_USER` during apply to avoid orphan/unknown definer failures on destination.
+
 ## Schema precheck: zero-date defaults
 
 - `plan` and `migrate` now run a schema precheck that scans source temporal defaults (`DATE`, `DATETIME`, `TIMESTAMP`) for zero-date patterns (`0000-00-00`, `0000-00-00 00:00:00`, `YYYY-00-DD`, `YYYY-MM-00`).

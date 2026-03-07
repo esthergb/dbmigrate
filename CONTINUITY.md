@@ -18,9 +18,8 @@ Last updated: 2026-03-07
     - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
   - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prF-replication-server-id`.
-  - `main` includes merged PRs through `#81`.
-  - PR `#82` is open: `fix: add source server-id override for binlog replication`.
+  - Current branch: `codex/fix/v1-prG-view-definer-sanitization`.
+  - `main` includes merged PRs through `#82`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -34,6 +33,7 @@ Last updated: 2026-03-07
     - `#79` typed baseline checkpoint cursors.
     - `#80` mixed DDL+row replay fail-fast fence.
     - `#81` bounded source-window buffering during binlog read.
+    - `#82` explicit source server-id override for binlog replication.
   - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
   - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds` (merged as `#81`):
     - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
@@ -53,10 +53,18 @@ Last updated: 2026-03-07
   - Validation passed for PR F:
     - `go test ./internal/commands ./internal/replicate/binlog`
     - `go test ./...`
+  - Implemented PR G on `codex/fix/v1-prG-view-definer-sanitization`:
+    - schema apply now sanitizes source `DEFINER=` clauses to `DEFINER=CURRENT_USER` before executing DDL
+    - sandbox schema validation path applies the same sanitization
+    - added schema unit tests for definer sanitization and sandbox rewrite interplay
+    - documented view-definer sanitization behavior in README and operators guide
+  - Validation passed for PR G:
+    - `go test ./internal/schema`
+    - `go test ./...`
 - Now:
-  - Monitor PR `#82` CI and address failures if they appear.
+  - Prepare PR G commit on this branch.
 - Next:
-  - Merge PR `#82` and continue next v1 hardening slice.
+  - Ask user confirmation before push + PR.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
