@@ -169,6 +169,7 @@ Replication checkpoint behavior:
 - Checkpoint advancement is tied to `applied_end` only (never directly to source tip).
 - Event application is transaction-batch based; checkpoint advances only after commit.
 - Destination checkpoint state is stored in table `dbmigrate_replication_checkpoint` and written atomically in the same destination transaction as applied row changes.
+- Optional: set `--source-server-id=<n>` (`1..4294967295`) when running multiple replication workers against the same source to avoid `server_id` collisions.
 - Row-based binlog events are decoded into SQL apply batches (insert upsert, update, delete) with commit-boundary checkpointing.
 - Mixed DDL + row-event windows fail fast in `v1`; split windows at DDL boundaries and run `migrate --schema-only` before replaying adjacent row batches.
 - Source-window buffering during binlog read is bounded by safety limits (events + estimated bytes); oversized windows fail fast as `source_window_buffer_limit_exceeded`.

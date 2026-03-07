@@ -199,6 +199,8 @@ Replication window control:
 - If the first transaction already exceeds `N`, replicate fails fast with guidance to increase the limit.
 - `--max-lag-seconds=0` (default) disables lag threshold checks.
 - `--max-lag-seconds=N` blocks apply when the transaction-end event lag exceeds `N` seconds (based on binlog event timestamps).
+- `--source-server-id=0` (default) derives a replication client `server_id` from source DSN fields.
+- `--source-server-id=N` overrides the derived value (`1..4294967295`) to avoid collisions across concurrent replication workers.
 
 Idempotent replay guard:
 - `--idempotent` is reserved for `v2` and is currently unsupported in `v1`.

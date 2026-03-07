@@ -26,6 +26,9 @@ func TestParseReplicateOptionsDefaults(t *testing.T) {
 	if opts.MaxLagSeconds != 0 {
 		t.Fatalf("expected default max-lag-seconds 0, got %d", opts.MaxLagSeconds)
 	}
+	if opts.SourceServerID != 0 {
+		t.Fatalf("expected default source-server-id 0, got %d", opts.SourceServerID)
+	}
 	if opts.Idempotent {
 		t.Fatal("expected default idempotent=false")
 	}
@@ -55,6 +58,7 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 		"--start-from=binlog-file:pos",
 		"--max-events=250",
 		"--max-lag-seconds=90",
+		"--source-server-id=24001",
 		"--apply-ddl=ignore",
 		"--conflict-policy=source-wins",
 		"--enable-trigger-cdc",
@@ -76,6 +80,9 @@ func TestParseReplicateOptionsExplicit(t *testing.T) {
 	}
 	if opts.MaxLagSeconds != 90 {
 		t.Fatalf("expected max-lag-seconds 90, got %d", opts.MaxLagSeconds)
+	}
+	if opts.SourceServerID != 24001 {
+		t.Fatalf("expected source-server-id 24001, got %d", opts.SourceServerID)
 	}
 	if opts.Idempotent {
 		t.Fatal("expected idempotent=false")
@@ -132,6 +139,13 @@ func TestParseReplicateOptionsInvalidMaxLagSeconds(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--max-lag-seconds=-1"})
 	if err == nil {
 		t.Fatal("expected parse error for invalid max-lag-seconds")
+	}
+}
+
+func TestParseReplicateOptionsInvalidSourceServerID(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--source-server-id=4294967296"})
+	if err == nil {
+		t.Fatal("expected parse error for invalid source-server-id")
 	}
 }
 

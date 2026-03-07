@@ -207,7 +207,7 @@ func TestLoadApplyBatchesFromSourceEmptyDSN(t *testing.T) {
 }
 
 func TestSourceSyncerConfigFlavorAndHost(t *testing.T) {
-	mysqlCfg, err := sourceSyncerConfig("mysql://user:pass@127.0.0.1:3306/app?tls=preferred", "", "", "", "")
+	mysqlCfg, err := sourceSyncerConfig("mysql://user:pass@127.0.0.1:3306/app?tls=preferred", 0, "", "", "", "")
 	if err != nil {
 		t.Fatalf("sourceSyncerConfig mysql: %v", err)
 	}
@@ -218,12 +218,22 @@ func TestSourceSyncerConfigFlavorAndHost(t *testing.T) {
 		t.Fatal("expected non-zero server id")
 	}
 
-	mariaCfg, err := sourceSyncerConfig("mariadb://user:pass@db.example:3307/app", "", "", "", "")
+	mariaCfg, err := sourceSyncerConfig("mariadb://user:pass@db.example:3307/app", 0, "", "", "", "")
 	if err != nil {
 		t.Fatalf("sourceSyncerConfig mariadb: %v", err)
 	}
 	if mariaCfg.Flavor != "mariadb" || mariaCfg.Host != "db.example" || mariaCfg.Port != 3307 {
 		t.Fatalf("unexpected mariadb sync config: %+v", mariaCfg)
+	}
+}
+
+func TestSourceSyncerConfigUsesServerIDOverride(t *testing.T) {
+	cfg, err := sourceSyncerConfig("mysql://user:pass@127.0.0.1:3306/app", 24123, "", "", "", "")
+	if err != nil {
+		t.Fatalf("sourceSyncerConfig override: %v", err)
+	}
+	if cfg.ServerID != 24123 {
+		t.Fatalf("expected server-id override 24123, got %d", cfg.ServerID)
 	}
 }
 

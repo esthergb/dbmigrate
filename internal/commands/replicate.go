@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"github.com/esthergb/dbmigrate/internal/config"
@@ -18,6 +19,7 @@ type replicateOptions struct {
 	StartFrom        string
 	MaxEvents        uint64
 	MaxLagSeconds    uint64
+	SourceServerID   uint64
 	Idempotent       bool
 	ConflictValues   string
 	ApplyDDL         string
@@ -44,11 +46,12 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			"replicate",
 			"dry-run",
 			fmt.Sprintf(
-				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d conflict_values=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
+				"dry-run: replicate plan ready (replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d source_server_id=%d conflict_values=%s enable_trigger_cdc=%v teardown_cdc=%v resume=%v apply_ddl=%s conflict_policy=%s start_file=%s start_pos=%d)",
 				opts.ReplicationMode,
 				opts.StartFrom,
 				opts.MaxEvents,
 				opts.MaxLagSeconds,
+				opts.SourceServerID,
 				opts.ConflictValues,
 				opts.EnableTriggerCDC,
 				opts.TeardownCDC,
@@ -103,6 +106,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		ConflictPolicy: opts.ConflictPolicy,
 		MaxEvents:      opts.MaxEvents,
 		MaxLagSeconds:  opts.MaxLagSeconds,
+		SourceServerID: uint32(opts.SourceServerID),
 		Idempotent:     opts.Idempotent,
 		ConflictValues: opts.ConflictValues,
 		Resume:         opts.Resume,
@@ -124,7 +128,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		"replicate",
 		"ok",
 		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d conflict_values=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
+			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d source_server_id=%d conflict_values=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
 			summary.SourceLogBin,
 			summary.SourceFormat,
 			summary.SourceRowImage,
@@ -144,6 +148,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			opts.StartFrom,
 			opts.MaxEvents,
 			opts.MaxLagSeconds,
+			opts.SourceServerID,
 			opts.ConflictValues,
 			summary.ApplyDDL,
 			summary.ConflictPolicy,
@@ -158,6 +163,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		StartFrom:       "auto",
 		MaxEvents:       0,
 		MaxLagSeconds:   0,
+		SourceServerID:  0,
 		Idempotent:      false,
 		ConflictValues:  "redacted",
 		ApplyDDL:        "warn",
@@ -172,6 +178,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.StringVar(&opts.StartFrom, "start-from", "auto", "replication start reference (auto|binlog-file:pos|gtid)")
 	fs.Uint64Var(&opts.MaxEvents, "max-events", 0, "max apply events per run (0 means no explicit limit)")
 	fs.Uint64Var(&opts.MaxLagSeconds, "max-lag-seconds", 0, "max allowed lag in seconds before apply (planned)")
+	fs.Uint64Var(&opts.SourceServerID, "source-server-id", 0, "source replication client server_id override (1..4294967295, 0 uses derived default)")
 	fs.BoolVar(&opts.Idempotent, "idempotent", false, "enforce idempotent-safe conflict policy for replay runs")
 	fs.StringVar(&opts.ConflictValues, "conflict-values", "redacted", "conflict report value mode (redacted|plain)")
 	fs.StringVar(&opts.ApplyDDL, "apply-ddl", "warn", "DDL policy during replication (ignore|apply|warn)")
@@ -228,6 +235,9 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	}
 	if opts.StartPos < 4 {
 		return replicateOptions{}, errors.New("start-pos must be >= 4")
+	}
+	if opts.SourceServerID > math.MaxUint32 {
+		return replicateOptions{}, errors.New("source-server-id must be <= 4294967295")
 	}
 	return opts, nil
 }
