@@ -448,7 +448,7 @@ func persistCollationPrecheckArtifact(stateDir string, report collationPrecheckR
 	if err != nil {
 		return fmt.Errorf("marshal collation precheck artifact: %w", err)
 	}
-	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write collation precheck artifact: %w", err)
 	}
 	return nil

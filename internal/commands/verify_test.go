@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -246,6 +247,13 @@ func TestVerifyDataArtifactRoundTrip(t *testing.T) {
 	path := verifyDataArtifactPath(tmp)
 	if path != filepath.Join(tmp, "verify-data-report.json") {
 		t.Fatalf("unexpected artifact path: %q", path)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat verify artifact: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected verify artifact mode 0600, got %o", info.Mode().Perm())
 	}
 	artifact, err := loadVerifyDataArtifact(tmp)
 	if err != nil {

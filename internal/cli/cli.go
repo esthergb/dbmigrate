@@ -49,7 +49,11 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 	fs.SetOutput(stderr)
 	config.BindGlobalFlags(fs, &cfg)
 
-	globalArgs, commandArgs := splitGlobalAndCommandArgs(args[1:])
+	globalArgs, commandArgs, err := splitGlobalAndCommandArgs(args[1:])
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return exitUsage
+	}
 	if err := fs.Parse(globalArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return exitOK
@@ -102,7 +106,7 @@ func writeHelp(out io.Writer, registry map[string]commands.Handler) {
 	_, _ = fmt.Fprintln(out, "  version    print build version")
 }
 
-func splitGlobalAndCommandArgs(raw []string) ([]string, []string) {
+func splitGlobalAndCommandArgs(raw []string) ([]string, []string, error) {
 	globalFlagsWithValue := map[string]struct{}{
 		"source":            {},
 		"dest":              {},
@@ -152,8 +156,13 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string) {
 			continue
 		}
 		if _, ok := globalFlagsWithValue[name]; ok {
+			if !hasValueInline {
+				if i+1 >= len(raw) || strings.HasPrefix(raw[i+1], "--") {
+					return nil, nil, fmt.Errorf("missing value for global flag --%s", name)
+				}
+			}
 			global = append(global, token)
-			if !hasValueInline && i+1 < len(raw) {
+			if !hasValueInline {
 				global = append(global, raw[i+1])
 				i++
 			}
@@ -163,5 +172,5 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string) {
 		command = append(command, token)
 	}
 
-	return global, command
+	return global, command, nil
 }

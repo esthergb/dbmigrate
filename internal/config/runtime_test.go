@@ -25,6 +25,29 @@ func TestRuntimeConfigValidation(t *testing.T) {
 	if err := cfg.ValidateBasic(); err == nil {
 		t.Fatal("expected dry-run-mode validation error")
 	}
+
+	cfg = RuntimeConfig{
+		TLSMode:          "required",
+		Concurrency:      2,
+		DowngradeProfile: "strict-lts",
+		DryRunMode:       "plan",
+		Source:           "user:pass@tcp(localhost:3306)/app?tls=preferred",
+		Dest:             "mysql://user:pass@localhost:3306/app",
+	}
+	if err := cfg.ValidateBasic(); err != nil {
+		t.Fatalf("expected driver-style DSN to be accepted, got error: %v", err)
+	}
+
+	cfg = RuntimeConfig{
+		TLSMode:          "required",
+		Concurrency:      2,
+		DowngradeProfile: "strict-lts",
+		DryRunMode:       "plan",
+		Source:           "postgres://localhost:5432/app",
+	}
+	if err := cfg.ValidateBasic(); err == nil {
+		t.Fatal("expected invalid source DSN format error")
+	}
 }
 
 func TestBindGlobalFlagsAndFinalize(t *testing.T) {

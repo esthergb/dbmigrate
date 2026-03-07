@@ -1,8 +1,12 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/esthergb/dbmigrate/internal/compat"
 )
 
 func TestCollationHasClientCompatibilityRisk(t *testing.T) {
@@ -79,5 +83,32 @@ func TestBuildCollationPrecheckFindingsClean(t *testing.T) {
 	}
 	if findings[0].Code != "collation_inventory_clean" {
 		t.Fatalf("unexpected finding: %#v", findings[0])
+	}
+}
+
+func TestPersistCollationPrecheckArtifactUsesSecurePermissions(t *testing.T) {
+	tmp := t.TempDir()
+	report := collationPrecheckReport{
+		Name:                        "collation",
+		Incompatible:                true,
+		UnsupportedDestinationCount: 1,
+		Findings: []compat.Finding{
+			{
+				Code:     "unsupported_destination_collation",
+				Severity: "error",
+			},
+		},
+	}
+	if err := persistCollationPrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist collation precheck artifact: %v", err)
+	}
+
+	path := filepath.Join(tmp, "collation-precheck.json")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat collation precheck artifact: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected collation precheck artifact mode 0600, got %o", info.Mode().Perm())
 	}
 }

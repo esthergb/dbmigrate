@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,6 +101,57 @@ func TestLoadFileConfigJSON(t *testing.T) {
 	}
 	if cfg.Concurrency == nil || *cfg.Concurrency != 5 {
 		t.Fatalf("unexpected concurrency: %#v", cfg.Concurrency)
+	}
+}
+
+func TestLoadFileConfigYAMLUnknownFieldFails(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.yaml")
+	content := []byte("source: mysql://src\nunexpected-key: true\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	_, err := LoadFileConfig(path)
+	if err == nil {
+		t.Fatal("expected unknown YAML field error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "field") {
+		t.Fatalf("expected unknown field details, got: %v", err)
+	}
+}
+
+func TestLoadFileConfigJSONUnknownFieldFails(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.json")
+	content := []byte(`{"source":"mysql://src","unexpected_key":true}`)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	_, err := LoadFileConfig(path)
+	if err == nil {
+		t.Fatal("expected unknown JSON field error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "unknown field") {
+		t.Fatalf("expected unknown field details, got: %v", err)
+	}
+}
+
+func TestLoadFileConfigJSONTrailingContentFails(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.json")
+	content := []byte(`{"source":"mysql://src"} {"dest":"mysql://dst"}`)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	_, err := LoadFileConfig(path)
+	if err == nil {
+		t.Fatal("expected trailing JSON error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "trailing") {
+		t.Fatalf("expected trailing content details, got: %v", err)
 	}
 }
 
