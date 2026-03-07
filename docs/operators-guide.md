@@ -12,6 +12,7 @@ Current v1 scope guardrails:
 - Default object scope is `--include-objects=tables,views`.
 - Requesting `routines`, `triggers`, or `events` fails fast in `v1` (reserved for `v2`).
 - `--idempotent` is reserved for `v2` and currently fails fast in `v1`.
+- Default transport policy is `--tls-mode=required`; using `--tls-mode=preferred` is explicit opt-in and warns that plaintext fallback is allowed.
 
 Compatibility profile selection:
 - `dbmigrate plan --source "<dsn>" --dest "<dsn>" --downgrade-profile strict-lts`

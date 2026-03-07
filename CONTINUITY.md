@@ -22,10 +22,11 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/fix/v1-prA-safety-hardening` (rebased from `main`).
+  - Current branch: `codex/fix/v1-prB-tls-default-required` (rebased from updated `main`).
   - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
   - PR `#75` (`chore: automate v1 release gate execution`) is merged.
   - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and pending merge.
+  - PR `#77` (`fix: harden v1 safety defaults and parsing`) is merged.
   - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
   - Baseline prior state is merged through PR `#73` on `main`.
   - Three new review inputs are present and untracked:
@@ -41,14 +42,26 @@ Last updated: 2026-03-07
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
-  - External review triage accepted by user; next execution wave is PR A safety hardening:
-    - strict config decoding
-    - global flag split parsing hardening
-    - secure artifact file permissions
-    - DSN validation aligned with connector parser
-  - User approved remote actions (push + PR creation) for PR A branch.
-  - PR `#77` is open for PR A (`fix: harden v1 safety defaults and parsing`).
+  - External review triage accepted by user; next execution wave is PR B TLS hardening:
+    - safer default TLS mode
+    - explicit operator messaging for downgrade-capable mode
+    - docs/tests alignment
+  - User approved remote actions (push + PR creation) for PR B branch.
+  - PR `#78` is open for PR B (`fix: default tls mode to required`).
 - Done:
+  - Implemented PR B TLS hardening on `codex/fix/v1-prB-tls-default-required`:
+    - default global `--tls-mode` changed from `preferred` to `required`
+    - runtime warning added when operators explicitly choose `--tls-mode=preferred` because plaintext fallback is allowed
+    - docs aligned in `README.md`, `docs/operators-guide.md`, and `docs/security.md`
+  - Added PR B tests:
+    - default `tls-mode=required` assertion in `internal/config/runtime_test.go`
+    - explicit warning behavior for `--tls-mode=preferred` in `internal/cli/cli_test.go`
+  - Validation passed:
+    - `go test ./internal/config ./internal/cli`
+    - `go test ./...`
+  - Pushed `codex/fix/v1-prB-tls-default-required` to `origin`.
+  - Opened PR `#78` against `main`.
+  - PR `#77` merged into `main` and local `main` synced.
   - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
     - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
     - global flag split hardening with fail-fast on missing global flag values in `internal/cli/cli.go`
@@ -63,7 +76,7 @@ Last updated: 2026-03-07
     - `go test ./internal/config ./internal/cli ./internal/commands`
     - `go test ./...`
   - Pushed `codex/fix/v1-prA-safety-hardening` to `origin`.
-  - Opened PR `#77` against `main`.
+  - Opened PR `#77` against `main` (now merged).
   - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
   - Added new release gate entrypoint:
     - `scripts/run-v1-release-gate.sh`
@@ -194,9 +207,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Wait for CI and review feedback on PR `#77`.
+  - Wait for CI and review feedback on PR `#78`.
 - Next:
-  - Merge PR `#77` once checks are green and user confirms.
+  - Merge PR `#78` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):

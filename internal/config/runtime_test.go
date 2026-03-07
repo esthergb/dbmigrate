@@ -59,7 +59,6 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 		"--source", "mysql://src",
 		"--dest", "mysql://dst",
 		"--concurrency", "8",
-		"--tls-mode", "preferred",
 	}
 	if err := fs.Parse(args); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
@@ -80,5 +79,8 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 	}
 	if len(cfg.ExcludeDatabases) == 0 {
 		t.Fatal("expected default excluded databases")
+	}
+	if cfg.TLSMode != "required" {
+		t.Fatalf("expected default tls-mode required, got %q", cfg.TLSMode)
 	}
 }

@@ -65,7 +65,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.DryRunMode, "dry-run-mode", "plan", "dry-run behavior: plan, sandbox")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "verbose logs")
 	fs.BoolVar(&cfg.JSON, "json", false, "JSON output mode")
-	fs.StringVar(&cfg.TLSMode, "tls-mode", "preferred", "TLS mode: disabled, preferred, required")
+	fs.StringVar(&cfg.TLSMode, "tls-mode", "required", "TLS mode: disabled, preferred, required")
 	fs.StringVar(&cfg.CAFile, "ca-file", "", "TLS CA file")
 	fs.StringVar(&cfg.CertFile, "cert-file", "", "TLS client cert file")
 	fs.StringVar(&cfg.KeyFile, "key-file", "", "TLS client key file")
