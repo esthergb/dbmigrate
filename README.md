@@ -168,6 +168,11 @@ dbmigrate migrate --source "mysql://..." --dest "mysql://..." --chunk-size 1000
 
 Schema apply behavior:
 - View DDL `DEFINER=` clauses from source are sanitized to `DEFINER=CURRENT_USER` during apply to avoid orphan/unknown definer failures on destination.
+- Intra-database foreign-key cycles are not auto-rewritten in `v1`; schema/data baseline fails fast and requires a manual post-step for cyclic constraints.
+
+State artifact behavior:
+- `dbmigrate` enforces a single-writer lock per `--state-dir`; concurrent `plan`/`migrate`/`replicate`/`verify` runs against the same directory fail fast instead of racing checkpoint/report artifacts.
+- If a process crashes and leaves `.dbmigrate.lock` behind, dbmigrate fails with the lock path plus owner metadata. v1 recovery is manual by design: verify no live dbmigrate process still owns that state-dir, remove the stale lock file, then rerun.
 
 ## Schema precheck: zero-date defaults
 
@@ -178,6 +183,96 @@ Schema apply behavior:
 - When incompatibilities are found, dbmigrate also writes an auto-fix artifact at:
   - `--state-dir/precheck-zero-date-fixes.sql`
 - This precheck returns incompatibility exit semantics (`exit 2`) rather than runtime crash semantics.
+
+## Schema precheck: foreign-key cycles
+
+- `plan` now detects intra-database foreign-key cycles in selected scope and fails compatibility when found.
+- `v1` does not auto-rewrite cyclic constraints.
+- Recommended remediation:
+  - create/load the affected tables without the cyclic foreign keys
+  - add the cyclic constraints in a controlled manual post-step with `ALTER TABLE`
+
+## Schema precheck: JSON cross-engine and MariaDB-only features
+
+- `plan` now inventories additional documented schema-feature risks:
+  - JSON columns on cross-engine paths
+  - MariaDB `SEQUENCE` objects
+  - MariaDB system-versioned tables (`WITH SYSTEM VERSIONING`)
+- v1 behavior:
+  - cross-engine JSON columns are treated as incompatible
+  - MariaDB sequences are incompatible on non-MariaDB destinations
+  - MariaDB system-versioned tables are incompatible on non-MariaDB destinations
+  - system-versioned tables still emit warnings inside MariaDB-only lanes because replication/binlog semantics need careful rehearsal
+
+## Schema precheck: identifier portability and parser drift
+
+- `plan` now inventories identifier-portability risks that often surface only after version or engine changes:
+  - identifiers that collide with destination reserved words
+  - mixed-case database/table/view names across `lower_case_table_names` boundaries
+  - case-fold collisions such as `Orders` and `orders`
+  - view definitions that depend on SQL-mode parser behavior (`ANSI_QUOTES`, `PIPES_AS_CONCAT`, `NO_BACKSLASH_ESCAPES`)
+- `migrate` fails on the same incompatibilities before schema apply.
+- Current v1 policy:
+  - identifiers that become newly reserved on the destination are incompatible
+  - identifiers already reserved on both source and destination stay warning-level, because legal quoted schemas can still exist
+  - `lower_case_table_names` mismatches plus case-fold collisions are incompatible
+  - mixed-case names become incompatible when either side uses case-folding semantics
+  - parser-sensitive view definitions fail until the view is rewritten or SQL-mode semantics are aligned
+
+## Replication precheck: cross-engine GTID boundary inventory
+
+- `plan` now inventories cross-engine continuity boundary evidence for replication lanes:
+  - source/destination GTID state
+  - source `log_bin`
+  - source `binlog_format`
+  - MySQL -> MariaDB row-event settings such as `binlog_row_value_options` and `binlog_transaction_compression`
+- Current v1 policy:
+  - cross-engine GTID state is reported as a warning class, not as the resume contract
+  - v1 cross-engine continuity must still use file/position, not GTID auto-position
+  - boundary warnings remain visible in `plan` even when baseline migration itself is otherwise compatible
+
+## Replication precheck: source binlog readiness
+
+- `plan` now inventories source replication-readiness settings used by `replicate`:
+  - `log_bin`
+  - `binlog_format`
+  - `binlog_row_image`
+  - current binary log handoff position when visible
+- Current v1 policy:
+  - these findings are warning-level in `plan`
+  - `replicate` still enforces them as hard runtime gates
+  - use `plan` to detect the misconfiguration earlier, not to downgrade the runtime safety fence
+
+## Temporal precheck: time-zone portability
+
+- `plan` now inventories:
+  - source/destination `system_time_zone`
+  - source/destination global/session `time_zone`
+  - tables containing `TIMESTAMP` and `DATETIME`
+  - tables that mix both types
+- Current v1 policy:
+  - time-zone drift and mixed `TIMESTAMP`/`DATETIME` semantics are warning-level portability findings
+  - they do not block baseline migration automatically
+  - they must be reviewed before claiming application-level temporal compatibility
+
+## Data precheck: stable keys and representation-sensitive tables
+
+- `plan` now inventories:
+  - tables without a primary key or non-null unique key
+  - representation-sensitive tables containing approximate numerics, temporal columns, JSON, or collation-sensitive text
+- Current v1 policy:
+  - keyless tables are incompatible because live baseline migration and deterministic verify modes depend on stable keys
+  - representation-sensitive tables stay warning-level and require canonicalized verify evidence
+
+## Manual evidence findings
+
+- `plan` now also emits warning-level findings for documented classes that cannot be proven from metadata alone:
+  - backup/restore usability evidence
+  - metadata-lock runbook readiness
+  - transaction-shape rehearsal
+  - dump/import tool skew review
+  - view definer rewrite review when views are in scope
+  - source grant inventory hints for replication workflows
 
 ## Incremental replication baseline
 
@@ -197,6 +292,7 @@ Replication mode selection:
 Replication start selection:
 - `--start-from=auto` (default) uses checkpoint/resume behavior.
 - `--start-from=binlog-file:pos` requires `--resume=false` plus explicit `--start-file` and `--start-pos`.
+- `--start-file` must be a bare binlog filename; path-like values and invalid characters are rejected before connect/apply.
 - `--start-from=gtid` is reserved for `v2` and currently fails fast with explicit guidance.
 
 Replication window control:
@@ -260,7 +356,7 @@ Current report behavior:
 - Includes remediation proposals from incompatible precheck and verify-data artifacts when present.
 - Report output distinguishes security handling for conflict samples:
   - redacted by default
-  - plain-text only when explicitly requested
+  - plain-text only when explicitly requested with `--include-sensitive-artifacts`
 - Fails by default (`exit 2`) when report status is `attention_required`. Use `--fail-on-conflict=false` to emit report without failing.
 
 ## Verification modes
@@ -286,7 +382,7 @@ Verify data-mode semantics in `v1`:
 - `sample`: bounded sample only (`--sample-size`), intended for fast triage.
 - `hash`: full-table deterministic hash with bounded memory (chunked/streaming).
 - `full-hash`: full-table deterministic hash with stricter chunked streaming aggregation (not an alias of `hash`).
-- `hash` and `full-hash` fail fast when a table has no primary key or non-null unique key (stable order required for deterministic replay-safe hashing).
+- `sample`, `hash`, and `full-hash` fail fast when a table has no primary key or non-null unique key (stable order required for deterministic replay-safe hashing).
 
 ## Configuration file support (phase 2)
 

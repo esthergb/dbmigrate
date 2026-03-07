@@ -173,3 +173,13 @@ func TestIncompatibleStableKeyError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestIncompatibleStableSampleKeyError(t *testing.T) {
+	err := incompatibleStableSampleKeyError("app", "events")
+	if err == nil {
+		t.Fatal("expected incompatible stable sample key error")
+	}
+	if !strings.Contains(err.Error(), "incompatible_for_v1_deterministic_sample") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

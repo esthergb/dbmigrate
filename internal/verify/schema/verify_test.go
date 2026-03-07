@@ -24,6 +24,17 @@ func TestNormalizeCreateStatementIgnoresDefinerDifferences(t *testing.T) {
 	}
 }
 
+func TestNormalizeCreateStatementPreservesQuotedCase(t *testing.T) {
+	left := "CREATE VIEW `v_users` AS SELECT 'KeepMe' AS `Label`"
+	right := "CREATE VIEW `v_users` AS SELECT 'keepme' AS `Label`"
+
+	leftNormalized := normalizeCreateStatement(left)
+	rightNormalized := normalizeCreateStatement(right)
+	if leftNormalized == rightNormalized {
+		t.Fatalf("expected quoted literal case drift to remain visible\nleft=%q\nright=%q", leftNormalized, rightNormalized)
+	}
+}
+
 func TestDiffObjectMaps(t *testing.T) {
 	source := map[string]objectDef{
 		"table:users": {

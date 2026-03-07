@@ -44,92 +44,173 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 		return writeResult(out, cfg, "plan", "dry-run", "dry-run: compatibility precheck requires connectivity and is skipped")
 	}
 
-	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect source: %w", err)
-	}
-	defer func() {
-		_ = sourceDB.Close()
-	}()
+	return withStateDirLock(cfg, func() error {
+		sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return fmt.Errorf("connect source: %w", err)
+		}
+		defer func() {
+			_ = sourceDB.Close()
+		}()
 
-	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect destination: %w", err)
-	}
-	defer func() {
-		_ = destDB.Close()
-	}()
+		destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return fmt.Errorf("connect destination: %w", err)
+		}
+		defer func() {
+			_ = destDB.Close()
+		}()
 
-	sourceVersion, err := queryServerVersion(ctx, sourceDB)
-	if err != nil {
-		return fmt.Errorf("detect source version: %w", err)
-	}
-	destVersion, err := queryServerVersion(ctx, destDB)
-	if err != nil {
-		return fmt.Errorf("detect destination version: %w", err)
-	}
+		sourceVersion, err := queryServerVersion(ctx, sourceDB)
+		if err != nil {
+			return fmt.Errorf("detect source version: %w", err)
+		}
+		destVersion, err := queryServerVersion(ctx, destDB)
+		if err != nil {
+			return fmt.Errorf("detect destination version: %w", err)
+		}
 
-	report := compat.Evaluate(
-		compat.ParseInstance(sourceVersion),
-		compat.ParseInstance(destVersion),
-		cfg.Databases,
-		cfg.DowngradeProfile,
-	)
+		sourceInstance := compat.ParseInstance(sourceVersion)
+		destInstance := compat.ParseInstance(destVersion)
 
-	precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
-	if err != nil {
-		return fmt.Errorf("schema precheck failed: %w", err)
-	}
-	if len(precheckReport.Findings) > 0 {
-		report.Findings = append(report.Findings, precheckReport.Findings...)
-	}
-	if precheckReport.Incompatible {
-		report.Compatible = false
-	}
-
-	pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
-	if err != nil {
-		return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
-	}
-	if len(pluginReport.Findings) > 0 {
-		report.Findings = append(report.Findings, pluginReport.Findings...)
-	}
-	if pluginReport.Incompatible {
-		report.Compatible = false
-	}
-
-	invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
-	if err != nil {
-		return fmt.Errorf("invisible/gipk precheck failed: %w", err)
-	}
-	if len(invisibleReport.Findings) > 0 {
-		report.Findings = append(report.Findings, invisibleReport.Findings...)
-	}
-	if invisibleReport.Incompatible {
-		report.Compatible = false
-	}
-
-	collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
-	if err != nil {
-		return fmt.Errorf("collation precheck failed: %w", err)
-	}
-	if len(collationReport.Findings) > 0 {
-		report.Findings = append(report.Findings, collationReport.Findings...)
-	}
-	if collationReport.Incompatible {
-		report.Compatible = false
-	}
-
-	if err := writePlanReport(out, cfg, report); err != nil {
-		return err
-	}
-	if !report.Compatible {
-		return WithExitCode(
-			ExitCodeDiff,
-			errors.New("compatibility check failed; see detailed report with remediation proposals"),
+		report := compat.Evaluate(
+			sourceInstance,
+			destInstance,
+			cfg.Databases,
+			cfg.DowngradeProfile,
 		)
-	}
-	return nil
+
+		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("schema precheck failed: %w", err)
+		}
+		if len(precheckReport.Findings) > 0 {
+			report.Findings = append(report.Findings, precheckReport.Findings...)
+		}
+		if precheckReport.Incompatible {
+			report.Compatible = false
+		}
+
+		pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
+		}
+		if len(pluginReport.Findings) > 0 {
+			report.Findings = append(report.Findings, pluginReport.Findings...)
+		}
+		if pluginReport.Incompatible {
+			report.Compatible = false
+		}
+
+		invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("invisible/gipk precheck failed: %w", err)
+		}
+		if len(invisibleReport.Findings) > 0 {
+			report.Findings = append(report.Findings, invisibleReport.Findings...)
+		}
+		if invisibleReport.Incompatible {
+			report.Compatible = false
+		}
+
+		collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("collation precheck failed: %w", err)
+		}
+		if len(collationReport.Findings) > 0 {
+			report.Findings = append(report.Findings, collationReport.Findings...)
+		}
+		if collationReport.Incompatible {
+			report.Compatible = false
+		}
+
+		schemaFeatureReport, err := runSchemaFeaturePrecheck(ctx, sourceDB, sourceInstance, destInstance, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("schema feature precheck failed: %w", err)
+		}
+		if len(schemaFeatureReport.Findings) > 0 {
+			report.Findings = append(report.Findings, schemaFeatureReport.Findings...)
+		}
+		if schemaFeatureReport.Incompatible {
+			report.Compatible = false
+		}
+
+		identifierReport, err := runIdentifierPortabilityPrecheck(ctx, sourceDB, destDB, sourceInstance, destInstance, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("identifier portability precheck failed: %w", err)
+		}
+		if len(identifierReport.Findings) > 0 {
+			report.Findings = append(report.Findings, identifierReport.Findings...)
+		}
+		if identifierReport.Incompatible {
+			report.Compatible = false
+		}
+
+		fkCycleReport, err := runForeignKeyCyclePrecheck(ctx, sourceDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("foreign-key cycle precheck failed: %w", err)
+		}
+		if len(fkCycleReport.Findings) > 0 {
+			report.Findings = append(report.Findings, fkCycleReport.Findings...)
+		}
+		if fkCycleReport.IssueCount > 0 {
+			report.Compatible = false
+		}
+
+		replicationBoundaryReport, err := runReplicationBoundaryPrecheck(ctx, sourceDB, destDB, sourceInstance, destInstance)
+		if err != nil {
+			return fmt.Errorf("replication boundary precheck failed: %w", err)
+		}
+		if len(replicationBoundaryReport.Findings) > 0 {
+			report.Findings = append(report.Findings, replicationBoundaryReport.Findings...)
+		}
+
+		replicationReadinessReport, err := runReplicationReadinessPrecheck(ctx, sourceDB, destDB, sourceInstance, destInstance)
+		if err != nil {
+			return fmt.Errorf("replication readiness precheck failed: %w", err)
+		}
+		if len(replicationReadinessReport.Findings) > 0 {
+			report.Findings = append(report.Findings, replicationReadinessReport.Findings...)
+		}
+
+		timezoneReport, err := runTimezonePortabilityPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases, sourceInstance, destInstance)
+		if err != nil {
+			return fmt.Errorf("timezone portability precheck failed: %w", err)
+		}
+		if len(timezoneReport.Findings) > 0 {
+			report.Findings = append(report.Findings, timezoneReport.Findings...)
+		}
+
+		dataShapeReport, err := runDataShapePrecheck(ctx, sourceDB, cfg.Databases, cfg.ExcludeDatabases)
+		if err != nil {
+			return fmt.Errorf("data-shape precheck failed: %w", err)
+		}
+		if len(dataShapeReport.Findings) > 0 {
+			report.Findings = append(report.Findings, dataShapeReport.Findings...)
+		}
+		if dataShapeReport.Incompatible {
+			report.Compatible = false
+		}
+
+		manualEvidenceReport, err := runManualEvidencePrecheck(ctx, sourceDB, sourceInstance, destInstance, hasObject(cfg.IncludeObjects, "views"))
+		if err != nil {
+			return fmt.Errorf("manual evidence precheck failed: %w", err)
+		}
+		if len(manualEvidenceReport.Findings) > 0 {
+			report.Findings = append(report.Findings, manualEvidenceReport.Findings...)
+		}
+
+		if err := writePlanReport(out, cfg, report); err != nil {
+			return err
+		}
+		if !report.Compatible {
+			return WithExitCode(
+				ExitCodeDiff,
+				errors.New("compatibility check failed; see detailed report with remediation proposals"),
+			)
+		}
+		return nil
+	})
 }
 
 func queryServerVersion(ctx context.Context, conn *sql.DB) (string, error) {

@@ -92,8 +92,45 @@ func TestRunReportJSONIncludesArtifactsAndProposals(t *testing.T) {
 	if len(payload.Proposals) != 2 {
 		t.Fatalf("unexpected proposals length: %d", len(payload.Proposals))
 	}
-	if !strings.Contains(strings.Join(payload.Proposals, " | "), "plain-text") {
+	if !payload.Summary.ConflictOutputRedacted {
+		t.Fatal("expected report output to redact plain conflict samples by default")
+	}
+	if len(payload.Summary.ReplicationConflictReport.RowDiffSample) != 0 {
+		t.Fatalf("expected row diff sample to be redacted from report output, got %#v", payload.Summary.ReplicationConflictReport.RowDiffSample)
+	}
+	if !strings.Contains(strings.Join(payload.Proposals, " | "), "report output redacted plain-text conflict samples by default") {
 		t.Fatalf("expected plain-text conflict proposal, got %#v", payload.Proposals)
+	}
+}
+
+func TestRunReportJSONCanIncludeSensitiveArtifacts(t *testing.T) {
+	tmp := t.TempDir()
+	conflictPath := filepath.Join(tmp, "replication-conflict-report.json")
+
+	conflictReport := state.NewReplicationConflictReport()
+	conflictReport.GeneratedAt = time.Date(2026, 3, 5, 12, 6, 0, 0, time.UTC)
+	conflictReport.FailureType = "schema_drift"
+	conflictReport.Message = "apply event failed"
+	conflictReport.RowDiffSample = []string{"name:old->new"}
+	if err := state.SaveReplicationConflictReport(conflictPath, conflictReport); err != nil {
+		t.Fatalf("save conflict report: %v", err)
+	}
+
+	var out bytes.Buffer
+	_ = runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, []string{"--fail-on-conflict=false", "--include-sensitive-artifacts"}, &out)
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Summary.ConflictOutputRedacted {
+		t.Fatal("did not expect sensitive output redaction when explicitly requested")
+	}
+	if len(payload.Summary.ReplicationConflictReport.RowDiffSample) != 1 {
+		t.Fatalf("expected row diff sample to remain visible, got %#v", payload.Summary.ReplicationConflictReport.RowDiffSample)
 	}
 }
 

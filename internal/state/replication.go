@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -75,22 +74,10 @@ func SaveReplicationCheckpoint(path string, checkpoint ReplicationCheckpoint) er
 		checkpoint.ApplyDDL = "warn"
 	}
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir replication checkpoint dir: %w", err)
-	}
-
 	raw, err := json.MarshalIndent(checkpoint, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal replication checkpoint: %w", err)
 	}
 
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, raw, 0o600); err != nil {
-		return fmt.Errorf("write replication checkpoint temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("replace replication checkpoint: %w", err)
-	}
-	return nil
+	return writePrivateFileAtomic(path, raw)
 }

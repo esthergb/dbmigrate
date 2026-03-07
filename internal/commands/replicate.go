@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"unicode"
 
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/db"
@@ -85,76 +86,78 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		)
 	}
 
-	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect source: %w", err)
-	}
-	defer func() {
-		_ = sourceDB.Close()
-	}()
+	return withStateDirLock(cfg, func() error {
+		sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return fmt.Errorf("connect source: %w", err)
+		}
+		defer func() {
+			_ = sourceDB.Close()
+		}()
 
-	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect destination: %w", err)
-	}
-	defer func() {
-		_ = destDB.Close()
-	}()
+		destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return fmt.Errorf("connect destination: %w", err)
+		}
+		defer func() {
+			_ = destDB.Close()
+		}()
 
-	summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
-		ApplyDDL:       opts.ApplyDDL,
-		ConflictPolicy: opts.ConflictPolicy,
-		MaxEvents:      opts.MaxEvents,
-		MaxLagSeconds:  opts.MaxLagSeconds,
-		SourceServerID: uint32(opts.SourceServerID),
-		Idempotent:     opts.Idempotent,
-		ConflictValues: opts.ConflictValues,
-		Resume:         opts.Resume,
-		StartFile:      opts.StartFile,
-		StartPos:       uint32(opts.StartPos),
-		SourceDSN:      cfg.Source,
-		SourceTLSMode:  cfg.TLSMode,
-		SourceCAFile:   cfg.CAFile,
-		SourceCertFile: cfg.CertFile,
-		SourceKeyFile:  cfg.KeyFile,
+		summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
+			ApplyDDL:       opts.ApplyDDL,
+			ConflictPolicy: opts.ConflictPolicy,
+			MaxEvents:      opts.MaxEvents,
+			MaxLagSeconds:  opts.MaxLagSeconds,
+			SourceServerID: uint32(opts.SourceServerID),
+			Idempotent:     opts.Idempotent,
+			ConflictValues: opts.ConflictValues,
+			Resume:         opts.Resume,
+			StartFile:      opts.StartFile,
+			StartPos:       uint32(opts.StartPos),
+			SourceDSN:      cfg.Source,
+			SourceTLSMode:  cfg.TLSMode,
+			SourceCAFile:   cfg.CAFile,
+			SourceCertFile: cfg.CertFile,
+			SourceKeyFile:  cfg.KeyFile,
+		})
+		if err != nil {
+			return fmt.Errorf("replicate run failed: %w", err)
+		}
+
+		return writeResult(
+			out,
+			cfg,
+			"replicate",
+			"ok",
+			fmt.Sprintf(
+				"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d source_server_id=%d conflict_values=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
+				summary.SourceLogBin,
+				summary.SourceFormat,
+				summary.SourceRowImage,
+				summary.StartFile,
+				summary.StartPos,
+				summary.SourceEndFile,
+				summary.SourceEndPos,
+				summary.EndFile,
+				summary.EndPos,
+				summary.AppliedEvents,
+				summary.Shape.TransactionsSeen,
+				summary.Shape.TransactionsApplied,
+				summary.Shape.MaxTransactionEvents,
+				summary.Shape.RiskLevel,
+				strings.Join(summary.Shape.RiskSignals, ","),
+				opts.ReplicationMode,
+				opts.StartFrom,
+				opts.MaxEvents,
+				opts.MaxLagSeconds,
+				opts.SourceServerID,
+				opts.ConflictValues,
+				summary.ApplyDDL,
+				summary.ConflictPolicy,
+				summary.CheckpointFile,
+			),
+		)
 	})
-	if err != nil {
-		return fmt.Errorf("replicate run failed: %w", err)
-	}
-
-	return writeResult(
-		out,
-		cfg,
-		"replicate",
-		"ok",
-		fmt.Sprintf(
-			"replication checkpoint updated: source(log_bin=%v format=%s row_image=%s) start=%s:%d source_end=%s:%d applied_end=%s:%d applied_events=%d tx_shape(seen=%d applied=%d max_events=%d risk=%s signals=%s) replication_mode=%s start_from=%s max_events=%d max_lag_seconds=%d source_server_id=%d conflict_values=%s apply_ddl=%s conflict_policy=%s checkpoint=%s",
-			summary.SourceLogBin,
-			summary.SourceFormat,
-			summary.SourceRowImage,
-			summary.StartFile,
-			summary.StartPos,
-			summary.SourceEndFile,
-			summary.SourceEndPos,
-			summary.EndFile,
-			summary.EndPos,
-			summary.AppliedEvents,
-			summary.Shape.TransactionsSeen,
-			summary.Shape.TransactionsApplied,
-			summary.Shape.MaxTransactionEvents,
-			summary.Shape.RiskLevel,
-			strings.Join(summary.Shape.RiskSignals, ","),
-			opts.ReplicationMode,
-			opts.StartFrom,
-			opts.MaxEvents,
-			opts.MaxLagSeconds,
-			opts.SourceServerID,
-			opts.ConflictValues,
-			summary.ApplyDDL,
-			summary.ConflictPolicy,
-			summary.CheckpointFile,
-		),
-	)
 }
 
 func parseReplicateOptions(args []string) (replicateOptions, error) {
@@ -212,6 +215,9 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 			return replicateOptions{}, errors.New("--start-file is required when --start-from=binlog-file:pos")
 		}
 	}
+	if err := validateBinlogFileName(opts.StartFile); err != nil {
+		return replicateOptions{}, err
+	}
 	switch opts.ApplyDDL {
 	case "ignore", "apply", "warn":
 		// valid
@@ -240,4 +246,29 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		return replicateOptions{}, errors.New("source-server-id must be <= 4294967295")
 	}
 	return opts, nil
+}
+
+func validateBinlogFileName(name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil
+	}
+	if len(trimmed) > 255 {
+		return errors.New("start-file must be <= 255 characters")
+	}
+	if strings.Contains(trimmed, "..") || strings.ContainsAny(trimmed, `/\`) {
+		return errors.New("start-file must be a bare binlog filename without path traversal")
+	}
+	for _, r := range trimmed {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		switch r {
+		case '.', '_', '-':
+			continue
+		default:
+			return fmt.Errorf("start-file contains invalid character %q", r)
+		}
+	}
+	return nil
 }

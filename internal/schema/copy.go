@@ -351,10 +351,23 @@ func orderTableNamesByForeignKeys(ctx context.Context, source *sql.DB, databaseN
 		return nil, err
 	}
 
-	return sortTableNamesByDependencies(tableNames, dependencies), nil
+	ordered, cyclic := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	if len(cyclic) > 0 {
+		return nil, fmt.Errorf(
+			"incompatible_for_v1_foreign_key_cycle: %s contains cyclic foreign keys across tables %s; create tables without the cyclic constraints, then add those constraints in a manual post-step",
+			databaseName,
+			strings.Join(cyclic, ", "),
+		)
+	}
+	return ordered, nil
 }
 
 func sortTableNamesByDependencies(tableNames []string, dependencies map[string]map[string]struct{}) []string {
+	ordered, _ := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	return ordered
+}
+
+func sortTableNamesByDependenciesDetailed(tableNames []string, dependencies map[string]map[string]struct{}) ([]string, []string) {
 	remainingDependencies := make(map[string]map[string]struct{}, len(tableNames))
 	dependents := make(map[string][]string, len(tableNames))
 	for _, tableName := range tableNames {
@@ -397,10 +410,9 @@ func sortTableNamesByDependencies(tableNames []string, dependencies map[string]m
 	}
 
 	if len(ordered) == len(tableNames) {
-		return ordered
+		return ordered, nil
 	}
 
-	// Cycles (or unresolved dependencies) are appended deterministically.
 	remaining := make([]string, 0, len(tableNames)-len(ordered))
 	for _, tableName := range tableNames {
 		if _, seen := processed[tableName]; !seen {
@@ -408,7 +420,7 @@ func sortTableNamesByDependencies(tableNames []string, dependencies map[string]m
 		}
 	}
 	sort.Strings(remaining)
-	return append(ordered, remaining...)
+	return append(ordered, remaining...), remaining
 }
 
 func fetchCreateStatement(ctx context.Context, source *sql.DB, query string) (string, error) {
@@ -527,7 +539,7 @@ func rewriteSchemaStatementForSandbox(statement string, sourceDatabase string, s
 	}
 	sourceQualified := quoteIdentifier(sourceDatabase) + "."
 	sandboxQualified := quoteIdentifier(sandboxDatabase) + "."
-	return strings.ReplaceAll(statement, sourceQualified, sandboxQualified)
+	return rewriteQualifiedDatabaseReference(statement, sourceQualified, sandboxQualified)
 }
 
 func sanitizeCreateStatementForApply(statement string) string {
@@ -535,4 +547,65 @@ func sanitizeCreateStatementForApply(statement string) string {
 		return statement
 	}
 	return definerClauseRe.ReplaceAllString(statement, "DEFINER=CURRENT_USER")
+}
+
+func rewriteQualifiedDatabaseReference(statement string, sourceQualified string, sandboxQualified string) string {
+	var out strings.Builder
+	out.Grow(len(statement))
+
+	inSingle := false
+	inDouble := false
+	inLineComment := false
+	inBlockComment := false
+
+	for i := 0; i < len(statement); i++ {
+		if inLineComment {
+			out.WriteByte(statement[i])
+			if statement[i] == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+		if inBlockComment {
+			out.WriteByte(statement[i])
+			if statement[i] == '*' && i+1 < len(statement) && statement[i+1] == '/' {
+				out.WriteByte(statement[i+1])
+				i++
+				inBlockComment = false
+			}
+			continue
+		}
+		if !inSingle && !inDouble {
+			if statement[i] == '#' {
+				out.WriteByte(statement[i])
+				inLineComment = true
+				continue
+			}
+			if statement[i] == '-' && i+2 < len(statement) && statement[i+1] == '-' && (statement[i+2] == ' ' || statement[i+2] == '\t' || statement[i+2] == '\n') {
+				out.WriteString("--")
+				i++
+				inLineComment = true
+				continue
+			}
+			if statement[i] == '/' && i+1 < len(statement) && statement[i+1] == '*' {
+				out.WriteString("/*")
+				i++
+				inBlockComment = true
+				continue
+			}
+			if strings.HasPrefix(statement[i:], sourceQualified) {
+				out.WriteString(sandboxQualified)
+				i += len(sourceQualified) - 1
+				continue
+			}
+		}
+		if statement[i] == '\'' && !inDouble {
+			inSingle = !inSingle
+		} else if statement[i] == '"' && !inSingle {
+			inDouble = !inDouble
+		}
+		out.WriteByte(statement[i])
+	}
+
+	return out.String()
 }

@@ -535,7 +535,10 @@ func hashTableByMode(ctx context.Context, queryer sqlQueryer, databaseName strin
 	if err != nil {
 		return "", err
 	}
-	if mode != hashModeSample && len(keyColumns) == 0 {
+	if len(keyColumns) == 0 {
+		if mode == hashModeSample {
+			return "", incompatibleStableSampleKeyError(databaseName, tableName)
+		}
 		return "", incompatibleStableKeyError(databaseName, tableName)
 	}
 
@@ -792,6 +795,14 @@ func keyCursorFromRow(rowValues []any, keyIndexes []int) []any {
 func incompatibleStableKeyError(databaseName string, tableName string) error {
 	return fmt.Errorf(
 		"incompatible_for_v1_deterministic_hash: %s.%s has no primary key or non-null unique key; add a stable key before using hash/full-hash verify modes",
+		databaseName,
+		tableName,
+	)
+}
+
+func incompatibleStableSampleKeyError(databaseName string, tableName string) error {
+	return fmt.Errorf(
+		"incompatible_for_v1_deterministic_sample: %s.%s has no primary key or non-null unique key; add a stable key before using sample verify mode",
 		databaseName,
 		tableName,
 	)

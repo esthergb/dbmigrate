@@ -265,9 +265,16 @@ func ValidateBaselineDataDryRun(ctx context.Context, source *sql.DB, dest *sql.D
 			if len(columns) == 0 {
 				continue
 			}
-			selectSQL := buildSelectSQL(sourceDatabase, tableName, columns)
+			keyColumns, err := listStableKeyColumns(ctx, source, sourceDatabase, tableName)
+			if err != nil {
+				return summary, fmt.Errorf("stable key check for %s.%s: %w", sourceDatabase, tableName, err)
+			}
+			if len(keyColumns) == 0 {
+				return summary, fmt.Errorf("incompatible_for_v1_dry_run_validation: %s.%s has no primary key or non-null unique key; add a stable key before sandbox DML validation", sourceDatabase, tableName)
+			}
+			selectSQL := buildKeysetSelectSQL(sourceDatabase, tableName, columns, keyColumns, false)
 			insertSQL := buildInsertSQL(destDatabase, tableName, columns)
-			if err := validateTableBatchWithRollback(ctx, source, dest, selectSQL, insertSQL, opts.ChunkSize, &summary); err != nil {
+			if err := validateTableBatchWithRollback(ctx, source, dest, selectSQL, insertSQL, opts.ChunkSize, columns, keyColumns, &summary); err != nil {
 				return summary, err
 			}
 		}
@@ -376,10 +383,23 @@ func orderTableNamesByForeignKeys(ctx context.Context, db sqlQueryer, databaseNa
 		return nil, err
 	}
 
-	return sortTableNamesByDependencies(tableNames, dependencies), nil
+	ordered, cyclic := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	if len(cyclic) > 0 {
+		return nil, fmt.Errorf(
+			"incompatible_for_v1_foreign_key_cycle: %s contains cyclic foreign keys across tables %s; baseline copy requires a manual post-step or temporarily relaxed FK enforcement",
+			databaseName,
+			strings.Join(cyclic, ", "),
+		)
+	}
+	return ordered, nil
 }
 
 func sortTableNamesByDependencies(tableNames []string, dependencies map[string]map[string]struct{}) []string {
+	ordered, _ := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	return ordered
+}
+
+func sortTableNamesByDependenciesDetailed(tableNames []string, dependencies map[string]map[string]struct{}) ([]string, []string) {
 	remainingDependencies := make(map[string]map[string]struct{}, len(tableNames))
 	dependents := make(map[string][]string, len(tableNames))
 	for _, tableName := range tableNames {
@@ -422,7 +442,7 @@ func sortTableNamesByDependencies(tableNames []string, dependencies map[string]m
 	}
 
 	if len(ordered) == len(tableNames) {
-		return ordered
+		return ordered, nil
 	}
 
 	remaining := make([]string, 0, len(tableNames)-len(ordered))
@@ -432,7 +452,7 @@ func sortTableNamesByDependencies(tableNames []string, dependencies map[string]m
 		}
 	}
 	sort.Strings(remaining)
-	return append(ordered, remaining...)
+	return append(ordered, remaining...), remaining
 }
 
 func listTableColumns(ctx context.Context, db sqlQueryer, databaseName string, tableName string) ([]string, error) {
@@ -517,42 +537,6 @@ func buildInsertSQL(databaseName string, tableName string, columns []string) str
 		strings.Join(colParts, ", "),
 		strings.Join(placeholders, ", "),
 	)
-}
-
-func fetchBatch(ctx context.Context, db sqlQueryer, selectSQL string, chunkSize int, offset int64, expectedColumns int) ([][]any, error) {
-	rows, err := db.QueryContext(ctx, selectSQL, chunkSize, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	batch := make([][]any, 0, chunkSize)
-	for rows.Next() {
-		rowValues := make([]any, expectedColumns)
-		scanValues := make([]any, expectedColumns)
-		for i := range rowValues {
-			scanValues[i] = &rowValues[i]
-		}
-		if err := rows.Scan(scanValues...); err != nil {
-			return nil, err
-		}
-
-		for i, val := range rowValues {
-			if raw, ok := val.([]byte); ok {
-				copied := make([]byte, len(raw))
-				copy(copied, raw)
-				rowValues[i] = copied
-			}
-		}
-
-		batch = append(batch, rowValues)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return batch, nil
 }
 
 func fetchKeysetBatch(
@@ -649,23 +633,25 @@ func validateTableBatchWithRollback(
 	selectSQL string,
 	insertSQL string,
 	chunkSize int,
+	columns []string,
+	keyColumns []string,
 	summary *DryRunValidationSummary,
 ) error {
-	tx, err := dest.BeginTx(ctx, nil)
-	if err != nil {
-		summary.Failed++
-		return err
-	}
-	offset := int64(0)
+	cursor := make([]any, 0, len(keyColumns))
 	for {
-		batch, err := fetchBatch(ctx, source, selectSQL, chunkSize, offset, countPlaceholders(insertSQL))
+		batch, lastKey, err := fetchKeysetBatch(ctx, source, selectSQL, chunkSize, cursor, columns, keyColumns)
 		if err != nil {
-			_ = tx.Rollback()
 			summary.Failed++
 			return err
 		}
 		if len(batch) == 0 {
 			break
+		}
+
+		tx, err := dest.BeginTx(ctx, nil)
+		if err != nil {
+			summary.Failed++
+			return err
 		}
 		for _, row := range batch {
 			if _, err := tx.ExecContext(ctx, insertSQL, row...); err != nil {
@@ -675,20 +661,16 @@ func validateTableBatchWithRollback(
 			}
 			summary.Validated++
 		}
-		offset += int64(len(batch))
+		if err := tx.Rollback(); err != nil {
+			summary.Failed++
+			return err
+		}
+		cursor = lastKey
 		if len(batch) < chunkSize {
 			break
 		}
 	}
-	if err := tx.Rollback(); err != nil {
-		summary.Failed++
-		return err
-	}
 	return nil
-}
-
-func countPlaceholders(insertSQL string) int {
-	return strings.Count(insertSQL, "?")
 }
 
 func ensureDestinationTablesAreEmpty(ctx context.Context, db *sql.DB, databaseName string, tableNames []string) error {

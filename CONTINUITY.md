@@ -1,8 +1,8 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Deliver `Fast Safe v1 Release Rescue (Strict-LTS)` and clear production blockers with truthful v1 behavior, safe replication semantics, secure defaults, and verified strict-lts readiness.
-  - Success criteria: strict-lts paths remain green; no misleading v1 flags/claims; checkpoint/resume and replication safety constraints are explicit; TLS and artifact handling are safe by default.
+  - Remediate the confirmed issues from the fresh independent review on top of merged `main`, then evolve `plan` into the v1 migration validator that detects every documented incompatibility before execution.
+  - Success criteria: reviewed integrity/security/correctness gaps are fixed on this branch, docs match behavior, `go vet ./...` plus `go test ./...` are green, and the next phase closes remaining gaps so `plan` surfaces all documented incompatibilities.
 - Constraints/Assumptions:
   - English docs.
   - Keep `Instructions.md` tracked.
@@ -18,9 +18,8 @@ Last updated: 2026-03-07
     - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
   - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prH-operation-timeout`.
-  - `main` includes merged PRs through `#83`.
-  - PR `#84` is open: `fix: add global operation timeout support`.
+  - Current branch: `codex/fix/v1-prI-review-remediation`.
+  - Base `main` includes merged PRs through `#84`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -36,6 +35,7 @@ Last updated: 2026-03-07
     - `#81` bounded source-window buffering during binlog read.
     - `#82` explicit source server-id override for binlog replication.
     - `#83` sanitize view definers during schema apply.
+    - `#84` add global operation timeout support.
   - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
   - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds` (merged as `#81`):
     - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
@@ -71,18 +71,57 @@ Last updated: 2026-03-07
   - Validation passed for PR H:
     - `go test ./internal/config ./internal/cli`
     - `go test ./...`
+  - On `codex/fix/v1-prI-review-remediation`, implemented review-driven hardening:
+    - state-dir single-writer lock plus private dir/file permissions and unique atomic temp files
+    - atomic/private writes reused by checkpoint, conflict, verify, collation, and zero-date artifacts
+    - replicate `--start-file` validation for bare binlog filenames only
+    - `report` now redacts plain conflict samples by default; `--include-sensitive-artifacts` is required to emit them
+    - `verify --data-mode sample` now also fails fast on tables without stable keys
+    - schema verify normalization preserves quoted/literal case drift instead of lowercasing everything
+    - sandbox schema rewrite now skips literals/comments instead of blind string replacement
+    - schema/data baseline now fail fast on intra-database FK cycles instead of pretending table ordering makes them safe
+    - dry-run sandbox DML validation now uses stable-key keyset pagination and per-batch rollback scopes
+    - `plan` now detects intra-database FK cycle groups and reports them as v1 incompatibilities before migrate
+    - stale-lock diagnostics now include lock path plus owner metadata and explicit manual recovery guidance
+    - `plan` now inventories cross-engine JSON columns plus MariaDB-only schema features (`SEQUENCE`, `WITH SYSTEM VERSIONING`)
+    - `migrate` fails on the same incompatible schema-feature classes before schema apply
+  - Extended `plan` validator coverage on this branch with additional documented incompatibility inventories:
+    - identifier portability precheck for destination reserved-word drift across databases/tables/views/columns
+    - parser-drift precheck for SQL-mode-sensitive view definitions (`ANSI_QUOTES`, `PIPES_AS_CONCAT`, `NO_BACKSLASH_ESCAPES`)
+    - `lower_case_table_names` portability checks for source/destination mismatch, case-fold collisions, and mixed-case identifiers across case-folding boundaries
+    - cross-engine replication boundary inventory for GTID state, file/position expectations, `log_bin`, `binlog_format`, and MySQL -> MariaDB row-event settings (`binlog_row_value_options`, `binlog_transaction_compression`)
+    - schema `migrate` now fails on incompatible identifier portability / parser-drift findings before schema apply
+    - replication-readiness inventory for source `log_bin`, `binlog_format`, `binlog_row_image`, and current binary-log handoff visibility
+    - temporal/time-zone portability inventory for source/destination `system_time_zone`, global/session `time_zone`, and mixed `TIMESTAMP`/`DATETIME` table usage
+    - data-shape precheck for keyless tables and representation-sensitive tables (approximate numerics, temporal columns, JSON, collation-sensitive text)
+    - manual-evidence findings for documented classes that cannot be proven from live metadata alone (backup/restore usability, metadata-lock runbook, transaction-shape rehearsal, dump-tool skew, view-definer review, replication grant hints)
+    - `migrate` now fails before baseline data copy when selected scope includes keyless tables
+  - Documentation aligned for the new validator slice:
+    - `README.md`
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+    - `docs/risk-checklist.md`
+  - Validation passed on this branch:
+    - `go test ./internal/state ./internal/schema ./internal/data ./internal/verify/schema ./internal/verify/data ./internal/commands`
+    - `go vet ./...`
+    - `go test ./...`
 - Now:
-  - Monitor PR `#84` CI and address failures if they appear.
+  - Confirm whether the active v1 docs now count as fully covered by either machine-validated prechecks or explicit manual-evidence findings.
 - Next:
-  - Merge PR `#84` and continue the next v1 hardening slice.
+  - If accepted, prepare commit/PR for the validator-completeness slice.
+  - If stricter coverage is still required, only cloud-only/managed or rehearsal-artifact-driven classes should remain.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
+  - UNCONFIRMED: whether to add stale-lock detection/lease recovery for `.dbmigrate.lock`, or keep manual cleanup as the explicit v1 tradeoff.
+  - UNCONFIRMED: whether the user wants cloud-only / managed-environment unsupported inventories surfaced in `plan` now, even though `v1` support is self-managed only.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/replicate/binlog/load.go`
-    - `internal/replicate/binlog/load_test.go`
-    - `README.md` (only if flags/behavior need doc updates)
-    - `docs/operators-guide.md` (only if behavior contract changes)
+    - `internal/state/*.go`
+    - `internal/commands/{plan,migrate,verify,replicate,report}*.go`
+    - `internal/{schema,data,verify}/**/*.go`
+    - `README.md`
+    - `docs/operators-guide.md`
+    - `docs/known-problems.md`
+    - `docs/risk-checklist.md`
   - Commands:
-    - `go test ./internal/replicate/binlog`
+    - `go vet ./...`
     - `go test ./...`

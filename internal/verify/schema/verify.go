@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 
 	baseSchema "github.com/esthergb/dbmigrate/internal/schema"
 )
@@ -300,11 +301,51 @@ func normalizeCreateStatement(createSQL string) string {
 	normalized := strings.TrimSpace(createSQL)
 	normalized = strings.TrimSuffix(normalized, ";")
 	normalized = definerRe.ReplaceAllString(normalized, "DEFINER=?")
-	normalized = strings.ReplaceAll(normalized, "`", "")
 	normalized = autoIncrementRe.ReplaceAllString(normalized, "AUTO_INCREMENT=?")
 	normalized = whitespaceRe.ReplaceAllString(normalized, " ")
-	normalized = strings.ToLower(strings.TrimSpace(normalized))
+	normalized = foldUnquotedSQLCase(strings.TrimSpace(normalized))
+	normalized = strings.ReplaceAll(normalized, "`", "")
 	return normalized
+}
+
+func foldUnquotedSQLCase(in string) string {
+	var out strings.Builder
+	out.Grow(len(in))
+
+	inSingle := false
+	inDouble := false
+	inBacktick := false
+	escapeNext := false
+
+	for _, r := range in {
+		switch {
+		case escapeNext:
+			out.WriteRune(r)
+			escapeNext = false
+			continue
+		case r == '\\' && (inSingle || inDouble):
+			out.WriteRune(r)
+			escapeNext = true
+			continue
+		case r == '\'' && !inDouble && !inBacktick:
+			inSingle = !inSingle
+			out.WriteRune(r)
+			continue
+		case r == '"' && !inSingle && !inBacktick:
+			inDouble = !inDouble
+			out.WriteRune(r)
+			continue
+		case r == '`' && !inSingle && !inDouble:
+			inBacktick = !inBacktick
+			out.WriteRune(r)
+			continue
+		case inSingle || inDouble || inBacktick:
+			out.WriteRune(r)
+		default:
+			out.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return out.String()
 }
 
 func sortDiffs(diffs []Diff) {

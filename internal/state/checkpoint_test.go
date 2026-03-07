@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -148,5 +149,23 @@ func TestCheckpointCursorValuesInvalidTypeFails(t *testing.T) {
 	}
 	if _, err := entry.CursorValues(); err == nil {
 		t.Fatal("expected decode failure for unsupported cursor type")
+	}
+}
+
+func TestAcquireDirLockBlocksSecondWriter(t *testing.T) {
+	tmp := t.TempDir()
+
+	lock, err := AcquireDirLock(tmp)
+	if err != nil {
+		t.Fatalf("acquire first lock: %v", err)
+	}
+	defer func() {
+		_ = lock.Release()
+	}()
+
+	if _, err := AcquireDirLock(tmp); err == nil {
+		t.Fatal("expected second dir lock acquisition to fail")
+	} else if !strings.Contains(err.Error(), ".dbmigrate.lock") || !strings.Contains(err.Error(), "remove the stale lock file manually") {
+		t.Fatalf("expected operational stale-lock guidance, got %v", err)
 	}
 }
