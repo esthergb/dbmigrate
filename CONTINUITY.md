@@ -20,6 +20,7 @@ Last updated: 2026-03-07
 - State:
   - Current branch: `codex/fix/v1-prG-view-definer-sanitization`.
   - `main` includes merged PRs through `#82`.
+  - PR `#83` is open: `fix: sanitize view definers during schema apply`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -62,9 +63,9 @@ Last updated: 2026-03-07
     - `go test ./internal/schema`
     - `go test ./...`
 - Now:
-  - Publish PR G after user confirmation (received): push branch + open PR.
+  - Monitor PR `#83` CI and address failures if they appear.
 - Next:
-  - Monitor PR CI and address failures quickly.
+  - Merge PR `#83` and continue the next v1 hardening slice.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
