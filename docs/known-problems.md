@@ -37,6 +37,9 @@ Observed failure patterns:
 - Preflight: detect JSON columns and engine pair; fail-fast in unsupported replication path.
 - Plan warning: recommend explicit conversion (`JSON` -> `TEXT`/`LONGTEXT`) or statement-based migration route where appropriate.
 - Verify mode: mark JSON comparison as potentially non-equivalent across engines unless normalization mode is enabled.
+- Current v1 behavior:
+  - `plan` inventories cross-engine JSON columns and treats them as incompatible
+  - `migrate` fails on the same finding before schema apply
 
 ### 1.2 MariaDB-only features (sequences, temporal system versioning) are not symmetric with MySQL
 
@@ -60,6 +63,10 @@ Observed failure patterns:
 - Default behavior: fail-fast with exact object list and remediation hints.
 - `--apply-ddl` policy gate applied before replaying risky DDL in replication.
 - Replication now fails fast when a replay window mixes DDL and row events, because v1 row replay still depends on live metadata lookup; operators must split windows at DDL boundaries and align schema first.
+- Current v1 behavior:
+  - `plan` inventories MariaDB `SEQUENCE` objects and system-versioned tables
+  - non-MariaDB destinations fail fast on those feature classes
+  - MariaDB-only lanes still receive explicit warnings for system-versioned tables so operators rehearse versioning semantics separately
 
 ### 1.3 MySQL invisible columns, invisible indexes, and generated invisible primary keys drift across downgrade targets
 
@@ -107,6 +114,10 @@ Observed failure patterns:
 - Capability detection: engine/flavor/version + GTID mode at source and destination.
 - Cross-engine default: checkpoint by file/position, not GTID.
 - Plan output: explicit, versioned matrix warning with required settings (`binlog-row-value-options`, `binlog_transaction_compression`) when relevant.
+- Current v1 behavior:
+  - `plan` inventories source/destination GTID state across cross-engine lanes and keeps GTID findings warning-only
+  - cross-engine continuity remains file/position-based in `v1`; GTID is evidence, not the resume contract
+  - MySQL -> MariaDB paths also inventory `log_bin`, `binlog_format`, `binlog_row_value_options`, and `binlog_transaction_compression`
 
 ---
 
@@ -170,6 +181,9 @@ Observed failure patterns:
   - verify artifacts record canonicalization assumptions and representation-sensitive table risk
   - `report` treats real verify diffs as `attention_required`, but keeps warning-only representation risk in `ok`
 - Rehearsal support is provided by `scripts/run-verify-canonicalization-rehearsal.sh`.
+- Current v1 behavior:
+  - `plan` inventories representation-sensitive tables (approximate numerics, temporal columns, JSON, collation-sensitive text)
+  - these findings stay warning-level and are meant to force canonicalized verify/rehearsal review, not to claim byte-identical storage
 
 ### 3.2 Hot baseline copy can miss/duplicate rows with offset pagination
 
@@ -189,7 +203,39 @@ Observed failure patterns:
 - Baseline pagination is keyset-based on stable table keys (primary key or non-null unique key), not offset-based.
 - Resume uses checkpoint cursor state (`key_columns`, typed `last_key_typed` with legacy `last_key` load compatibility) and destination max-key fallback when needed.
 - Tables without stable key fail fast in live baseline mode as incompatible in `v1`.
+- Sandbox dry-run DML validation now uses the same stable-key/keyset contract; keyless tables fail fast instead of relying on unstable offset pagination.
 - Baseline checkpoints capture source binlog watermark (`file:pos`) to preserve baseline->replicate continuity evidence.
+- Current v1 behavior:
+  - `plan` inventories selected tables without a primary key or non-null unique key
+  - keyless tables fail compatibility because v1 live baseline and deterministic verify modes require stable keys
+
+### 3.3 Cyclic foreign keys are not safely auto-replayed in v1 baseline
+
+Observed failure patterns:
+
+- table-order sorting alone cannot create mutually dependent tables and load their rows safely when constraints are cyclic.
+- “best effort” DDL ordering gives a false sense of support and fails late with engine errors.
+
+`dbmigrate` safeguards:
+
+- `plan` inventories intra-database foreign-key dependencies and fails fast when it detects a cycle group.
+- Schema and baseline data copy now fail fast with `incompatible_for_v1_foreign_key_cycle` when intra-database FK cycles are detected.
+- Operators must create/load the affected tables with a controlled manual post-step for the cyclic constraints, or otherwise relax FK enforcement outside dbmigrate before rerunning.
+
+### 3.4 Stale state-dir lock files block reruns after crashes
+
+Observed failure patterns:
+
+- a crashed operator session can leave `.dbmigrate.lock` behind and block later runs against the same `--state-dir`.
+- auto-breaking that lock without proving ownership risks concurrent writers and corrupted checkpoint/report artifacts.
+
+`dbmigrate` safeguards:
+
+- v1 keeps single-writer locking strict and fail-fast.
+- lock errors now include:
+  - the exact lock file path
+  - owner metadata (`pid`, `hostname`, `started_at`, `cwd`) when available
+  - manual recovery guidance to verify no live owner remains before deleting the stale lock file
 
 ---
 
@@ -242,6 +288,11 @@ Observed failure patterns:
 - Plan-time parser scan over object names and definitions against source+destination reserved word sets.
 - Auto-suggestion output for quote/rename remediation.
 - Default behavior for unsafe parser conflicts: fail before migrate/replicate apply.
+- Current v1 behavior:
+  - `plan` inventories database/table/view/column identifiers that collide with destination reserved words
+  - identifiers that become newly reserved on the destination fail fast; identifiers already reserved on both sides stay warning-level portability debt
+  - `plan` scans selected view definitions for parser-sensitive SQL-mode drift (`ANSI_QUOTES`, `PIPES_AS_CONCAT`, `NO_BACKSLASH_ESCAPES`)
+  - `migrate` fails on the same identifier/parser portability findings before schema apply
 
 ---
 
@@ -266,6 +317,9 @@ Observed failure patterns:
 - Preflight enforcement: require/strongly recommend `ROW` for incremental mode.
 - If not `ROW`: limited mode with high-visibility warning and explicit operator opt-in.
 - Compatibility checks for compression and row-value options when MySQL->MariaDB paths require them.
+- Current v1 behavior:
+  - `plan` inventories source `log_bin`, `binlog_format`, `binlog_row_image`, and current binary log handoff visibility as warning-level readiness findings
+  - `replicate` still enforces `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL` as hard runtime gates
 
 ---
 
@@ -316,6 +370,8 @@ Observed failure patterns:
   - derived `risk_level` and `risk_signals`
 - `report` now surfaces transaction-shape remediation proposals instead of treating worker count as the only tuning knob.
 - Operator rehearsal script: `scripts/run-replication-shape-rehearsal.sh`.
+- Current v1 behavior:
+  - `plan` emits explicit warning-level manual-evidence findings for transaction-shape rehearsal instead of pretending metadata can prove this class safe
 
 ### 7.1 Metadata-lock queue amplification during DDL windows
 
@@ -338,6 +394,8 @@ Observed failure patterns:
 - Replication apply classifies DDL lock-timeout failures with metadata-lock wording as `metadata_lock_timeout`, not only `retryable_transaction_error`.
 - Operator rehearsal script: `scripts/run-metadata-lock-scenario.sh`.
 - Runbook guidance prefers blocker identification and waiting-DDL abort decisions over blind retries.
+- Current v1 behavior:
+  - `plan` emits an explicit warning-level metadata-lock runbook finding because this class remains operational, not schema-only
 
 ### 7.2 Backup completion is not restore evidence
 
@@ -358,6 +416,8 @@ Observed failure patterns:
 - Operator rehearsal script: `scripts/run-backup-restore-rehearsal.sh`.
 - Runbooks now distinguish backup completion, artifact validation, and restore usability.
 - Physical backup tooling remains documented as a separate compatibility class rather than being conflated with logical migration success.
+- Current v1 behavior:
+  - `plan` emits an explicit warning-level backup/restore evidence finding because rollback safety cannot be inferred from live SQL metadata
 
 ### 7.3 Session time zone changes make `TIMESTAMP` and `DATETIME` diverge operationally
 
@@ -377,6 +437,9 @@ Observed failure patterns:
 
 - Operator rehearsal script: `scripts/run-timezone-rehearsal.sh`.
 - Runbooks now require explicit review of `system_time_zone`, session `time_zone`, and `TIMESTAMP` versus `DATETIME` semantics before compatibility claims.
+- Current v1 behavior:
+  - `plan` records source/destination `system_time_zone`, global/session `time_zone`, and temporal-table inventory
+  - `plan` emits warning-level findings for environment time-zone drift, mixed `TIMESTAMP`/`DATETIME` tables, and timestamp-heavy tables that deserve explicit review
 
 ---
 
@@ -386,6 +449,10 @@ Observed failure patterns:
   - https://dev.mysql.com/doc/refman/8.4/en/identifier-case-sensitivity.html
 - Upgrade-time lettercase mismatch risk when `lower_case_table_names=1`.
   - https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/upgrade-prerequisites.html
+- Current v1 behavior:
+  - `plan` records source/destination `lower_case_table_names`
+  - `plan` fails on case-fold collisions and on mixed-case identifiers when either side applies case folding
+  - `migrate` fails on the same portability findings before schema apply
 - Trigger/definer upgrade hygiene checks called out in MySQL upgrade prerequisites.
   - https://docs.oracle.com/cd/E17952_01/mysql-8.4-en/upgrade-prerequisites.html
 

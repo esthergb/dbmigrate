@@ -74,6 +74,93 @@ Invisible-column and GIPK precheck:
   - default dump preserves GIPK on MySQL targets that support it
   - `--skip-generated-invisible-primary-key` removes the hidden key from logical dumps entirely
 
+Foreign-key cycle precheck:
+- `plan` inventories intra-database foreign-key dependencies and fails when a cycle group is detected.
+- Schema `migrate` and dry-run sandbox validation fail on the same cycle groups.
+- v1 remediation is manual and explicit:
+  - create/load the affected tables without the cyclic constraints
+  - apply the cyclic `ALTER TABLE ... ADD CONSTRAINT ...` statements as a post-step
+
+Schema-feature precheck:
+- `plan` inventories documented schema-feature incompatibilities that are easy to miss in cross-engine lanes:
+  - JSON columns on cross-engine paths
+  - MariaDB `SEQUENCE` objects
+  - MariaDB system-versioned tables
+- `migrate` fails on the same incompatible feature classes before schema apply.
+- Current v1 policy:
+  - cross-engine JSON columns are treated as incompatible
+  - MariaDB sequences are incompatible on non-MariaDB destinations
+  - MariaDB system-versioned tables are incompatible on non-MariaDB destinations
+  - MariaDB-only versioned tables still emit warnings on MariaDB destinations because replay semantics deserve separate rehearsal
+
+Identifier portability precheck:
+- `plan` inventories identifier/parser portability hazards before schema apply:
+  - identifiers that collide with the destination reserved-word set
+  - `lower_case_table_names` mismatch between source and destination
+  - case-fold collisions (`Orders` vs `orders`)
+  - mixed-case database/table/view names when either side applies case folding
+  - view definitions that depend on SQL-mode parser behavior (`ANSI_QUOTES`, `PIPES_AS_CONCAT`, `NO_BACKSLASH_ESCAPES`)
+- `migrate` fails on the same incompatible identifier-portability findings before schema apply.
+- v1 remediation is explicit:
+  - rename identifiers that become newly reserved on the destination
+  - keep already-reserved identifiers quoted consistently and treat them as warning-level portability debt
+  - normalize mixed-case names before moving across case-folding boundaries
+  - rewrite parser-sensitive views or align SQL-mode semantics before cutover
+
+Replication boundary inventory:
+- `plan` inventories cross-engine continuity boundary state even though `--start-from=gtid` remains reserved for `v2`.
+- Current inventory includes:
+  - source/destination GTID state
+  - source `log_bin`
+  - source `binlog_format`
+  - MySQL -> MariaDB `binlog_row_value_options`
+  - MySQL -> MariaDB `binlog_transaction_compression`
+- v1 interpretation:
+  - cross-engine GTID auto-position is not a supported resume contract
+  - file/position remains the only supported cross-engine continuity boundary
+  - boundary findings stay warning-level so baseline-only migrations are not blocked by replication-only inventory
+
+Replication readiness precheck:
+- `plan` now inventories the same source-side replication readiness settings that `replicate` enforces at runtime:
+  - `log_bin`
+  - `binlog_format`
+  - `binlog_row_image`
+  - current binary log status / file-position handoff when visible
+- Current v1 policy:
+  - these findings stay warning-level in `plan`
+  - `replicate` remains the hard gate and still fails if `log_bin` is off, `binlog_format != ROW`, or `binlog_row_image != FULL`
+  - use the `plan` findings to fix topology readiness before the first incremental rehearsal
+
+Temporal/time-zone portability precheck:
+- `plan` now records:
+  - source/destination `system_time_zone`
+  - source/destination global/session `time_zone`
+  - tables containing `TIMESTAMP` and `DATETIME`
+  - tables that mix both temporal models
+- Current v1 policy:
+  - these findings are warning-level portability inventory
+  - they do not prove or disprove application correctness on their own
+  - they are meant to force explicit review before claiming temporal compatibility across environments
+
+Data-shape precheck:
+- `plan` now inventories:
+  - tables without a primary key or non-null unique key
+  - representation-sensitive tables with approximate numerics, temporal columns, JSON, or collation-sensitive text
+- `migrate` now fails before baseline data copy when selected scope includes keyless tables.
+- v1 interpretation:
+  - keyless tables are incompatible for live baseline and deterministic verify modes
+  - representation-sensitive tables stay warning-level but should drive canonicalized verify and rehearsal choices
+
+Manual-evidence findings:
+- `plan` now emits explicit warning-level findings for documented operational classes that metadata alone cannot certify:
+  - backup/restore usability evidence
+  - metadata-lock runbook readiness
+  - transaction-shape rehearsal
+  - dump/import tool skew review
+  - view-definer rewrite review when views are in scope
+  - source CURRENT_USER() grant inventory hints for replication workflows
+- These findings are not noise. They are the line between “schema looks compatible” and “cutover is actually rehearsed.”
+
 ## Baseline migration execution
 
 - Schema-only:
@@ -85,11 +172,18 @@ Invisible-column and GIPK precheck:
 
 Checkpoint and resume:
 - Baseline data copy writes checkpoint state into `--state-dir` (default `./state`).
+- `dbmigrate` enforces a single-writer lock per `--state-dir`; concurrent `plan`/`migrate`/`replicate`/`verify` runs against the same state directory fail fast instead of racing checkpoint/report artifacts.
+- If a crash leaves `.dbmigrate.lock` behind, v1 recovery is manual by design:
+  - verify no active dbmigrate process still owns that `--state-dir`
+  - remove the stale lock file
+  - rerun the command
 - Use `--resume` to continue from checkpoint state after interruption.
 - Baseline uses consistent source snapshot reads plus keyset pagination (stable PK/unique key order), with typed resume cursors from checkpoint state (`last_key_typed`, legacy `last_key` load-compatible).
 - For live baselines, tables without primary key or non-null unique key fail fast as incompatible in `v1`.
+- Dry-run sandbox DML validation uses the same stable-key/keyset contract; keyless tables fail fast instead of being “validated” with unstable offset scans.
 - Baseline checkpoint artifacts include source watermark (`SHOW MASTER STATUS`/`SHOW BINARY LOG STATUS`) for baseline->replicate continuity evidence.
 - Schema apply sanitizes source view `DEFINER=` clauses to `DEFINER=CURRENT_USER` to reduce cross-environment definer breakage.
+- Intra-database foreign-key cycles are not auto-rewritten in `v1`; baseline requires a manual post-step for cyclic constraints.
 
 ## Verification execution
 
@@ -108,9 +202,9 @@ Verification behavior:
 - Any diff returns non-zero exit code.
 - `--json` emits structured diff details for automation pipelines.
 - `sample` mode hashes only bounded rows (`--sample-size`) and is intended for fast triage.
+- `sample`, `hash`, and `full-hash` require a stable table order (primary key or non-null unique key) and fail fast when absent.
 - `hash` mode performs full-table deterministic hash with bounded memory (chunked streaming).
 - `full-hash` mode performs full-table deterministic hash with stricter chunked streaming aggregation (not an alias of `hash`).
-- `hash` and `full-hash` require a stable table order (primary key or non-null unique key) and fail fast when absent.
 - Hash-based verification now canonicalizes rows before hashing:
   - deterministic ordering uses stable key order where required
   - verify sessions are pinned and normalized to `SET NAMES utf8mb4` plus `time_zone='+00:00'`
@@ -180,11 +274,14 @@ Replication checkpoint behavior:
 - Source preflight gates: `log_bin=ON`, `binlog_format=ROW`, and `binlog_row_image=FULL`.
 - Conflict report JSON includes categorized `failure_type` values (for example `schema_drift`, `conflict_duplicate_key`), `sql_error_code` when surfaced by the destination engine, and contextual samples: `value_sample`, `old_row_sample`, `new_row_sample`, `row_diff_sample`.
 - Conflict report samples are redacted by default; plain-text samples require explicit `--conflict-values=plain`.
+- `--start-file` must be a bare binlog filename; path-like values and invalid characters fail before replication starts.
 
 ## Report generation
 
 - Generate machine-readable report from state artifacts:
   - `dbmigrate report --state-dir ./state --json`
+- Include sensitive conflict samples in output only when explicitly needed:
+  - `dbmigrate report --state-dir ./state --json --include-sensitive-artifacts`
 - Default behavior is fail-fast when conflicts are present (`status=attention_required`), returning non-zero exit.
 - Optional override to keep reporting but not fail the command:
   - `dbmigrate report --state-dir ./state --json --fail-on-conflict=false`

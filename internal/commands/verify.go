@@ -64,179 +64,181 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 		)
 	}
 
-	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect source: %w", err))
-	}
-	defer func() {
-		_ = sourceDB.Close()
-	}()
-
-	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect destination: %w", err))
-	}
-	defer func() {
-		_ = destDB.Close()
-	}()
-
-	includeTables := hasObject(cfg.IncludeObjects, "tables")
-	includeViews := hasObject(cfg.IncludeObjects, "views")
-
-	switch opts.VerifyLevel {
-	case "schema":
-		if !includeTables && !includeViews {
-			return WithExitCode(ExitCodeVerifyFailed, errors.New("schema verification requires tables/views in --include-objects"))
-		}
-
-		summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
-			IncludeDatabases: cfg.Databases,
-			ExcludeDatabases: cfg.ExcludeDatabases,
-			IncludeTables:    includeTables,
-			IncludeViews:     includeViews,
-		})
+	return withStateDirLock(cfg, func() error {
+		sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 		if err != nil {
-			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("schema verification failed: %w", err))
+			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect source: %w", err))
 		}
+		defer func() {
+			_ = sourceDB.Close()
+		}()
 
-		if err := writeSchemaVerifyResult(out, cfg, opts.VerifyLevel, summary); err != nil {
-			return WithExitCode(ExitCodeVerifyFailed, err)
+		destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("connect destination: %w", err))
 		}
-		if len(summary.Diffs) > 0 {
-			return WithExitCode(
-				ExitCodeDiff,
-				fmt.Errorf(
-					"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
-					summary.MissingInDestination,
-					summary.MissingInSource,
-					summary.DefinitionMismatches,
-				),
-			)
-		}
-		return nil
-	case "data":
-		if !includeTables {
-			return WithExitCode(ExitCodeVerifyFailed, errors.New("data verification requires tables in --include-objects"))
-		}
+		defer func() {
+			_ = destDB.Close()
+		}()
 
-		switch opts.DataMode {
-		case "count":
-			summary, err := dataVerify.VerifyCount(ctx, sourceDB, destDB, dataVerify.Options{
+		includeTables := hasObject(cfg.IncludeObjects, "tables")
+		includeViews := hasObject(cfg.IncludeObjects, "views")
+
+		switch opts.VerifyLevel {
+		case "schema":
+			if !includeTables && !includeViews {
+				return WithExitCode(ExitCodeVerifyFailed, errors.New("schema verification requires tables/views in --include-objects"))
+			}
+
+			summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
 				IncludeDatabases: cfg.Databases,
 				ExcludeDatabases: cfg.ExcludeDatabases,
+				IncludeTables:    includeTables,
+				IncludeViews:     includeViews,
 			})
 			if err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("schema verification failed: %w", err))
 			}
-			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+
+			if err := writeSchemaVerifyResult(out, cfg, opts.VerifyLevel, summary); err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, err)
 			}
 			if len(summary.Diffs) > 0 {
 				return WithExitCode(
 					ExitCodeDiff,
 					fmt.Errorf(
-						"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
+						"schema differences detected: missing_in_destination=%d missing_in_source=%d definition_mismatches=%d",
 						summary.MissingInDestination,
 						summary.MissingInSource,
-						summary.CountMismatches,
+						summary.DefinitionMismatches,
 					),
 				)
 			}
 			return nil
-		case "hash":
-			summary, err := dataVerify.VerifyHash(ctx, sourceDB, destDB, dataVerify.Options{
-				IncludeDatabases: cfg.Databases,
-				ExcludeDatabases: cfg.ExcludeDatabases,
-				SampleSize:       opts.SampleSize,
-			})
-			if err != nil {
-				return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
+		case "data":
+			if !includeTables {
+				return WithExitCode(ExitCodeVerifyFailed, errors.New("data verification requires tables in --include-objects"))
 			}
-			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
+
+			switch opts.DataMode {
+			case "count":
+				summary, err := dataVerify.VerifyCount(ctx, sourceDB, destDB, dataVerify.Options{
+					IncludeDatabases: cfg.Databases,
+					ExcludeDatabases: cfg.ExcludeDatabases,
+				})
+				if err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data verification failed: %w", err))
+				}
+				if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if len(summary.Diffs) > 0 {
+					return WithExitCode(
+						ExitCodeDiff,
+						fmt.Errorf(
+							"data differences detected: missing_in_destination=%d missing_in_source=%d count_mismatches=%d",
+							summary.MissingInDestination,
+							summary.MissingInSource,
+							summary.CountMismatches,
+						),
+					)
+				}
+				return nil
+			case "hash":
+				summary, err := dataVerify.VerifyHash(ctx, sourceDB, destDB, dataVerify.Options{
+					IncludeDatabases: cfg.Databases,
+					ExcludeDatabases: cfg.ExcludeDatabases,
+					SampleSize:       opts.SampleSize,
+				})
+				if err != nil {
+					return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
+				}
+				if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if len(summary.Diffs) > 0 {
+					return WithExitCode(
+						ExitCodeDiff,
+						fmt.Errorf(
+							"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+							summary.MissingInDestination,
+							summary.MissingInSource,
+							summary.HashMismatches,
+						),
+					)
+				}
+				return nil
+			case "sample":
+				summary, err := dataVerify.VerifySample(ctx, sourceDB, destDB, dataVerify.Options{
+					IncludeDatabases: cfg.Databases,
+					ExcludeDatabases: cfg.ExcludeDatabases,
+					SampleSize:       opts.SampleSize,
+				})
+				if err != nil {
+					return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
+				}
+				if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if len(summary.Diffs) > 0 {
+					return WithExitCode(
+						ExitCodeDiff,
+						fmt.Errorf(
+							"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+							summary.MissingInDestination,
+							summary.MissingInSource,
+							summary.HashMismatches,
+						),
+					)
+				}
+				return nil
+			case "full-hash":
+				summary, err := dataVerify.VerifyFullHash(ctx, sourceDB, destDB, dataVerify.Options{
+					IncludeDatabases: cfg.Databases,
+					ExcludeDatabases: cfg.ExcludeDatabases,
+					SampleSize:       opts.SampleSize,
+				})
+				if err != nil {
+					return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
+				}
+				if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
+					return WithExitCode(ExitCodeVerifyFailed, err)
+				}
+				if len(summary.Diffs) > 0 {
+					return WithExitCode(
+						ExitCodeDiff,
+						fmt.Errorf(
+							"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
+							summary.MissingInDestination,
+							summary.MissingInSource,
+							summary.HashMismatches,
+						),
+					)
+				}
+				return nil
+			default:
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample, full-hash", opts.DataMode))
 			}
-			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if len(summary.Diffs) > 0 {
-				return WithExitCode(
-					ExitCodeDiff,
-					fmt.Errorf(
-						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-						summary.MissingInDestination,
-						summary.MissingInSource,
-						summary.HashMismatches,
-					),
-				)
-			}
-			return nil
-		case "sample":
-			summary, err := dataVerify.VerifySample(ctx, sourceDB, destDB, dataVerify.Options{
-				IncludeDatabases: cfg.Databases,
-				ExcludeDatabases: cfg.ExcludeDatabases,
-				SampleSize:       opts.SampleSize,
-			})
-			if err != nil {
-				return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
-			}
-			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if len(summary.Diffs) > 0 {
-				return WithExitCode(
-					ExitCodeDiff,
-					fmt.Errorf(
-						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-						summary.MissingInDestination,
-						summary.MissingInSource,
-						summary.HashMismatches,
-					),
-				)
-			}
-			return nil
-		case "full-hash":
-			summary, err := dataVerify.VerifyFullHash(ctx, sourceDB, destDB, dataVerify.Options{
-				IncludeDatabases: cfg.Databases,
-				ExcludeDatabases: cfg.ExcludeDatabases,
-				SampleSize:       opts.SampleSize,
-			})
-			if err != nil {
-				return WithExitCode(verifyDataExitCode(err), fmt.Errorf("data verification failed: %w", err))
-			}
-			if err := persistVerifyDataArtifact(cfg.StateDir, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if err := writeDataVerifyResult(out, cfg, opts.VerifyLevel, opts.DataMode, summary); err != nil {
-				return WithExitCode(ExitCodeVerifyFailed, err)
-			}
-			if len(summary.Diffs) > 0 {
-				return WithExitCode(
-					ExitCodeDiff,
-					fmt.Errorf(
-						"data differences detected: missing_in_destination=%d missing_in_source=%d hash_mismatches=%d",
-						summary.MissingInDestination,
-						summary.MissingInSource,
-						summary.HashMismatches,
-					),
-				)
-			}
-			return nil
 		default:
-			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("data-mode %q is not implemented yet; supported: count, hash, sample, full-hash", opts.DataMode))
+			return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel))
 		}
-	default:
-		return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("verify-level %q is not implemented", opts.VerifyLevel))
-	}
+	})
 }
 
 func verifyDataExitCode(err error) int {
-	if strings.Contains(err.Error(), "incompatible_for_v1_deterministic_hash") {
+	if strings.Contains(err.Error(), "incompatible_for_v1_deterministic_hash") || strings.Contains(err.Error(), "incompatible_for_v1_deterministic_sample") {
 		return ExitCodeDiff
 	}
 	return ExitCodeVerifyFailed

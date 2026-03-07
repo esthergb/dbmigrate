@@ -15,6 +15,7 @@ import (
 	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/schema"
+	"github.com/esthergb/dbmigrate/internal/state"
 	"github.com/esthergb/dbmigrate/internal/version"
 )
 
@@ -440,15 +441,11 @@ func persistCollationPrecheckArtifact(stateDir string, report collationPrecheckR
 	}
 
 	path := collationPrecheckArtifactPath(stateDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mkdir state-dir for collation precheck artifact: %w", err)
-	}
-
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal collation precheck artifact: %w", err)
 	}
-	if err := os.WriteFile(path, append(raw, '\n'), 0o600); err != nil {
+	if err := state.WritePrivateFileAtomic(path, append(raw, '\n')); err != nil {
 		return fmt.Errorf("write collation precheck artifact: %w", err)
 	}
 	return nil

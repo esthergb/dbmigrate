@@ -15,6 +15,7 @@ import (
 	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/schema"
+	"github.com/esthergb/dbmigrate/internal/state"
 	"github.com/esthergb/dbmigrate/internal/version"
 )
 
@@ -269,9 +270,6 @@ func cleanupZeroDateFixScript(stateDir string) error {
 
 func writeZeroDateFixScript(stateDir string, issues []zeroDateDefaultIssue) (string, error) {
 	path := zeroDateFixScriptPath(stateDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("mkdir state-dir for zero-date fix script: %w", err)
-	}
 
 	unique := make(map[string]struct{}, len(issues))
 	lines := make([]string, 0, len(issues))
@@ -296,7 +294,7 @@ func writeZeroDateFixScript(stateDir string, issues []zeroDateDefaultIssue) (str
 		content.WriteString("\n")
 	}
 
-	if err := os.WriteFile(path, []byte(content.String()), 0o644); err != nil {
+	if err := state.WritePrivateFileAtomic(path, []byte(content.String())); err != nil {
 		return "", fmt.Errorf("write zero-date fix script: %w", err)
 	}
 	return path, nil

@@ -61,6 +61,15 @@ func TestRewriteAndSanitizeForSandbox(t *testing.T) {
 	}
 }
 
+func TestRewriteSchemaStatementForSandboxSkipsCommentsAndLiterals(t *testing.T) {
+	in := "CREATE VIEW `srcdb`.`v1` AS SELECT 'from `srcdb`.literal' AS note /* `srcdb`.`ignored` */ FROM `srcdb`.`t1` -- `srcdb`.`comment`\n"
+	out := rewriteSchemaStatementForSandbox(in, "srcdb", "dryrun_srcdb")
+	want := "CREATE VIEW `dryrun_srcdb`.`v1` AS SELECT 'from `srcdb`.literal' AS note /* `srcdb`.`ignored` */ FROM `dryrun_srcdb`.`t1` -- `srcdb`.`comment`\n"
+	if out != want {
+		t.Fatalf("unexpected rewritten statement: %q", out)
+	}
+}
+
 func TestSortTableNamesByDependencies(t *testing.T) {
 	tableNames := []string{"cart_items", "users", "orders"}
 	dependencies := map[string]map[string]struct{}{
@@ -83,6 +92,14 @@ func TestSortTableNamesByDependencies(t *testing.T) {
 			t.Fatalf("unexpected sorted order: got=%#v want=%#v", got, want)
 		}
 	}
+
+	ordered, cyclic := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	if len(ordered) != len(want) {
+		t.Fatalf("unexpected detailed sorted length: got=%d want=%d (%#v)", len(ordered), len(want), ordered)
+	}
+	if len(cyclic) != 0 {
+		t.Fatalf("unexpected cyclic tables: %#v", cyclic)
+	}
 }
 
 func TestSortTableNamesByDependenciesCycleFallback(t *testing.T) {
@@ -103,5 +120,13 @@ func TestSortTableNamesByDependenciesCycleFallback(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("unexpected sorted order: got=%#v want=%#v", got, want)
 		}
+	}
+
+	ordered, cyclic := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	if len(ordered) != len(want) {
+		t.Fatalf("unexpected detailed sorted length: got=%d want=%d (%#v)", len(ordered), len(want), ordered)
+	}
+	if len(cyclic) != 2 || cyclic[0] != "a" || cyclic[1] != "b" {
+		t.Fatalf("unexpected cyclic tables: %#v", cyclic)
 	}
 }

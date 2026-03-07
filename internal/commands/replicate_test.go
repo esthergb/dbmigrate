@@ -183,6 +183,17 @@ func TestParseReplicateOptionsInvalidStartPos(t *testing.T) {
 	}
 }
 
+func TestParseReplicateOptionsInvalidStartFile(t *testing.T) {
+	_, err := parseReplicateOptions([]string{
+		"--start-from=binlog-file:pos",
+		"--resume=false",
+		"--start-file=../../mysql-bin.000001",
+	})
+	if err == nil {
+		t.Fatal("expected parse error for invalid start-file")
+	}
+}
+
 func TestParseReplicateOptionsInvalidConflictPolicy(t *testing.T) {
 	_, err := parseReplicateOptions([]string{"--conflict-policy=merge"})
 	if err == nil {

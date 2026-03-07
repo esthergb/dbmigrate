@@ -39,6 +39,7 @@ type reportSummary struct {
 	ReplicationConflictReport   *state.ReplicationConflictReport `json:"replication_conflict_report,omitempty"`
 	ReplicationConflictFilePath string                           `json:"replication_conflict_file,omitempty"`
 	ReplicationConflictStale    bool                             `json:"replication_conflict_stale,omitempty"`
+	ConflictOutputRedacted      bool                             `json:"conflict_output_redacted,omitempty"`
 }
 
 type reportArtifacts struct {
@@ -90,7 +91,8 @@ type replicationCheckpointSummary struct {
 }
 
 type reportOptions struct {
-	FailOnConflict bool
+	FailOnConflict            bool
+	IncludeSensitiveArtifacts bool
 }
 
 func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -99,7 +101,7 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 		return err
 	}
 
-	summary, proposals, err := loadReportSummary(cfg.StateDir)
+	summary, proposals, err := loadReportSummary(cfg.StateDir, opts.IncludeSensitiveArtifacts)
 	if err != nil {
 		return err
 	}
@@ -162,13 +164,14 @@ func parseReportOptions(args []string) (reportOptions, error) {
 	fs := flag.NewFlagSet("report", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.BoolVar(&opts.FailOnConflict, "fail-on-conflict", true, "fail with non-zero exit when replication conflict report requires attention")
+	fs.BoolVar(&opts.IncludeSensitiveArtifacts, "include-sensitive-artifacts", false, "include raw sensitive conflict samples in report output when artifact was captured with plain values")
 	if err := fs.Parse(args); err != nil {
 		return reportOptions{}, err
 	}
 	return opts, nil
 }
 
-func loadReportSummary(stateDir string) (reportSummary, []string, error) {
+func loadReportSummary(stateDir string, includeSensitiveArtifacts bool) (reportSummary, []string, error) {
 	summary := reportSummary{
 		StateDir: stateDir,
 	}
@@ -270,15 +273,19 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 			return reportSummary{}, nil, err
 		}
 		summary.Artifacts.ReplicationConflictReport = true
-		summary.ReplicationConflictReport = &report
+		outputReport, outputRedacted := sanitizeConflictReportForOutput(report, includeSensitiveArtifacts)
+		summary.ReplicationConflictReport = &outputReport
 		summary.ReplicationConflictFilePath = conflictReportPath
 		summary.ReplicationConflictStale = isStaleConflictReport(report, summary.ReplicationCheckpoint)
+		summary.ConflictOutputRedacted = outputRedacted
 		if !summary.ReplicationConflictStale && report.Remediation != "" {
 			proposals = append(proposals, report.Remediation)
 		}
 		if !summary.ReplicationConflictStale {
 			if report.ValuesRedacted {
 				proposals = append(proposals, "replication conflict samples are redacted by default; rerun replicate with --conflict-values=plain only in controlled environments when raw values are required.")
+			} else if outputRedacted {
+				proposals = append(proposals, "report output redacted plain-text conflict samples by default; use --include-sensitive-artifacts only when you intentionally want raw values in stdout/JSON output.")
 			} else {
 				proposals = append(proposals, "replication conflict samples are plain-text; treat replication-conflict-report.json as sensitive data.")
 			}
@@ -289,6 +296,23 @@ func loadReportSummary(stateDir string) (reportSummary, []string, error) {
 		proposals = append(proposals, "review replication-conflict-report.json and resolve destination drift before rerun")
 	}
 	return summary, proposals, nil
+}
+
+func sanitizeConflictReportForOutput(report state.ReplicationConflictReport, includeSensitiveArtifacts bool) (state.ReplicationConflictReport, bool) {
+	if includeSensitiveArtifacts || report.ValuesRedacted {
+		return report, false
+	}
+
+	sanitized := report
+	if len(sanitized.ValueSample) == 0 && len(sanitized.OldRowSample) == 0 && len(sanitized.NewRowSample) == 0 && len(sanitized.RowDiffSample) == 0 {
+		return sanitized, false
+	}
+	sanitized.ValueSample = nil
+	sanitized.OldRowSample = nil
+	sanitized.NewRowSample = nil
+	sanitized.RowDiffSample = nil
+	sanitized.ValuesRedacted = true
+	return sanitized, true
 }
 
 func isStaleConflictReport(report state.ReplicationConflictReport, checkpoint *replicationCheckpointSummary) bool {
@@ -471,11 +495,12 @@ func writeReportText(out io.Writer, payload reportResult) error {
 		report := payload.Summary.ReplicationConflictReport
 		if _, err := fmt.Fprintf(
 			out,
-			"[report] replication_conflict file=%s failure_type=%s stale=%v values_redacted=%v table=%s operation=%s message=%s\n",
+			"[report] replication_conflict file=%s failure_type=%s stale=%v values_redacted=%v output_redacted=%v table=%s operation=%s message=%s\n",
 			payload.Summary.ReplicationConflictFilePath,
 			report.FailureType,
 			payload.Summary.ReplicationConflictStale,
 			report.ValuesRedacted,
+			payload.Summary.ConflictOutputRedacted,
 			report.TableName,
 			report.Operation,
 			report.Message,

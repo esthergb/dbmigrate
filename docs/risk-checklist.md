@@ -21,8 +21,11 @@ Use this checklist before running `dbmigrate plan`, `migrate`, or `replicate`.
 
 - [ ] `log_bin` is enabled on source.
 - [ ] `binlog_format=ROW` (preferred/required for safe incremental behavior).
+- [ ] `binlog_row_image=FULL` on source for deterministic row replay.
 - [ ] Cross-engine path validated for GTID compatibility expectations.
 - [ ] If cross-engine GTID is incompatible: file/position start point prepared.
+- [ ] Review `plan` boundary findings for GTID state, `binlog_format`, and MySQL -> MariaDB row-event settings before claiming incremental continuity.
+- [ ] If using `--start-from=binlog-file:pos`, validate `--start-file` as a bare binlog filename, not a path-like value.
 - [ ] For MySQL 8.0 -> MariaDB paths, verify required version/settings compatibility from MariaDB docs.
 
 Reference:
@@ -49,9 +52,13 @@ Reference:
 ## E) SQL compatibility
 
 - [ ] Scan for reserved-word identifier collisions on destination version.
+- [ ] Review `plan` identifier-portability findings for destination reserved words and SQL-mode parser drift in views.
 - [ ] Scan for engine-specific constructs (sequences, temporal system-versioning, unsupported syntax).
 - [ ] Inventory invisible columns, invisible indexes, and generated invisible primary keys before any downgrade or MySQL -> MariaDB path.
+- [ ] Detect intra-database foreign-key cycles; plan a manual post-step instead of assuming table-order sorting will make them safe.
 - [ ] Decide handling policy for incompatible objects (block, rewrite, manual).
+- [ ] Review `plan` temporal/time-zone findings for mixed `TIMESTAMP`/`DATETIME` tables before claiming application compatibility.
+- [ ] Review `plan` data-shape findings for keyless tables and representation-sensitive tables before approving baseline + verify strategy.
 
 Reference:
 
@@ -90,11 +97,13 @@ Reference:
 - [ ] Review `verify-data-report.json` or `dbmigrate report` output, not just raw command exit codes.
 - [ ] Distinguish real verify diffs from representation-sensitive tables before declaring drift.
 - [ ] For cross-engine verify, prefer `full-hash` after `sample` triage when temporal, JSON, collation, or approximate numeric columns exist.
-- [ ] Confirm tables in hash/full-hash scope have a primary key or non-null unique key; otherwise expect fail-fast incompatibility in `v1`.
+- [ ] Confirm tables in sample/hash/full-hash scope have a primary key or non-null unique key; otherwise expect fail-fast incompatibility in `v1`.
 - [ ] Keep canonicalization evidence when verify passes on representation-sensitive tables; treat it as equivalence proof, not byte-for-byte identity proof.
 
 ## H) Operational safety
 
+- [ ] Use a dedicated `--state-dir` per active run; concurrent writers to the same state directory are intentionally blocked.
+- [ ] If `.dbmigrate.lock` exists, verify no live dbmigrate process still owns that state-dir before deleting the lock file manually.
 - [ ] Ensure sufficient disk for dumps/temp files/binlogs on source and destination.
 - [ ] Set chunk size and concurrency conservatively for first run.
 - [ ] Set lag and rate-control bounds.
@@ -111,6 +120,7 @@ Reference:
 ## I) Case sensitivity and naming portability
 
 - [ ] Validate `lower_case_table_names` behavior on both sides.
+- [ ] Review `plan` output for case-fold collisions and mixed-case identifiers before moving across case-folding boundaries.
 - [ ] Confirm naming policy avoids mixed-case portability surprises.
 - [ ] If upgrade touches `lower_case_table_names`, run uppercase-name checks first.
 
@@ -122,6 +132,11 @@ Reference:
 ## J) Runbook gates
 
 - [ ] Dry-run plan reviewed and signed off.
+- [ ] Manual-evidence findings from `plan` reviewed and assigned:
+  - backup/restore rehearsal
+  - metadata-lock runbook
+  - transaction-shape rehearsal
+  - dump/import tool skew
 - [ ] Baseline backup/snapshot confirmed.
 - [ ] Logical backup rehearsal completed for the exact tool and workflow planned for rollback.
 - [ ] Restore evidence reviewed: distinguish `backup completed`, `artifact validated`, and `restore usable`.

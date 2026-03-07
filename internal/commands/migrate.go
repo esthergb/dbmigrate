@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/data"
 	"github.com/esthergb/dbmigrate/internal/db"
@@ -76,138 +77,200 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		return writeResult(out, cfg, "migrate", "dry-run", message)
 	}
 
-	sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect source: %w", err)
-	}
-	defer func() {
-		_ = sourceDB.Close()
-	}()
-
-	destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
-	if err != nil {
-		return fmt.Errorf("connect destination: %w", err)
-	}
-	defer func() {
-		_ = destDB.Close()
-	}()
-
-	if runSchema {
-		pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+	return withStateDirLock(cfg, func() error {
+		sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
 		if err != nil {
-			return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
+			return fmt.Errorf("connect source: %w", err)
 		}
-		if pluginReport.Incompatible {
-			if err := writePluginLifecyclePrecheckReport(out, cfg, pluginReport); err != nil {
-				return err
+		defer func() {
+			_ = sourceDB.Close()
+		}()
+
+		destDB, err := db.OpenAndPingWithTLS(ctx, cfg.Dest, tlsOptionsFromRuntime(cfg))
+		if err != nil {
+			return fmt.Errorf("connect destination: %w", err)
+		}
+		defer func() {
+			_ = destDB.Close()
+		}()
+
+		sourceVersion, err := queryServerVersion(ctx, sourceDB)
+		if err != nil {
+			return fmt.Errorf("detect source version: %w", err)
+		}
+		destVersion, err := queryServerVersion(ctx, destDB)
+		if err != nil {
+			return fmt.Errorf("detect destination version: %w", err)
+		}
+		sourceInstance := compat.ParseInstance(sourceVersion)
+		destInstance := compat.ParseInstance(destVersion)
+
+		if runSchema {
+			pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
 			}
-			return WithExitCode(
-				ExitCodeDiff,
-				errors.New("schema precheck failed; source uses storage engines that are unsupported on destination"),
-			)
+			if pluginReport.Incompatible {
+				if err := writePluginLifecyclePrecheckReport(out, cfg, pluginReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; source uses storage engines that are unsupported on destination"),
+				)
+			}
+
+			invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("invisible/gipk precheck failed: %w", err)
+			}
+			if invisibleReport.Incompatible {
+				if err := writeInvisibleGIPKPrecheckReport(out, cfg, invisibleReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; invisible columns or generated invisible primary keys drift on destination"),
+				)
+			}
+
+			collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("collation precheck failed: %w", err)
+			}
+			if collationReport.Incompatible {
+				if err := writeCollationMigratePrecheckReport(out, cfg, collationReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; source collations are unsupported on destination"),
+				)
+			}
+
+			precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("schema precheck failed: %w", err)
+			}
+			if precheckReport.Incompatible {
+				if err := writeMigratePrecheckReport(out, cfg, precheckReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; zero-date defaults are incompatible with destination sql_mode"),
+				)
+			}
+
+			schemaFeatureReport, err := runSchemaFeaturePrecheck(ctx, sourceDB, sourceInstance, destInstance, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("schema feature precheck failed: %w", err)
+			}
+			if schemaFeatureReport.Incompatible {
+				if err := writeSchemaFeaturePrecheckReport(out, cfg, schemaFeatureReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; source uses schema features that are incompatible with destination in v1"),
+				)
+			}
+
+			identifierReport, err := runIdentifierPortabilityPrecheck(ctx, sourceDB, destDB, sourceInstance, destInstance, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("identifier portability precheck failed: %w", err)
+			}
+			if identifierReport.Incompatible {
+				if err := writeIdentifierPortabilityPrecheckReport(out, cfg, identifierReport); err != nil {
+					return err
+				}
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("schema precheck failed; identifier portability or parser drift is incompatible with destination in v1"),
+				)
+			}
 		}
 
-		invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
-		if err != nil {
-			return fmt.Errorf("invisible/gipk precheck failed: %w", err)
-		}
-		if invisibleReport.Incompatible {
-			if err := writeInvisibleGIPKPrecheckReport(out, cfg, invisibleReport); err != nil {
-				return err
+		schemaSummary := schema.CopySummary{}
+		if runSchema {
+			schemaOptions := schema.CopyOptions{
+				IncludeDatabases:  cfg.Databases,
+				ExcludeDatabases:  cfg.ExcludeDatabases,
+				IncludeTables:     includeTables,
+				IncludeViews:      includeViews,
+				DestEmptyRequired: opts.DestEmptyRequired && !opts.Force,
 			}
-			return WithExitCode(
-				ExitCodeDiff,
-				errors.New("schema precheck failed; invisible columns or generated invisible primary keys drift on destination"),
-			)
+			if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews {
+				return errors.New("schema migration currently supports tables/views in --include-objects")
+			}
+
+			schemaSummary, err = schema.CopySchema(ctx, sourceDB, destDB, schemaOptions)
+			if err != nil {
+				if isMigrateCompatibilityError(err) {
+					return WithExitCode(ExitCodeDiff, fmt.Errorf("schema migration failed: %w", err))
+				}
+				return fmt.Errorf("schema migration failed: %w", err)
+			}
 		}
 
-		collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
-		if err != nil {
-			return fmt.Errorf("collation precheck failed: %w", err)
-		}
-		if collationReport.Incompatible {
-			if err := writeCollationMigratePrecheckReport(out, cfg, collationReport); err != nil {
-				return err
+		dataSummary := data.CopySummary{}
+		if runData {
+			if !hasObject(cfg.IncludeObjects, "tables") {
+				return errors.New("data migration requires tables in --include-objects")
 			}
-			return WithExitCode(
-				ExitCodeDiff,
-				errors.New("schema precheck failed; source collations are unsupported on destination"),
-			)
+			dataShapeReport, err := runDataShapePrecheck(ctx, sourceDB, cfg.Databases, cfg.ExcludeDatabases)
+			if err != nil {
+				return fmt.Errorf("data-shape precheck failed: %w", err)
+			}
+			if dataShapeReport.Incompatible {
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("data precheck failed; selected scope contains tables without stable keys required for v1 baseline migration"),
+				)
+			}
+			dataOptions := data.CopyOptions{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+				ChunkSize:        opts.ChunkSize,
+				Resume:           opts.Resume,
+				RequireEmptyDest: runData && !runSchema && opts.DestEmptyRequired && !opts.Force,
+			}
+
+			dataSummary, err = data.CopyBaselineData(ctx, sourceDB, destDB, cfg.StateDir, dataOptions)
+			if err != nil {
+				if isMigrateCompatibilityError(err) {
+					return WithExitCode(ExitCodeDiff, fmt.Errorf("data migration failed: %w", err))
+				}
+				return fmt.Errorf("data migration failed: %w", err)
+			}
 		}
 
-		precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
-		if err != nil {
-			return fmt.Errorf("schema precheck failed: %w", err)
-		}
-		if precheckReport.Incompatible {
-			if err := writeMigratePrecheckReport(out, cfg, precheckReport); err != nil {
-				return err
-			}
-			return WithExitCode(
-				ExitCodeDiff,
-				errors.New("schema precheck failed; zero-date defaults are incompatible with destination sql_mode"),
-			)
-		}
+		message := fmt.Sprintf(
+			"migration completed: schema(databases=%d tables=%d views=%d statements=%d) data(databases=%d tables=%d completed=%d rows=%d batches=%d restarted=%d checkpoint=%s watermark=%s:%d)",
+			schemaSummary.Databases,
+			schemaSummary.Tables,
+			schemaSummary.Views,
+			schemaSummary.Statements,
+			dataSummary.Databases,
+			dataSummary.Tables,
+			dataSummary.Completed,
+			dataSummary.RowsCopied,
+			dataSummary.Batches,
+			dataSummary.Restarted,
+			dataSummary.CheckpointFile,
+			dataSummary.WatermarkFile,
+			dataSummary.WatermarkPos,
+		)
+		return writeResult(out, cfg, "migrate", "ok", message)
+	})
+}
+
+func isMigrateCompatibilityError(err error) bool {
+	if err == nil {
+		return false
 	}
-
-	schemaSummary := schema.CopySummary{}
-	if runSchema {
-		schemaOptions := schema.CopyOptions{
-			IncludeDatabases:  cfg.Databases,
-			ExcludeDatabases:  cfg.ExcludeDatabases,
-			IncludeTables:     includeTables,
-			IncludeViews:      includeViews,
-			DestEmptyRequired: opts.DestEmptyRequired && !opts.Force,
-		}
-		if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews {
-			return errors.New("schema migration currently supports tables/views in --include-objects")
-		}
-
-		schemaSummary, err = schema.CopySchema(ctx, sourceDB, destDB, schemaOptions)
-		if err != nil {
-			return fmt.Errorf("schema migration failed: %w", err)
-		}
-	}
-
-	dataSummary := data.CopySummary{}
-	if runData {
-		if !hasObject(cfg.IncludeObjects, "tables") {
-			return errors.New("data migration requires tables in --include-objects")
-		}
-		dataOptions := data.CopyOptions{
-			IncludeDatabases: cfg.Databases,
-			ExcludeDatabases: cfg.ExcludeDatabases,
-			ChunkSize:        opts.ChunkSize,
-			Resume:           opts.Resume,
-			RequireEmptyDest: runData && !runSchema && opts.DestEmptyRequired && !opts.Force,
-		}
-
-		dataSummary, err = data.CopyBaselineData(ctx, sourceDB, destDB, cfg.StateDir, dataOptions)
-		if err != nil {
-			if strings.Contains(err.Error(), "incompatible_for_live_baseline") {
-				return WithExitCode(ExitCodeDiff, fmt.Errorf("data migration failed: %w", err))
-			}
-			return fmt.Errorf("data migration failed: %w", err)
-		}
-	}
-
-	message := fmt.Sprintf(
-		"migration completed: schema(databases=%d tables=%d views=%d statements=%d) data(databases=%d tables=%d completed=%d rows=%d batches=%d restarted=%d checkpoint=%s watermark=%s:%d)",
-		schemaSummary.Databases,
-		schemaSummary.Tables,
-		schemaSummary.Views,
-		schemaSummary.Statements,
-		dataSummary.Databases,
-		dataSummary.Tables,
-		dataSummary.Completed,
-		dataSummary.RowsCopied,
-		dataSummary.Batches,
-		dataSummary.Restarted,
-		dataSummary.CheckpointFile,
-		dataSummary.WatermarkFile,
-		dataSummary.WatermarkPos,
-	)
-	return writeResult(out, cfg, "migrate", "ok", message)
+	text := err.Error()
+	return strings.Contains(text, "incompatible_for_")
 }
 
 func parseMigrateOptions(args []string) (migrateOptions, error) {
@@ -336,6 +399,9 @@ func runMigrateDryRunSandbox(
 		return err
 	}
 	if validationErr != nil {
+		if isMigrateCompatibilityError(validationErr) {
+			return WithExitCode(ExitCodeDiff, validationErr)
+		}
 		return validationErr
 	}
 	if cleanupErr != nil {

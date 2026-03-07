@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -74,23 +73,10 @@ func SaveDataCheckpoint(path string, checkpoint DataCheckpoint) error {
 		checkpoint.Tables = map[string]TableCheckpoint{}
 	}
 
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir checkpoint dir: %w", err)
-	}
-
 	raw, err := json.MarshalIndent(checkpoint, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal checkpoint: %w", err)
 	}
 
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, raw, 0o600); err != nil {
-		return fmt.Errorf("write checkpoint temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("replace checkpoint: %w", err)
-	}
-
-	return nil
+	return writePrivateFileAtomic(path, raw)
 }

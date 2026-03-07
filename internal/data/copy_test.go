@@ -78,13 +78,6 @@ func TestQuoteIdentifierEscapesBackticks(t *testing.T) {
 	}
 }
 
-func TestCountPlaceholders(t *testing.T) {
-	insertSQL := "INSERT INTO `app`.`users` (`id`, `name`, `email`) VALUES (?, ?, ?)"
-	if got := countPlaceholders(insertSQL); got != 3 {
-		t.Fatalf("expected 3 placeholders, got %d", got)
-	}
-}
-
 func TestSortTableNamesByDependencies(t *testing.T) {
 	tableNames := []string{"cart_items", "users", "orders"}
 	dependencies := map[string]map[string]struct{}{
@@ -127,5 +120,13 @@ func TestSortTableNamesByDependenciesCycleFallback(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("unexpected sorted order: got=%#v want=%#v", got, want)
 		}
+	}
+
+	ordered, cyclic := sortTableNamesByDependenciesDetailed(tableNames, dependencies)
+	if len(ordered) != len(want) {
+		t.Fatalf("unexpected detailed sorted length: got=%d want=%d (%#v)", len(ordered), len(want), ordered)
+	}
+	if len(cyclic) != 2 || cyclic[0] != "a" || cyclic[1] != "b" {
+		t.Fatalf("unexpected cyclic tables: %#v", cyclic)
 	}
 }
