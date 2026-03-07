@@ -24,8 +24,8 @@ Last updated: 2026-03-07
 - State:
   - Current branch: `codex/chore/v1-matrix-infra`.
   - PR `#67`, PR `#68`, and PR `#69` are merged.
-  - Blocker diagnosis is complete: current local Docker/test infra did not match the frozen `v1` support matrix; the branch now carries the first alignment patch.
-  - Working tree contains local infra changes for new Docker services, exact `v1` configs, new `test-v1-*` wrappers, and script docs.
+  - Blocker diagnosis is complete: current local Docker/test infra did not match the frozen `v1` support matrix; this branch now carries the alignment patch and supplemental requested scenarios.
+  - Commit `90fe355` records the infra alignment work locally and is ready to publish.
 - Done:
   - Added and merged:
     - `docs/v1-release-plan.md`
@@ -76,9 +76,8 @@ Last updated: 2026-03-07
     - `mariadb1011a` started successfully as `10.11.16-MariaDB-ubu2204`
     - `mariadb118a` started successfully as `11.8.6-MariaDB-ubu2404`
 - Now:
-  - Review the infra patch for publication; the requested frozen and supplemental scenarios are now wired and validated locally.
+  - Publish the infra-alignment branch and open the PR.
 - Next:
-  - Publish this infra-alignment branch after review/approval.
   - Then start the actual full frozen-`v1` matrix execution using `scripts/test-v1-matrix.sh`.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether the same MariaDB 11.x dataset mapping is sufficient for the full `mariadb114*` and `mariadb118*` matrix sweep, or whether a narrower version-specific seed split will be needed after the first complete run.
