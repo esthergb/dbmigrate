@@ -44,10 +44,9 @@ Last updated: 2026-03-07
     - `go test ./internal/replicate/binlog`
     - `go test ./...`
 - Now:
-  - Prepare PR E commit on this branch.
+  - Publish PR E: push branch and open PR after explicit user approval (received).
 - Next:
-  - Ask user confirmation before push + PR.
-  - Push branch and open PR E after approval.
+  - Monitor PR E CI and resolve any failures.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
