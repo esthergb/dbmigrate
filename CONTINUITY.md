@@ -62,9 +62,9 @@ Last updated: 2026-03-07
     - `go test ./internal/schema`
     - `go test ./...`
 - Now:
-  - Prepare PR G commit on this branch.
+  - Publish PR G after user confirmation (received): push branch + open PR.
 - Next:
-  - Ask user confirmation before push + PR.
+  - Monitor PR CI and address failures quickly.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
