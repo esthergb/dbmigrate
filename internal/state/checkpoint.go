@@ -12,11 +12,12 @@ const checkpointVersion = 1
 
 // TableCheckpoint stores migration progress for one table.
 type TableCheckpoint struct {
-	RowsCopied int64     `json:"rows_copied"`
-	KeyColumns []string  `json:"key_columns,omitempty"`
-	LastKey    []string  `json:"last_key,omitempty"`
-	Done       bool      `json:"done"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	RowsCopied   int64                `json:"rows_copied"`
+	KeyColumns   []string             `json:"key_columns,omitempty"`
+	LastKey      []string             `json:"last_key,omitempty"` // legacy compatibility cursor storage
+	LastKeyTyped []CheckpointKeyValue `json:"last_key_typed,omitempty"`
+	Done         bool                 `json:"done"`
+	UpdatedAt    time.Time            `json:"updated_at"`
 }
 
 // DataCheckpoint stores migration progress for all copied tables.
@@ -54,6 +55,12 @@ func LoadDataCheckpoint(path string) (DataCheckpoint, error) {
 	}
 	if cp.Version == 0 {
 		cp.Version = checkpointVersion
+	}
+	for tableKey, entry := range cp.Tables {
+		if len(entry.LastKeyTyped) == 0 && len(entry.LastKey) > 0 {
+			entry.LastKeyTyped = legacyCheckpointStrings(entry.LastKey)
+			cp.Tables[tableKey] = entry
+		}
 	}
 	return cp, nil
 }

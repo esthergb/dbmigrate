@@ -2,7 +2,6 @@ package data
 
 import (
 	"testing"
-	"time"
 
 	"github.com/esthergb/dbmigrate/internal/state"
 )
@@ -38,36 +37,37 @@ func TestBuildKeysetSelectSQL(t *testing.T) {
 func TestCheckpointCursorArgsRequiresMatchingKeyColumns(t *testing.T) {
 	progress := state.TableCheckpoint{
 		KeyColumns: []string{"id"},
-		LastKey:    []string{"42"},
 	}
-	cursor := checkpointCursorArgs(progress, []string{"id"})
-	if len(cursor) != 1 || cursor[0] != "42" {
+	if err := progress.SetCursorValues([]any{int64(42)}); err != nil {
+		t.Fatalf("set cursor values: %v", err)
+	}
+	cursor, err := checkpointCursorArgs(progress, []string{"id"})
+	if err != nil {
+		t.Fatalf("unexpected cursor decode error: %v", err)
+	}
+	if len(cursor) != 1 || cursor[0] != int64(42) {
 		t.Fatalf("unexpected cursor: %#v", cursor)
 	}
 
-	mismatch := checkpointCursorArgs(progress, []string{"tenant_id"})
+	mismatch, err := checkpointCursorArgs(progress, []string{"tenant_id"})
+	if err != nil {
+		t.Fatalf("unexpected mismatch error: %v", err)
+	}
 	if mismatch != nil {
 		t.Fatalf("expected nil cursor when key columns mismatch, got %#v", mismatch)
 	}
 }
 
-func TestKeyArgsToStringsNormalizesTypes(t *testing.T) {
-	now := time.Date(2026, 3, 7, 12, 30, 0, 0, time.UTC)
-	out := keyArgsToStrings([]any{[]byte("abc"), now, int64(7), nil})
-	if len(out) != 4 {
-		t.Fatalf("unexpected len: %d", len(out))
+func TestCheckpointCursorArgsPropagatesDecodeFailure(t *testing.T) {
+	progress := state.TableCheckpoint{
+		KeyColumns: []string{"id"},
+		LastKeyTyped: []state.CheckpointKeyValue{
+			{Type: "unsupported", Value: "x"},
+		},
 	}
-	if out[0] != "abc" {
-		t.Fatalf("unexpected bytes conversion: %q", out[0])
-	}
-	if out[1] != "2026-03-07T12:30:00Z" {
-		t.Fatalf("unexpected time conversion: %q", out[1])
-	}
-	if out[2] != "7" {
-		t.Fatalf("unexpected integer conversion: %q", out[2])
-	}
-	if out[3] != "" {
-		t.Fatalf("unexpected nil conversion: %q", out[3])
+	_, err := checkpointCursorArgs(progress, []string{"id"})
+	if err == nil {
+		t.Fatal("expected decode error for unsupported checkpoint key type")
 	}
 }
 
