@@ -1,0 +1,25 @@
+# Migration config: MariaDB 10.11 strict-lts source -> MariaDB 10.11 strict-lts destination
+source: mariadb://root:rootpass123@127.0.0.1:14311/?tls=preferred
+dest: mariadb://root:rootpass123@127.0.0.1:14312/?tls=preferred
+
+databases: []
+exclude-databases:
+  - information_schema
+  - performance_schema
+  - sys
+  - mysql
+include-objects:
+  - tables
+  - views
+  - routines
+  - triggers
+  - events
+
+concurrency: 4
+verbose: true
+json: false
+
+tls-mode: preferred
+state-dir: ./state/v1/mariadb1011a-to-mariadb1011b
+
+downgrade-profile: strict-lts

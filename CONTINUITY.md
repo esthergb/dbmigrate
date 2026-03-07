@@ -1,141 +1,104 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Execute PR 2 from the v1 release plan: release criteria and signoff doc.
-  - Success means `v1` has a tracked release-gate document that defines signoff evidence, matrix requirements, and stop conditions clearly enough to drive the release process.
+  - Align local matrix infrastructure with the frozen `v1` support matrix and add the requested supplemental upgrade-evidence scenarios around adjacent supported lines.
+  - Success means local Docker services, scenario wrappers, and configs exist for the frozen `v1` matrix, plus the requested supplemental wrappers, and all can be exercised without falling back to the legacy 20-scenario matrix.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
   - `configs/mysql84-to-mariadb114.yaml` must remain untracked.
-  - Phase 64 is already implemented and merged.
+  - `v1` scope is limited to implemented and genuinely supported self-managed paths only.
+  - Before any remote push/PR creation, get explicit user confirmation.
 - Key decisions:
-  - Phase 62 enforces hidden-schema compatibility as product behavior, not just documentation: MySQL invisible columns, invisible indexes, and GIPK are inventory items in `plan` and schema blockers in `migrate` when destination semantics drift.
-  - MariaDB destinations are blocked for these hidden-schema features because local restore evidence shows visibility drift instead of semantic preservation.
-  - Phase 63 is defined as the collation client-compatibility and handshake-risk track.
-  - Phase 63 product boundary:
-    - server-unsupported collations are schema blockers,
-    - client/library compatibility risk remains warning-level evidence,
-    - representative CLI connectivity is useful rehearsal evidence but not proof that every driver stack is safe.
-  - `report` status semantics are tightened:
-    - incompatible precheck artifacts escalate to `attention_required`
-    - warning-only precheck artifacts remain `ok`
-    - default `report` exit code follows that status unless `--fail-on-conflict=false` is set
-  - MariaDB `uca1400_*` and `utf8mb4_uca1400_*` names are treated as the same support family when inventorying destination support.
-  - Phase 64 is defined as the verification canonicalization and false-positive control track.
-  - Phase 64 must land as one coherent slice: canonicalized data verify behavior, artifact/report surfacing, and a dedicated rehearsal with fixtures.
-  - Verification hashing must be session-pinned. Setting session state on pooled `*sql.DB` handles is insufficient for charset/time zone stability.
-  - Product scope is now split explicitly:
-    - v1: only paths that are implemented and genuinely supported
-    - v2: everything the CLI currently surfaces but does not fully implement yet
-    - v3: v2 plus managed/cloud deployment paths
-- State:
-  - Current branch: `codex/chore/v1-release-criteria`.
-  - PR `#65` is merged.
-  - PR `#66` is merged.
-  - PR `#67` is merged.
-  - PR `#68` is merged.
-  - Branch created from updated `main` to add the v1 release criteria/signoff doc.
-  - Working tree contains docs-only release-criteria planning updates.
-- Done:
-  - Phases 57-62 are merged into `main`.
-  - Phase 57: metadata-lock rehearsal and reporting.
-  - Phase 58: backup/restore rehearsal and rollback evidence gates.
-  - Phase 59: session timezone and `NOW()` behavior rehearsal.
-  - Phase 60: plugin lifecycle precheck and rehearsal.
-  - Phase 61: replication transaction-shape telemetry, report/remediation output, and rehearsal script.
-  - Phase 62: invisible-column and GIPK downgrade precheck, rehearsal fixture/script, and operator docs.
-  - Phase 62 evidence now includes:
-    - `mysql84 -> mysql80`
-    - `mysql84 -> mariadb10`
-    - `mysql84 -> mariadb11`
-  - Phase 63 implementation:
-    - added `internal/commands/collation_precheck.go`
-    - wired collation precheck into `plan`, schema `migrate`, and `report`
-    - added tests:
-      - `internal/commands/collation_precheck_test.go`
-      - updated `internal/commands/migrate_test.go`
-      - updated `internal/commands/report_test.go`
-    - added fixtures:
-      - `datasets/phase63_mysql0900_collation.sql`
-      - `datasets/phase63_mariadb_uca1400_collation.sql`
-    - added rehearsal script:
-      - `scripts/run-collation-rehearsal.sh`
-    - updated docs:
-      - `docs/operators-guide.md`
-      - `docs/known-problems.md`
-      - `docs/risk-checklist.md`
-      - `scripts/README.md`
-      - `datasets/README.md`
-  - Phase 63 merged via PR `#65`.
-  - Verified locally:
-    - `go test ./internal/commands`
-    - `go test ./...`
-    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-collation-rehearsal.sh ./state/collation-phase63`
-    - `./bin/dbmigrate report --state-dir ./state/collation-phase63/mysql84-to-mariadb10-0900/state --json` -> exit `2`, `status=attention_required`
-    - `./bin/dbmigrate report --state-dir ./state/collation-phase63/mariadb12-to-mariadb12-uca1400/state --json --fail-on-conflict=false` -> exit `0`, `status=ok`
-  - Observed Phase 63 evidence:
-    - `mysql84 -> mariadb10` with `utf8mb4_0900_ai_ci`:
-      - `plan_exit_code=2`
-      - `restore_exit_code=1`
-      - representative `mariadb10` CLI probe to MySQL 8.4 succeeded
-    - `mariadb12 -> mysql84` with `utf8mb4_uca1400_ai_ci`:
-      - `plan_exit_code=2`
-      - `restore_exit_code=1`
-      - representative `mysql80` CLI probe to MariaDB 12 succeeded
-    - `mariadb12 -> mariadb12` with `utf8mb4_uca1400_ai_ci`:
-      - `plan_exit_code=0`
-      - `restore_exit_code=0`
-      - `client_compatibility_risk_count=7`
-  - Research history and PR execution plan remain documented in:
-    - `docs/migration-replication-conflict-history.md`
-    - `docs/matrix-pr-plan.md`
-  - Phase 64 partial implementation already exists locally:
-    - verify data artifacts persisted to `verify-data-report.json`
-    - `report` surfaces verify artifact status/proposals
-    - rehearsal fixtures/scripts exist for MySQL 8.4 -> MariaDB 12 canonicalization evidence
-  - Phase 64 final local behavior:
-    - verify hashing runs on pinned source/destination connections with normalized session state
-    - `report` escalates real verify diffs, but not risk-only artifacts
-    - rehearsal script forces UTF-8 client loading so fixture evidence is semantically stable
-  - Verified locally:
-    - `go test ./internal/verify/data ./internal/commands`
-    - `go test ./...`
-    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64-final3`
-  - Observed Phase 64 evidence:
-    - `naive_hashes_differ=true`
-    - `verify_hash_exit_code=0`
-    - `verify_sample_exit_code=0`
-    - `verify_full_hash_exit_code=0`
-    - `representation_risk_tables=4`
-    - `noise_risk_mismatches=0`
-  - CI failure identified and fixed on PR `#66` before merge:
-    - `golangci-lint` reported `internal/verify/data/verify.go:400:6: func listTableColumns is unused`
-  - Added tracked planning doc:
+  - Product scope is split explicitly:
+    - `v1`: only implemented and genuinely supported paths
+    - `v2`: surfaced-but-not-implemented CLI paths
+    - `v3`: `v2` plus managed/cloud deployment paths
+  - The frozen `v1` support surface is documented in:
+    - `README.md`
     - `docs/v1-release-plan.md`
+    - `docs/v1-release-criteria.md`
+  - A true `v1` matrix run must target the frozen `v1` engine/version lines, not the older legacy local matrix.
+  - Keep the legacy matrix intact for historical rehearsals; add new `v1` infra alongside it instead of renaming existing services in place.
+  - Keep the frozen strict-lts release lane distinct from supplemental upgrade-evidence scenarios so release-grade signoff does not get muddied by broader non-frozen paths.
+- State:
+  - Current branch: `codex/chore/v1-matrix-infra`.
+  - PR `#67`, PR `#68`, and PR `#69` are merged.
+  - Blocker diagnosis is complete: current local Docker/test infra did not match the frozen `v1` support matrix; this branch now carries the alignment patch and supplemental requested scenarios.
+  - Commit `90fe355` records the infra alignment work locally and is ready to publish.
+- Done:
+  - Added and merged:
+    - `docs/v1-release-plan.md`
+    - `docs/v1-release-criteria.md`
+  - Updated and merged `README.md` to define explicit `v1 / v2 / v3` scope and tighten `strict-lts` vs `max-compat` wording.
+  - Confirmed local infra mismatch:
+    - frozen `v1` docs require exact lines around `MariaDB 10.11.x`, `MariaDB 11.4.x`, `MariaDB 11.8.x`, and `MySQL 8.4.x`
+    - local Docker currently exposes only `mariadb:10.6`, `mariadb:11.0`, `mariadb:12.0`, `mysql:8.0`, and `mysql:8.4`
+    - current `scripts/test-*.sh` wrappers are still the older 20-scenario matrix built around those legacy services
+  - Added parallel frozen-`v1` local services in `docker-compose.yml`:
+    - `mysql84a`, `mysql84b`
+    - `mysql80a`
+    - `mariadb1011a`, `mariadb1011b`
+    - `mariadb114a`, `mariadb114b`
+    - `mariadb118a`, `mariadb118b`
+  - Added exact frozen-`v1` configs:
+    - `configs/v1-mysql84a-to-mysql84b.yaml`
+    - `configs/v1-mariadb1011a-to-mariadb1011b.yaml`
+    - `configs/v1-mariadb114a-to-mariadb114b.yaml`
+    - `configs/v1-mariadb118a-to-mariadb118b.yaml`
+    - `configs/v1-mysql84a-to-mariadb114b.yaml`
+    - `configs/v1-mariadb114a-to-mysql84b.yaml`
+  - Added dedicated frozen-`v1` wrappers:
+    - `scripts/test-v1-*.sh`
+    - `scripts/test-v1-matrix.sh`
+  - Added supplemental upgrade-evidence configs and wrappers:
+    - `configs/v1-supplemental-mariadb1011a-to-mariadb114b.yaml`
+    - `configs/v1-supplemental-mariadb1011a-to-mariadb118b.yaml`
+    - `configs/v1-supplemental-mariadb114a-to-mariadb118b.yaml`
+    - `configs/v1-supplemental-mysql80a-to-mysql84b.yaml`
+    - `scripts/test-v1-supplemental-*.sh`
+    - `scripts/test-v1-supplemental-matrix.sh`
+  - Updated `scripts/run-migration-test.sh` dataset routing so the new service names map to the correct legacy-compatible seed datasets.
+  - Verified locally:
+    - `docker compose -f docker-compose.yml config --services`
+    - `go test ./...`
+    - `./scripts/test-v1-mysql84-to-mysql84.sh`
+    - `./scripts/test-v1-mysql84-to-mariadb114.sh`
+    - `./scripts/test-v1-supplemental-matrix.sh`
+    - `docker compose up -d mariadb1011a mariadb118a` plus `SELECT VERSION()` smoke checks
+  - Observed local evidence:
+    - `mysql84a -> mysql84b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mysql84a -> mariadb114b` passed end-to-end with strict-lts matrix match, warning-only plugin/collation findings, and `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mariadb1011a -> mariadb114b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mariadb1011a -> mariadb118b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mariadb114a -> mariadb118b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mysql80a -> mysql84b` passed end-to-end with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+    - `mariadb1011a` started successfully as `10.11.16-MariaDB-ubu2204`
+    - `mariadb118a` started successfully as `11.8.6-MariaDB-ubu2404`
 - Now:
-  - Publish the v1 release criteria/signoff doc, then start the fresh full v1 matrix execution workstream.
+  - Publish the infra-alignment branch and open the PR.
 - Next:
-  - Commit, push, and open the v1 release-criteria PR.
-  - Create the matrix-execution branch and begin the full v1 matrix run.
+  - Then start the actual full frozen-`v1` matrix execution using `scripts/test-v1-matrix.sh`.
 - Open questions (UNCONFIRMED if needed):
-  - None on product scope; the remaining question is release execution order for v1 hardening.
+  - UNCONFIRMED: whether the same MariaDB 11.x dataset mapping is sufficient for the full `mariadb114*` and `mariadb118*` matrix sweep, or whether a narrower version-specific seed split will be needed after the first complete run.
 - Working set (files/ids/commands):
   - Files:
     - `CONTINUITY.md`
-    - `docs/matrix-pr-plan.md`
-    - `docs/migration-replication-conflict-history.md`
-    - `internal/verify/data/verify.go`
-    - `internal/commands/report.go`
-    - `internal/commands/verify.go`
-    - `internal/commands/verify_artifact.go`
-    - `datasets/phase64_verify_source_mysql84.sql`
-    - `datasets/phase64_verify_dest_mariadb12.sql`
-    - `scripts/run-verify-canonicalization-rehearsal.sh`
-  - IDs: merged PR `#59`, merged PR `#60`, merged PR `#61`, merged PR `#62`, merged PR `#63`, merged PR `#64`, merged PR `#65`, merged PR `#66`, merged PR `#67`, merged PR `#68`; branch `codex/chore/v1-release-criteria`.
+    - `docker-compose.yml`
+    - `README.md`
+    - `docs/v1-release-plan.md`
+    - `docs/v1-release-criteria.md`
+    - `docs/operators-guide.md`
+    - `scripts/run-migration-test.sh`
+    - `scripts/test-*.sh`
+    - `configs/`
+    - `datasets/README.md`
+  - IDs:
+    - branch `codex/chore/v1-matrix-infra`
+    - merged PR `#67`
+    - merged PR `#68`
+    - merged PR `#69`
   - Commands:
-    - `go test ./internal/verify/data ./internal/commands`
+    - `docker compose up -d <service>...`
+    - `./scripts/run-migration-test.sh <config> <source-service> <dest-service>`
     - `go test ./...`
-    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64-final3`

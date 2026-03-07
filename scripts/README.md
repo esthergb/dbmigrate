@@ -4,9 +4,9 @@ This directory contains executable wrappers for exhaustive migration scenario te
 
 ## Scope
 
-- 20 scenarios across MariaDB 10.6/11.0/12.0 and MySQL 8.0/8.4.
+- Legacy matrix: 20 scenarios across MariaDB 10.6/11.0/12.0 and MySQL 8.0/8.4.
+- Frozen v1 matrix: exact release-grade services for MariaDB 10.11/11.4/11.8 and MySQL 8.4.
 - Same-engine and cross-engine paths.
-- Upgrade and downgrade directions.
 
 ## Structure
 
@@ -20,7 +20,9 @@ This directory contains executable wrappers for exhaustive migration scenario te
 - `run-invisible-gipk-rehearsal.sh`: local proof of invisible-column visibility drift and generated invisible primary key dump behavior.
 - `run-collation-rehearsal.sh`: local proof that server-unsupported collations and client-compatibility risk are different failure classes.
 - `run-verify-canonicalization-rehearsal.sh`: local proof that naive hashes can drift while canonicalized verify remains stable.
-- `test-*.sh`: thin scenario wrappers that call the shared runner.
+- `test-*.sh`: legacy scenario wrappers that call the shared runner.
+- `test-v1-*.sh`: frozen v1 matrix wrappers targeting the exact release-grade local service set.
+- `test-v1-supplemental-*.sh`: extra upgrade-evidence wrappers requested outside the frozen strict-lts release lane.
 
 ## What the Runner Does
 
@@ -156,13 +158,43 @@ docker compose up -d mysql84 mariadb12
 ./scripts/run-verify-canonicalization-rehearsal.sh ./state/verify-canonicalization-phase64
 ```
 
-Run all scenarios sequentially:
+Run all legacy scenarios sequentially:
 
 ```bash
 for script in scripts/test-*.sh; do
   echo "Running $script"
   bash "$script" || echo "FAILED: $script"
 done
+```
+
+Run the frozen v1 matrix only:
+
+```bash
+./scripts/test-v1-matrix.sh
+```
+
+Frozen `v1` wrappers currently cover the exact release-grade strict-lts pairs only:
+
+- `test-v1-mysql84-to-mysql84.sh`
+- `test-v1-mariadb1011-to-mariadb1011.sh`
+- `test-v1-mariadb114-to-mariadb114.sh`
+- `test-v1-mariadb118-to-mariadb118.sh`
+- `test-v1-mysql84-to-mariadb114.sh`
+- `test-v1-mariadb114-to-mysql84.sh`
+
+They intentionally do not include `max-compat` candidate paths or broader same-major range sweeps.
+
+Supplemental wrappers currently cover:
+
+- `test-v1-supplemental-mariadb1011-to-mariadb114.sh`
+- `test-v1-supplemental-mariadb1011-to-mariadb118.sh`
+- `test-v1-supplemental-mariadb114-to-mariadb118.sh`
+- `test-v1-supplemental-mysql80-to-mysql84.sh`
+
+Run them together with:
+
+```bash
+./scripts/test-v1-supplemental-matrix.sh
 ```
 
 ## Troubleshooting
