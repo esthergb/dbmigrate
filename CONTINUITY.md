@@ -48,6 +48,7 @@ Last updated: 2026-03-07
   - PR `#78` (`fix: default tls mode to required`) is merged.
   - PR `#79` (`fix: use typed checkpoint cursors for baseline resume`) is merged.
   - User approved remote actions (push + PR creation) for PR D branch.
+  - PR `#80` is open for PR D (`fix: fail fast on mixed ddl and row replay windows`).
 - Done:
   - Implemented PR D replication DDL-window safety fence on `codex/fix/v1-prD-replication-ddl-fence`:
     - replication apply now fails fast when a replay window mixes schema-changing DDL with row events
@@ -63,6 +64,8 @@ Last updated: 2026-03-07
   - Validation passed:
     - `go test ./internal/replicate/binlog`
     - `go test ./...`
+  - Pushed `codex/fix/v1-prD-replication-ddl-fence` to `origin`.
+  - Opened PR `#80` against `main`.
   - PR `#79` merged into `main` and local `main` synced.
   - PR `#78` merged into `main` and local `main` synced.
   - Implemented PR C typed checkpoint cursor hardening on `codex/fix/v1-prC-typed-checkpoint-cursor`:
@@ -237,9 +240,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Push PR D branch and open PR against `main`.
+  - Wait for CI and review feedback on PR `#80`.
 - Next:
-  - Wait for CI and review/merge decision on PR D.
+  - Merge PR `#80` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
