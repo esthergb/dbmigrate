@@ -56,8 +56,16 @@ service_port() {
     mariadb10) echo "13306" ;;
     mariadb11) echo "13307" ;;
     mariadb12) echo "13308" ;;
-    mysql80) echo "23306" ;;
+    mariadb1011a) echo "14311" ;;
+    mariadb1011b) echo "14312" ;;
+    mariadb114a) echo "14411" ;;
+    mariadb114b) echo "14412" ;;
+    mariadb118a) echo "14811" ;;
+    mariadb118b) echo "14812" ;;
+    mysql80|mysql80a) echo "23306" ;;
     mysql84) echo "23307" ;;
+    mysql84a) echo "24311" ;;
+    mysql84b) echo "24312" ;;
     *)
       echo "unknown service: $1" >&2
       return 1

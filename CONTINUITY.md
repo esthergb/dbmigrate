@@ -1,8 +1,8 @@
 Last updated: 2026-03-07
 
 - Goal (incl. success criteria):
-  - Execute the full frozen `v1` matrix on current `main` and include the supplemental upgrade-evidence matrix in the same execution workstream.
-  - Success means the release-grade `v1` matrix has fresh execution evidence on current code, and the supplemental upgrade scenarios also have fresh current-main evidence recorded separately.
+  - Rerun and archive the focused rehearsal set required by `docs/v1-release-criteria.md` so `v1` signoff has fresh operator-grade evidence, not just matrix evidence.
+  - Success means every required rehearsal has a fresh current-main run, archived output location, and a clean pass/fail classification ready for the final signoff bundle.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
@@ -22,11 +22,17 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-matrix-execution-phase71`.
-  - PR `#67`, PR `#68`, PR `#69`, and PR `#70` are merged.
-  - Local `main` is fast-forwarded to include the merged v1 matrix infra lane.
-  - Full frozen `v1` matrix execution has been run on this branch against current merged code.
+  - Current branch: `codex/chore/v1-signoff-rehearsals`.
+  - PR `#67`, PR `#68`, PR `#69`, PR `#70`, and PR `#71` are merged.
+  - Local `main` is fast-forwarded to include the merged v1 matrix infra lane and matrix evidence report.
+  - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
   - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
+  - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
+    - retargeted to frozen `v1` services: metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, verify canonicalization
+    - collation server-side scenarios retargeted to `v1`-relevant services, while the representative client probe intentionally uses `mysql80a`
+  - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
+  - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
+  - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
 - Done:
   - Added and merged:
     - `docs/v1-release-plan.md`
@@ -73,14 +79,31 @@ Last updated: 2026-03-07
     - every strict-lts scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
     - cross-engine strict-lts paths remained warning-heavy for auth-plugin and collation-client risk, but were still semantically successful and classified `report=status=ok`
     - every supplemental scenario completed with `plan=0`, `migrate=0`, `verify=0`, `report=0`
+  - Ran an initial focused signoff rehearsal pack on `codex/chore/v1-signoff-rehearsals`:
+    - `./scripts/run-v1-signoff-rehearsals.sh`
+  - Initial signoff pack result:
+    - archived root: `state/v1-signoff-rehearsals/20260307T003054Z`
+    - metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, and verify canonicalization all archived correctly
+    - collation evidence executed but the wrapper returned nonzero before the top-level summary was written
+  - Patched `scripts/run-collation-rehearsal.sh` so `report` exit codes are archived without aborting expected incompatible scenarios.
+  - Reran the full signoff rehearsal pack:
+    - `./scripts/run-v1-signoff-rehearsals.sh`
+  - Clean signoff pack result:
+    - archived root: `state/v1-signoff-rehearsals/20260307T003408Z`
+    - manifest: `state/v1-signoff-rehearsals/20260307T003408Z/manifest.tsv`
+    - top summary: `state/v1-signoff-rehearsals/20260307T003408Z/summary.json`
+    - `failed_steps=0`
+    - unexpected failures: none
+  - Verified current branch before publish:
+    - `go test ./...`
+    - `bash -n scripts/run-plugin-lifecycle-rehearsal.sh scripts/run-invisible-gipk-rehearsal.sh scripts/run-collation-rehearsal.sh scripts/run-verify-canonicalization-rehearsal.sh scripts/run-v1-signoff-rehearsals.sh`
 - Now:
-  - Publish the dedicated matrix-evidence/report PR from this branch.
+  - Prepare this branch for commit/PR with the focused signoff evidence and script retargeting.
 - Next:
-  - Rerun focused rehearsals required by `docs/v1-release-criteria.md` if they are being treated as stale for release signoff.
-  - After that, assemble the signoff bundle or a focused release-blocker report.
+  - Commit and publish the signoff-rehearsal evidence branch after user confirmation.
+  - After merge, assemble the final `v1` signoff bundle or release decision PR.
 - Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether the same MariaDB 11.x dataset mapping is sufficient for the full `mariadb114*` and `mariadb118*` matrix sweep, or whether a narrower version-specific seed split will be needed after the first complete run.
-  - UNCONFIRMED: whether you want the next branch to be a docs/report PR that captures this frozen-matrix evidence formally, or a broader signoff bundle including the focused rehearsal reruns.
+  - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
   - Files:
     - `CONTINUITY.md`
@@ -88,16 +111,25 @@ Last updated: 2026-03-07
     - `README.md`
     - `docs/v1-release-plan.md`
     - `docs/v1-release-criteria.md`
+    - `docs/v1-rehearsal-evidence.md`
     - `docker-compose.yml`
-    - `scripts/run-migration-test.sh`
-    - `scripts/test-v1-matrix.sh`
-    - `configs/v1-*.yaml`
+    - `scripts/run-metadata-lock-scenario.sh`
+    - `scripts/run-backup-restore-rehearsal.sh`
+    - `scripts/run-timezone-rehearsal.sh`
+    - `scripts/run-plugin-lifecycle-rehearsal.sh`
+    - `scripts/run-replication-shape-rehearsal.sh`
+    - `scripts/run-invisible-gipk-rehearsal.sh`
+    - `scripts/run-collation-rehearsal.sh`
+    - `scripts/run-verify-canonicalization-rehearsal.sh`
+    - `scripts/run-v1-signoff-rehearsals.sh`
   - IDs:
     - merged PR `#67`
     - merged PR `#68`
     - merged PR `#69`
     - merged PR `#70`
+    - merged PR `#71`
   - Commands:
     - `go test ./...`
     - `./scripts/test-v1-matrix.sh`
+    - `./scripts/run-v1-signoff-rehearsals.sh`
     - `docker compose -f docker-compose.yml config --services`
