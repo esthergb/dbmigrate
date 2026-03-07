@@ -20,6 +20,7 @@ Last updated: 2026-03-07
 - State:
   - Current branch: `codex/fix/v1-prH-operation-timeout`.
   - `main` includes merged PRs through `#83`.
+  - PR `#84` is open: `fix: add global operation timeout support`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -71,9 +72,9 @@ Last updated: 2026-03-07
     - `go test ./internal/config ./internal/cli`
     - `go test ./...`
 - Now:
-  - Publish PR H after user confirmation (received): push branch + open PR.
+  - Monitor PR `#84` CI and address failures if they appear.
 - Next:
-  - Monitor PR CI and address failures quickly.
+  - Merge PR `#84` and continue the next v1 hardening slice.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
