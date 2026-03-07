@@ -53,9 +53,9 @@ Last updated: 2026-03-07
     - `go test ./internal/commands ./internal/replicate/binlog`
     - `go test ./...`
 - Now:
-  - Prepare PR F commit on this branch.
+  - Publish PR F after user confirmation (received): push branch + open PR.
 - Next:
-  - Run tests, commit, and ask user confirmation before push + PR.
+  - Monitor PR CI and address failures quickly.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
