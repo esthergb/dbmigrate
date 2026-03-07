@@ -20,6 +20,7 @@ Last updated: 2026-03-07
 - State:
   - Current branch: `codex/fix/v1-prE-replication-buffer-bounds`.
   - `main` includes merged PRs through `#80`.
+  - PR `#81` is open: `fix: bound replication source-window buffering`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -46,7 +47,7 @@ Last updated: 2026-03-07
 - Now:
   - Publish PR E: push branch and open PR after explicit user approval (received).
 - Next:
-  - Monitor PR E CI and resolve any failures.
+  - Monitor PR `#81` CI and resolve any failures.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):
