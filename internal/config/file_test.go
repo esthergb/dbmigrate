@@ -62,12 +62,47 @@ func TestLoadFileConfigDryRunMode(t *testing.T) {
 	}
 }
 
+func TestLoadFileConfigOperationTimeout(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.yaml")
+	content := []byte("operation-timeout: 45s\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		t.Fatalf("expected load success: %v", err)
+	}
+	if cfg.OperationTimeout == nil || *cfg.OperationTimeout != "45s" {
+		t.Fatalf("unexpected operation-timeout: %#v", cfg.OperationTimeout)
+	}
+}
+
+func TestLoadFileConfigInvalidOperationTimeoutFails(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "cfg.yaml")
+	content := []byte("operation-timeout: nope\n")
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	_, err := LoadFileConfig(path)
+	if err == nil {
+		t.Fatal("expected invalid operation-timeout error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "operation-timeout") {
+		t.Fatalf("expected operation-timeout details, got: %v", err)
+	}
+}
+
 func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	source := "mysql://from-file"
 	concurrency := 9
 	profile := "max-compat"
 	dryRunMode := "sandbox"
-	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency, DowngradeProfile: &profile, DryRunMode: &dryRunMode}
+	timeout := "30s"
+	fileCfg := FileConfig{Source: &source, Concurrency: &concurrency, DowngradeProfile: &profile, DryRunMode: &dryRunMode, OperationTimeout: &timeout}
 	target := RuntimeConfig{Source: "mysql://from-flag", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan"}
 	explicit := map[string]struct{}{"source": {}}
 
@@ -84,6 +119,9 @@ func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 	}
 	if target.DryRunMode != "sandbox" {
 		t.Fatalf("file config should apply dry-run-mode, got %q", target.DryRunMode)
+	}
+	if target.OperationTimeout.String() != "30s" {
+		t.Fatalf("file config should apply operation-timeout, got %s", target.OperationTimeout)
 	}
 }
 

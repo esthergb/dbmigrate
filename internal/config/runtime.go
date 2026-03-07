@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/esthergb/dbmigrate/internal/db"
 )
@@ -44,6 +45,7 @@ type RuntimeConfig struct {
 	CAFile           string
 	CertFile         string
 	KeyFile          string
+	OperationTimeout time.Duration
 	StateDir         string
 	DowngradeProfile string
 
@@ -69,6 +71,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.CAFile, "ca-file", "", "TLS CA file")
 	fs.StringVar(&cfg.CertFile, "cert-file", "", "TLS client cert file")
 	fs.StringVar(&cfg.KeyFile, "key-file", "", "TLS client key file")
+	fs.DurationVar(&cfg.OperationTimeout, "operation-timeout", 0, "global operation timeout (0 disables deadline)")
 	fs.StringVar(&cfg.StateDir, "state-dir", "./state", "checkpoint and metadata directory")
 	fs.StringVar(&cfg.DowngradeProfile, "downgrade-profile", "strict-lts", "downgrade compatibility profile: strict-lts, same-major, adjacent-minor, max-compat")
 }
@@ -100,6 +103,9 @@ func (c *RuntimeConfig) Finalize() {
 func (c RuntimeConfig) ValidateBasic() error {
 	if c.Concurrency < 1 {
 		return errors.New("concurrency must be at least 1")
+	}
+	if c.OperationTimeout < 0 {
+		return errors.New("operation-timeout must be >= 0")
 	}
 	if _, ok := validTLSModes[c.TLSMode]; !ok {
 		return fmt.Errorf("invalid tls-mode %q", c.TLSMode)

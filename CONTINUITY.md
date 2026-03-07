@@ -18,9 +18,9 @@ Last updated: 2026-03-07
     - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
   - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prG-view-definer-sanitization`.
-  - `main` includes merged PRs through `#82`.
-  - PR `#83` is open: `fix: sanitize view definers during schema apply`.
+  - Current branch: `codex/fix/v1-prH-operation-timeout`.
+  - `main` includes merged PRs through `#83`.
+  - PR `#84` is open: `fix: add global operation timeout support`.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
@@ -35,6 +35,7 @@ Last updated: 2026-03-07
     - `#80` mixed DDL+row replay fail-fast fence.
     - `#81` bounded source-window buffering during binlog read.
     - `#82` explicit source server-id override for binlog replication.
+    - `#83` sanitize view definers during schema apply.
   - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
   - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds` (merged as `#81`):
     - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
@@ -62,10 +63,18 @@ Last updated: 2026-03-07
   - Validation passed for PR G:
     - `go test ./internal/schema`
     - `go test ./...`
+  - Implemented PR H on `codex/fix/v1-prH-operation-timeout`:
+    - added global `--operation-timeout` runtime flag and config-file support
+    - root CLI now wraps command execution with `context.WithTimeout` when timeout > 0
+    - invalid timeout values fail early in config-file loading and runtime validation
+    - documented operator-facing timeout behavior in README and operators guide
+  - Validation passed for PR H:
+    - `go test ./internal/config ./internal/cli`
+    - `go test ./...`
 - Now:
-  - Monitor PR `#83` CI and address failures if they appear.
+  - Monitor PR `#84` CI and address failures if they appear.
 - Next:
-  - Merge PR `#83` and continue the next v1 hardening slice.
+  - Merge PR `#84` and continue the next v1 hardening slice.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to keep defaults at `200k events / 64 MiB estimated bytes` or tune after matrix evidence.
 - Working set (files/ids/commands):

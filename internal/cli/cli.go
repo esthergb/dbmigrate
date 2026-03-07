@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/esthergb/dbmigrate/internal/commands"
 	"github.com/esthergb/dbmigrate/internal/config"
@@ -80,7 +81,10 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintln(stderr, "warning: --tls-mode=preferred allows plaintext fallback; use --tls-mode=required for production")
 	}
 
-	if err := handler(ctx, cfg, commandArgs, stdout); err != nil {
+	commandCtx, cancel := applyOperationTimeout(ctx, cfg.OperationTimeout)
+	defer cancel()
+
+	if err := handler(commandCtx, cfg, commandArgs, stdout); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
 		if code, ok := commands.ResolveExitCode(err); ok {
 			return code
@@ -122,6 +126,7 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string, error) {
 		"ca-file":           {},
 		"cert-file":         {},
 		"key-file":          {},
+		"operation-timeout": {},
 		"state-dir":         {},
 		"downgrade-profile": {},
 		"dry-run-mode":      {},
@@ -176,4 +181,11 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string, error) {
 	}
 
 	return global, command, nil
+}
+
+func applyOperationTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
