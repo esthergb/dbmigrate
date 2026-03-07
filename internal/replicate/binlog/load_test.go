@@ -126,6 +126,46 @@ func TestBuildApplyBatchesDDLRiskyBlockedInApplyMode(t *testing.T) {
 	}
 }
 
+func TestBuildApplyBatchesFailsWhenDDLPrecedesRowEvents(t *testing.T) {
+	events := []streamEvent{
+		{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 240, Query: "CREATE TABLE app.t(id INT PRIMARY KEY)"},
+		{Kind: streamEventWriteRows, File: "mysql-bin.000001", Pos: 250, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}}},
+	}
+
+	_, err := buildApplyBatches(context.Background(), nil, events, Options{ApplyDDL: "apply"})
+	if err == nil {
+		t.Fatal("expected unsafe mixed DDL + row window failure")
+	}
+	if !strings.Contains(err.Error(), "unsafe replication window mixes DDL") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBuildApplyBatchesFailsWhenDDLFollowsRowEvents(t *testing.T) {
+	restore := stubLoadHooks(t)
+	defer restore()
+
+	loadTableMetadataFn = func(_ context.Context, _ *sql.DB, _ string, _ string) (tableMetadata, error) {
+		return tableMetadata{
+			Columns:     []string{"id", "name"},
+			KeyOrdinals: []int{0},
+		}, nil
+	}
+
+	events := []streamEvent{
+		{Kind: streamEventWriteRows, File: "mysql-bin.000001", Pos: 300, Schema: "app", Table: "items", Rows: [][]any{{int64(1), "a"}}},
+		{Kind: streamEventQuery, File: "mysql-bin.000001", Pos: 320, Query: "ALTER TABLE app.items ADD COLUMN c INT"},
+	}
+
+	_, err := buildApplyBatches(context.Background(), nil, events, Options{ApplyDDL: "apply"})
+	if err == nil {
+		t.Fatal("expected unsafe mixed row + DDL window failure")
+	}
+	if !strings.Contains(err.Error(), "unsafe replication window mixes DDL") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestBuildApplyBatchesIncompleteTransactionFails(t *testing.T) {
 	restore := stubLoadHooks(t)
 	defer restore()

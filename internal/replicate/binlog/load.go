@@ -209,6 +209,8 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 	pendingFile := ""
 	var pendingPos uint32
 	batches := make([]applyBatch, 0, 16)
+	var firstDDLEvent *streamEvent
+	var firstRowEvent *streamEvent
 
 	for _, event := range events {
 		switch event.Kind {
@@ -249,6 +251,13 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 					Message:     fmt.Sprintf("unsupported query event %q at %s:%d under ROW replication", event.Query, event.File, event.Pos),
 					Remediation: "run migrate --schema-only to align schema changes, then rerun replicate",
 				}
+			}
+			if firstRowEvent != nil {
+				return nil, unsafeDDLWindowFailure(event, *firstRowEvent)
+			}
+			if firstDDLEvent == nil {
+				ddlCopy := event
+				firstDDLEvent = &ddlCopy
 			}
 			switch opts.ApplyDDL {
 			case "ignore":
@@ -312,6 +321,13 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 			pendingFile = ""
 			pendingPos = 0
 		case streamEventWriteRows, streamEventUpdateRows, streamEventDeleteRows:
+			if firstRowEvent == nil {
+				rowCopy := event
+				firstRowEvent = &rowCopy
+			}
+			if firstDDLEvent != nil {
+				return nil, unsafeDDLWindowFailure(*firstDDLEvent, event)
+			}
 			tableKey := tableKey(event.Schema, event.Table)
 			metadata, ok := cache[tableKey]
 			if !ok {
@@ -344,6 +360,25 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 		}
 	}
 	return batches, nil
+}
+
+func unsafeDDLWindowFailure(ddlEvent streamEvent, rowEvent streamEvent) *applyFailure {
+	return &applyFailure{
+		FailureType: "ddl_window_unsafe_live_metadata",
+		File:        rowEvent.File,
+		Pos:         rowEvent.Pos,
+		Operation:   "transaction",
+		TableName:   rowEvent.Schema + "." + rowEvent.Table,
+		Query:       ddlEvent.Query,
+		Message: fmt.Sprintf(
+			"unsafe replication window mixes DDL (%s:%d) with row events (%s:%d); v1 replay uses live metadata and cannot guarantee correct row mapping",
+			ddlEvent.File,
+			ddlEvent.Pos,
+			rowEvent.File,
+			rowEvent.Pos,
+		),
+		Remediation: "split replay window at DDL boundaries, run migrate --schema-only to align schema, then rerun replicate from checkpoint",
+	}
 }
 
 func sqlEventsForRows(event streamEvent, metadata tableMetadata, conflictPolicy string) ([]applyEvent, error) {

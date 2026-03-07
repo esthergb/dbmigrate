@@ -59,6 +59,7 @@ Observed failure patterns:
 - Preflight scanner for unsupported DDL constructs (sequence objects, system-versioned clauses, engine-specific syntax).
 - Default behavior: fail-fast with exact object list and remediation hints.
 - `--apply-ddl` policy gate applied before replaying risky DDL in replication.
+- Replication now fails fast when a replay window mixes DDL and row events, because v1 row replay still depends on live metadata lookup; operators must split windows at DDL boundaries and align schema first.
 
 ### 1.3 MySQL invisible columns, invisible indexes, and generated invisible primary keys drift across downgrade targets
 
