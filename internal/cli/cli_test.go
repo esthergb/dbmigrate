@@ -139,7 +139,10 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 		"--force",
 		"--json",
 	}
-	global, command := splitGlobalAndCommandArgs(raw)
+	global, command, err := splitGlobalAndCommandArgs(raw)
+	if err != nil {
+		t.Fatalf("unexpected split error: %v", err)
+	}
 
 	if len(global) == 0 || len(command) == 0 {
 		t.Fatalf("expected both global and command args, got global=%v command=%v", global, command)
@@ -166,6 +169,18 @@ func TestSplitGlobalAndCommandArgs(t *testing.T) {
 	}
 	if !foundDryRunMode {
 		t.Fatalf("expected dry-run-mode in global args, got %v", global)
+	}
+}
+
+func TestSplitGlobalAndCommandArgsMissingValue(t *testing.T) {
+	raw := []string{
+		"--source",
+		"--dest", "mysql://dst",
+		"plan",
+	}
+	_, _, err := splitGlobalAndCommandArgs(raw)
+	if err == nil {
+		t.Fatal("expected split error for missing global flag value")
 	}
 }
 

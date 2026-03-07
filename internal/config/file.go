@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,9 +48,33 @@ func LoadFileConfig(path string) (FileConfig, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
 	case ".json":
-		err = json.Unmarshal(raw, &out)
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err = dec.Decode(&out); err == nil {
+			var trailing any
+			trailingErr := dec.Decode(&trailing)
+			if trailingErr != io.EOF {
+				if trailingErr == nil {
+					err = errors.New("unexpected trailing JSON content")
+				} else {
+					err = trailingErr
+				}
+			}
+		}
 	case ".yaml", ".yml", "":
-		err = yaml.Unmarshal(raw, &out)
+		dec := yaml.NewDecoder(bytes.NewReader(raw))
+		dec.KnownFields(true)
+		if err = dec.Decode(&out); err == nil {
+			var trailing any
+			trailingErr := dec.Decode(&trailing)
+			if trailingErr != io.EOF {
+				if trailingErr == nil {
+					err = errors.New("unexpected trailing YAML content")
+				} else {
+					err = trailingErr
+				}
+			}
+		}
 	default:
 		return FileConfig{}, fmt.Errorf("unsupported config extension %q", ext)
 	}

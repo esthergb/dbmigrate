@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+
+	"github.com/esthergb/dbmigrate/internal/db"
 )
 
 var validTLSModes = map[string]struct{}{
@@ -108,11 +110,21 @@ func (c RuntimeConfig) ValidateBasic() error {
 	if _, ok := validDryRunModes[c.DryRunMode]; !ok {
 		return fmt.Errorf("invalid dry-run-mode %q", c.DryRunMode)
 	}
-	if c.Source != "" && !strings.Contains(c.Source, "://") {
-		return errors.New("source must be a DSN URI")
+	if err := validateRuntimeDSN(c.Source, "source"); err != nil {
+		return err
 	}
-	if c.Dest != "" && !strings.Contains(c.Dest, "://") {
-		return errors.New("dest must be a DSN URI")
+	if err := validateRuntimeDSN(c.Dest, "dest"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateRuntimeDSN(raw string, field string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	if _, err := db.NormalizeDSN(raw); err != nil {
+		return fmt.Errorf("%s has invalid DSN format: %w", field, err)
 	}
 	return nil
 }

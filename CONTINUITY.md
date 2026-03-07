@@ -22,8 +22,10 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-release-gate-automation-phase65`.
+  - Current branch: `codex/fix/v1-prA-safety-hardening` (rebased from `main`).
   - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
+  - PR `#75` (`chore: automate v1 release gate execution`) is merged.
+  - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and pending merge.
   - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
   - Baseline prior state is merged through PR `#73` on `main`.
   - Three new review inputs are present and untracked:
@@ -39,7 +41,29 @@ Last updated: 2026-03-07
   - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
   - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
   - Final release decision doc now exists at `docs/v1-release-decision.md`.
+  - External review triage accepted by user; next execution wave is PR A safety hardening:
+    - strict config decoding
+    - global flag split parsing hardening
+    - secure artifact file permissions
+    - DSN validation aligned with connector parser
+  - User approved remote actions (push + PR creation) for PR A branch.
+  - PR `#77` is open for PR A (`fix: harden v1 safety defaults and parsing`).
 - Done:
+  - Implemented PR A safety hardening on `codex/fix/v1-prA-safety-hardening`:
+    - strict config decoding with unknown-key rejection for YAML/JSON in `internal/config/file.go`
+    - global flag split hardening with fail-fast on missing global flag values in `internal/cli/cli.go`
+    - artifact file permissions tightened to `0600` for verify/collation artifacts
+    - runtime DSN validation unified with connector parser (`db.NormalizeDSN`) in `internal/config/runtime.go`
+  - Added tests for PR A:
+    - unknown config keys and trailing JSON handling (`internal/config/file_test.go`)
+    - driver-style DSN acceptance and invalid DSN rejection (`internal/config/runtime_test.go`)
+    - global-flag splitter missing-value failure (`internal/cli/cli_test.go`)
+    - secure file mode assertions for verify/collation artifacts (`internal/commands/verify_test.go`, `internal/commands/collation_precheck_test.go`)
+  - Validation passed:
+    - `go test ./internal/config ./internal/cli ./internal/commands`
+    - `go test ./...`
+  - Pushed `codex/fix/v1-prA-safety-hardening` to `origin`.
+  - Opened PR `#77` against `main`.
   - Started post-merge automation phase on `codex/chore/v1-release-gate-automation-phase65`.
   - Added new release gate entrypoint:
     - `scripts/run-v1-release-gate.sh`
@@ -170,9 +194,9 @@ Last updated: 2026-03-07
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
 - Now:
-  - Prepare this phase for commit and user confirmation.
+  - Wait for CI and review feedback on PR `#77`.
 - Next:
-  - Commit this branch and ask user for explicit approval before push/PR.
+  - Merge PR `#77` once checks are green and user confirms.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
