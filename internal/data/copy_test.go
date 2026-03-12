@@ -1,6 +1,8 @@
 package data
 
 import (
+	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/esthergb/dbmigrate/internal/state"
@@ -76,6 +78,16 @@ func TestQuoteIdentifierEscapesBackticks(t *testing.T) {
 	if out != "`na``me`" {
 		t.Fatalf("unexpected quoted identifier: %s", out)
 	}
+}
+
+func TestApplyBatchAcceptsTxBeginner(t *testing.T) {
+	var _ txBeginner = (*mockTxBeginner)(nil)
+}
+
+type mockTxBeginner struct{}
+
+func (*mockTxBeginner) BeginTx(_ context.Context, _ *sql.TxOptions) (*sql.Tx, error) {
+	return nil, nil
 }
 
 func TestSortTableNamesByDependencies(t *testing.T) {
