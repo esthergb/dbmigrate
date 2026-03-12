@@ -231,7 +231,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 			}
 
 			for _, w := range precheckWarnings {
-				_, _ = fmt.Fprintf(out, "[migrate] precheck %s code=%s message=%s\n", w.Severity, w.Code, w.Message)
+				cfg.Log.Warn("precheck finding", "code", w.Code, "severity", w.Severity, "message", w.Message)
 			}
 		}
 
@@ -243,6 +243,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 				IncludeTables:     includeTables,
 				IncludeViews:      includeViews,
 				DestEmptyRequired: opts.DestEmptyRequired && !opts.Force,
+				Log:               cfg.Log,
 			}
 			if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews {
 				return errors.New("schema migration currently supports tables/views in --include-objects")
@@ -278,6 +279,7 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 				ChunkSize:        opts.ChunkSize,
 				Resume:           opts.Resume,
 				RequireEmptyDest: runData && !runSchema && opts.DestEmptyRequired && !opts.Force,
+				Log:              cfg.Log,
 			}
 
 			dataSummary, err = data.CopyBaselineData(ctx, sourceDB, destDB, cfg.StateDir, dataOptions)

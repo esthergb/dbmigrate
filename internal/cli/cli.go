@@ -12,6 +12,7 @@ import (
 
 	"github.com/esthergb/dbmigrate/internal/commands"
 	"github.com/esthergb/dbmigrate/internal/config"
+	"github.com/esthergb/dbmigrate/internal/dblog"
 )
 
 const (
@@ -77,15 +78,17 @@ func Run(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "invalid configuration: %v\n", err)
 		return exitUsage
 	}
+	cfg.Log = dblog.New(stderr, cfg.JSON, cfg.Verbose)
+
 	if strings.EqualFold(cfg.TLSMode, "preferred") {
-		_, _ = fmt.Fprintln(stderr, "warning: --tls-mode=preferred allows plaintext fallback; use --tls-mode=required for production")
+		cfg.Log.Warn("tls-mode=preferred allows plaintext fallback; use tls-mode=required for production")
 	}
 
 	commandCtx, cancel := applyOperationTimeout(ctx, cfg.OperationTimeout)
 	defer cancel()
 
 	if err := handler(commandCtx, cfg, commandArgs, stdout); err != nil {
-		_, _ = fmt.Fprintf(stderr, "%s failed: %v\n", args[0], err)
+		cfg.Log.Error("command failed", "command", args[0], "error", err.Error())
 		if code, ok := commands.ResolveExitCode(err); ok {
 			return code
 		}

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/esthergb/dbmigrate/internal/dblog"
 )
 
 var systemSchemas = map[string]struct{}{
@@ -26,6 +28,7 @@ type CopyOptions struct {
 	IncludeTables     bool
 	IncludeViews      bool
 	DestEmptyRequired bool
+	Log               *dblog.Logger
 }
 
 // CopySummary reports how many objects were applied.
@@ -66,6 +69,9 @@ func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOpti
 		return CopySummary{}, fmt.Errorf("list source databases: %w", err)
 	}
 	selectedDatabases := SelectDatabases(allDatabases, opts.IncludeDatabases, opts.ExcludeDatabases)
+	if opts.Log != nil {
+		opts.Log.Debug("schema copy selected databases", "count", len(selectedDatabases))
+	}
 
 	if opts.DestEmptyRequired {
 		count, err := countUserTables(ctx, dest, opts.ExcludeDatabases)
@@ -85,6 +91,9 @@ func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOpti
 		}
 		if len(statements) == 0 {
 			continue
+		}
+		if opts.Log != nil {
+			opts.Log.Debug("applying schema", "database", databaseName, "tables", tableCount, "views", viewCount, "statements", len(statements))
 		}
 		if err := applyStatements(ctx, dest, databaseName, statements); err != nil {
 			return summary, fmt.Errorf("apply schema for %s: %w", databaseName, err)

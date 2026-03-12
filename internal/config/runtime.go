@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/esthergb/dbmigrate/internal/db"
+	"github.com/esthergb/dbmigrate/internal/dblog"
 )
 
 var validTLSModes = map[string]struct{}{
@@ -48,6 +49,7 @@ type RuntimeConfig struct {
 	OperationTimeout time.Duration
 	StateDir         string
 	DowngradeProfile string
+	Log              *dblog.Logger
 
 	databasesRaw        string
 	excludeDatabasesRaw string

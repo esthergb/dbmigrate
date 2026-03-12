@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esthergb/dbmigrate/internal/dblog"
 	"github.com/esthergb/dbmigrate/internal/schema"
 	"github.com/esthergb/dbmigrate/internal/state"
 )
@@ -22,6 +23,7 @@ type CopyOptions struct {
 	ChunkSize        int
 	Resume           bool
 	RequireEmptyDest bool
+	Log              *dblog.Logger
 }
 
 // CopySummary reports copied data metrics.
@@ -138,8 +140,14 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 			tableKey := databaseName + "." + tableName
 			progress := checkpoint.Tables[tableKey]
 			if progress.Done {
+				if opts.Log != nil {
+					opts.Log.Debug("skipping completed table", "table", tableKey)
+				}
 				summary.Completed++
 				continue
+			}
+			if opts.Log != nil {
+				opts.Log.Debug("copying table", "table", tableKey, "chunk_size", opts.ChunkSize)
 			}
 			columns, err := listTableColumns(ctx, sourceConn, databaseName, tableName)
 			if err != nil {

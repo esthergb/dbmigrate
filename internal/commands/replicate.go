@@ -119,6 +119,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			SourceCAFile:   cfg.CAFile,
 			SourceCertFile: cfg.CertFile,
 			SourceKeyFile:  cfg.KeyFile,
+			Log:            cfg.Log,
 		})
 		if err != nil {
 			return fmt.Errorf("replicate run failed: %w", err)

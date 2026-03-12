@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esthergb/dbmigrate/internal/dblog"
 	"github.com/esthergb/dbmigrate/internal/state"
 )
 
@@ -31,6 +32,7 @@ type Options struct {
 	SourceCAFile   string
 	SourceCertFile string
 	SourceKeyFile  string
+	Log            *dblog.Logger
 }
 
 // Summary reports checkpoint update results.
@@ -162,6 +164,10 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	}
 	if startPos == 0 {
 		startPos = 4
+	}
+
+	if opts.Log != nil {
+		opts.Log.Debug("replication setup", "resume", opts.Resume, "start_file", startFile, "start_pos", startPos, "apply_ddl", opts.ApplyDDL, "conflict_policy", opts.ConflictPolicy)
 	}
 
 	if startFile == "" {
