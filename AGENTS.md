@@ -11,7 +11,7 @@ Build `dbmigrate` as a production-grade Go CLI for MySQL/MariaDB migration with:
 - operator-safe defaults,
 - strong tests and documentation.
 
-## Current State (as of PR #85)
+## Current State (as of PR #86)
 
 v1 core is implemented and passing all tests. The following is done:
 
@@ -62,7 +62,7 @@ Key patterns:
 
 ## Delivery Strategy
 
-Use phased delivery with PR-sized increments.
+Use phased delivery with branch-sized increments.
 
 Phase priority:
 1. MariaDB -> MariaDB (upgrade/downgrade)
@@ -93,7 +93,9 @@ Do not start implementation until prerequisite phase documentation is ready.
 - Create one branch per feature/fix/chore.
 - Branch naming: `feat/<scope>-<short>`, `fix/<scope>-<short>`, `chore/<scope>-<short>`.
 - Use Conventional Commits.
-- Keep each PR focused, tested, and documented.
+- **Branch-first, PR-on-demand:** work on branches and merge to `main` directly after local validation (`go vet ./...` + `go test ./... -count=1`). Only open a PR when CI validation or code review from another person is genuinely needed. This conserves GitHub Actions resources.
+- Before any remote push, ask user for explicit confirmation.
+- Keep each branch focused, tested, and documented.
 
 ## Required Execution Order
 
