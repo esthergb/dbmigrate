@@ -119,6 +119,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			SourceCAFile:   cfg.CAFile,
 			SourceCertFile: cfg.CertFile,
 			SourceKeyFile:  cfg.KeyFile,
+			RateLimit:      cfg.RateLimit,
 			Log:            cfg.Log,
 		})
 		if err != nil {

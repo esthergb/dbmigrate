@@ -11,7 +11,7 @@ import (
 func TestLoadFileConfigYAML(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "cfg.yaml")
-	content := []byte("source: mysql://src\ndest: mysql://dst\nconcurrency: 6\n")
+	content := []byte("source: mysql://src\ndest: mysql://dst\nconcurrency: 6\nrate-limit: 500\n")
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
@@ -25,6 +25,9 @@ func TestLoadFileConfigYAML(t *testing.T) {
 	}
 	if cfg.Concurrency == nil || *cfg.Concurrency != 6 {
 		t.Fatalf("unexpected concurrency: %#v", cfg.Concurrency)
+	}
+	if cfg.RateLimit == nil || *cfg.RateLimit != 500 {
+		t.Fatalf("unexpected rate-limit: %#v", cfg.RateLimit)
 	}
 }
 
@@ -128,7 +131,7 @@ func TestMergeFileConfigRespectsExplicitFlags(t *testing.T) {
 func TestLoadFileConfigJSON(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "cfg.json")
-	content := []byte(`{"source":"mysql://src","dest":"mysql://dst","concurrency":5}`)
+	content := []byte(`{"source":"mysql://src","dest":"mysql://dst","concurrency":5,"rate_limit":250}`)
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
@@ -139,6 +142,9 @@ func TestLoadFileConfigJSON(t *testing.T) {
 	}
 	if cfg.Concurrency == nil || *cfg.Concurrency != 5 {
 		t.Fatalf("unexpected concurrency: %#v", cfg.Concurrency)
+	}
+	if cfg.RateLimit == nil || *cfg.RateLimit != 250 {
+		t.Fatalf("unexpected rate-limit: %#v", cfg.RateLimit)
 	}
 }
 

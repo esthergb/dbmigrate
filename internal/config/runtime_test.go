@@ -54,6 +54,21 @@ func TestRuntimeConfigValidation(t *testing.T) {
 	if err := cfg.ValidateBasic(); err == nil {
 		t.Fatal("expected operation-timeout validation error")
 	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan", RateLimit: -1}
+	if err := cfg.ValidateBasic(); err == nil {
+		t.Fatal("expected rate-limit validation error")
+	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan", RateLimit: 0}
+	if err := cfg.ValidateBasic(); err != nil {
+		t.Fatalf("expected rate-limit=0 to be valid, got: %v", err)
+	}
+
+	cfg = RuntimeConfig{TLSMode: "required", Concurrency: 2, DowngradeProfile: "strict-lts", DryRunMode: "plan", RateLimit: 1000}
+	if err := cfg.ValidateBasic(); err != nil {
+		t.Fatalf("expected rate-limit=1000 to be valid, got: %v", err)
+	}
 }
 
 func TestBindGlobalFlagsAndFinalize(t *testing.T) {
@@ -65,6 +80,7 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 		"--source", "mysql://src",
 		"--dest", "mysql://dst",
 		"--concurrency", "8",
+		"--rate-limit", "5000",
 	}
 	if err := fs.Parse(args); err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
@@ -76,6 +92,9 @@ func TestBindGlobalFlagsAndFinalize(t *testing.T) {
 	}
 	if cfg.Concurrency != 8 {
 		t.Fatalf("expected concurrency=8, got %d", cfg.Concurrency)
+	}
+	if cfg.RateLimit != 5000 {
+		t.Fatalf("expected rate-limit=5000, got %d", cfg.RateLimit)
 	}
 	if cfg.DowngradeProfile != "strict-lts" {
 		t.Fatalf("expected default downgrade-profile strict-lts, got %q", cfg.DowngradeProfile)

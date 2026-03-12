@@ -9,11 +9,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/esthergb/dbmigrate/internal/dblog"
 	"github.com/esthergb/dbmigrate/internal/schema"
 	"github.com/esthergb/dbmigrate/internal/state"
+	"github.com/esthergb/dbmigrate/internal/throttle"
 )
 
 // CopyOptions controls baseline data-copy behavior.
@@ -21,6 +23,8 @@ type CopyOptions struct {
 	IncludeDatabases []string
 	ExcludeDatabases []string
 	ChunkSize        int
+	Concurrency      int
+	RateLimit        int
 	Resume           bool
 	RequireEmptyDest bool
 	Log              *dblog.Logger
@@ -59,13 +63,25 @@ type DryRunValidationSummary struct {
 	Failed    int
 }
 
+type tableWork struct {
+	database string
+	table    string
+}
+
 // CopyBaselineData copies table rows in batches with checkpoint/resume support.
+// When opts.Concurrency > 1, tables are copied in parallel using a worker pool.
+// Each worker uses its own source connection with a consistent snapshot.
+// Note: concurrent mode uses per-connection snapshots, not a single global snapshot.
 func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts CopyOptions) (CopySummary, error) {
 	if source == nil || dest == nil {
 		return CopySummary{}, errors.New("source and destination connections are required")
 	}
 	if opts.ChunkSize < 1 {
 		return CopySummary{}, errors.New("chunk size must be >= 1")
+	}
+	concurrency := opts.Concurrency
+	if concurrency < 1 {
+		concurrency = 1
 	}
 
 	checkpointFile := filepath.Join(stateDir, "data-baseline-checkpoint.json")
@@ -78,26 +94,21 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 		}
 	}
 
-	sourceConn, err := source.Conn(ctx)
+	discConn, err := source.Conn(ctx)
 	if err != nil {
 		return CopySummary{}, fmt.Errorf("pin source connection: %w", err)
 	}
-	defer func() {
-		_ = sourceConn.Close()
-	}()
-
-	if _, err := sourceConn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+	if _, err := discConn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+		_ = discConn.Close()
 		return CopySummary{}, fmt.Errorf("set source transaction isolation: %w", err)
 	}
-	if _, err := sourceConn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
+	if _, err := discConn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
+		_ = discConn.Close()
 		return CopySummary{}, fmt.Errorf("start consistent snapshot transaction: %w", err)
 	}
-	defer func() {
-		_, _ = sourceConn.ExecContext(context.Background(), "ROLLBACK")
-	}()
 
 	if checkpoint.SourceWatermarkFile == "" {
-		watermarkFile, watermarkPos, watermarkErr := querySourceWatermark(ctx, sourceConn)
+		watermarkFile, watermarkPos, watermarkErr := querySourceWatermark(ctx, discConn)
 		if watermarkErr != nil {
 			checkpoint.SourceWatermarkFile = "unavailable"
 			checkpoint.SourceWatermarkPos = 0
@@ -106,12 +117,16 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 			checkpoint.SourceWatermarkPos = watermarkPos
 		}
 		if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
+			_, _ = discConn.ExecContext(context.Background(), "ROLLBACK")
+			_ = discConn.Close()
 			return CopySummary{}, err
 		}
 	}
 
-	databases, err := listDatabases(ctx, sourceConn)
+	databases, err := listDatabases(ctx, discConn)
 	if err != nil {
+		_, _ = discConn.ExecContext(context.Background(), "ROLLBACK")
+		_ = discConn.Close()
 		return CopySummary{}, fmt.Errorf("list source databases: %w", err)
 	}
 	selected := schema.SelectDatabases(databases, opts.IncludeDatabases, opts.ExcludeDatabases)
@@ -119,9 +134,13 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 	summary := CopySummary{CheckpointFile: checkpointFile}
 	summary.WatermarkFile = checkpoint.SourceWatermarkFile
 	summary.WatermarkPos = checkpoint.SourceWatermarkPos
+
+	var work []tableWork
 	for _, databaseName := range selected {
-		tableNames, err := listBaseTables(ctx, sourceConn, databaseName)
+		tableNames, err := listBaseTables(ctx, discConn, databaseName)
 		if err != nil {
+			_, _ = discConn.ExecContext(context.Background(), "ROLLBACK")
+			_ = discConn.Close()
 			return summary, fmt.Errorf("list source tables for %s: %w", databaseName, err)
 		}
 		if len(tableNames) == 0 {
@@ -132,109 +151,217 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 
 		if opts.RequireEmptyDest {
 			if err := ensureDestinationTablesAreEmpty(ctx, dest, databaseName, tableNames); err != nil {
+				_, _ = discConn.ExecContext(context.Background(), "ROLLBACK")
+				_ = discConn.Close()
 				return summary, fmt.Errorf("destination non-empty check failed for %s: %w", databaseName, err)
 			}
 		}
 
 		for _, tableName := range tableNames {
-			tableKey := databaseName + "." + tableName
-			progress := checkpoint.Tables[tableKey]
-			if progress.Done {
-				if opts.Log != nil {
-					opts.Log.Debug("skipping completed table", "table", tableKey)
-				}
-				summary.Completed++
-				continue
-			}
-			if opts.Log != nil {
-				opts.Log.Debug("copying table", "table", tableKey, "chunk_size", opts.ChunkSize)
-			}
-			columns, err := listTableColumns(ctx, sourceConn, databaseName, tableName)
-			if err != nil {
-				return summary, fmt.Errorf("list columns for %s: %w", tableKey, err)
-			}
-			if len(columns) == 0 {
-				progress.Done = true
-				progress.UpdatedAt = time.Now().UTC()
-				checkpoint.Tables[tableKey] = progress
-				if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
-					return summary, err
-				}
-				summary.Completed++
-				continue
-			}
-
-			keyColumns, err := listStableKeyColumns(ctx, sourceConn, databaseName, tableName)
-			if err != nil {
-				return summary, fmt.Errorf("stable key check for %s: %w", tableKey, err)
-			}
-			if len(keyColumns) == 0 {
-				return summary, fmt.Errorf("incompatible_for_live_baseline: %s has no primary key or non-null unique key; add a stable key before v1 baseline migration", tableKey)
-			}
-
-			cursor, err := checkpointCursorArgs(progress, keyColumns)
-			if err != nil {
-				return summary, fmt.Errorf("decode checkpoint cursor for %s: %w", tableKey, err)
-			}
-			if opts.Resume && progress.RowsCopied > 0 && len(cursor) == 0 {
-				cursor, err = destinationResumeCursor(ctx, dest, databaseName, tableName, keyColumns)
-				if err != nil {
-					return summary, fmt.Errorf("resume cursor for %s: %w", tableKey, err)
-				}
-				if len(cursor) > 0 {
-					if err := progress.SetCursorValues(cursor); err != nil {
-						return summary, fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
-					}
-					progress.KeyColumns = append([]string(nil), keyColumns...)
-				}
-			}
-
-			insertSQL := buildInsertSQL(databaseName, tableName, columns)
-			for {
-				selectSQL := buildKeysetSelectSQL(databaseName, tableName, columns, keyColumns, len(cursor) > 0)
-				batch, lastKey, err := fetchKeysetBatch(ctx, sourceConn, selectSQL, opts.ChunkSize, cursor, columns, keyColumns)
-				if err != nil {
-					return summary, fmt.Errorf("fetch batch for %s: %w", tableKey, err)
-				}
-				if len(batch) == 0 {
-					break
-				}
-
-				if err := applyBatch(ctx, dest, insertSQL, batch); err != nil {
-					return summary, fmt.Errorf("apply batch for %s: %w", tableKey, err)
-				}
-
-				progress.RowsCopied += int64(len(batch))
-				progress.KeyColumns = append([]string(nil), keyColumns...)
-				if err := progress.SetCursorValues(lastKey); err != nil {
-					return summary, fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
-				}
-				progress.UpdatedAt = time.Now().UTC()
-				checkpoint.Tables[tableKey] = progress
-				if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
-					return summary, err
-				}
-
-				summary.RowsCopied += int64(len(batch))
-				summary.Batches++
-				cursor = lastKey
-
-				if len(batch) < opts.ChunkSize {
-					break
-				}
-			}
-
-			progress.Done = true
-			progress.UpdatedAt = time.Now().UTC()
-			checkpoint.Tables[tableKey] = progress
-			if err := state.SaveDataCheckpoint(checkpointFile, checkpoint); err != nil {
-				return summary, err
-			}
-			summary.Completed++
+			work = append(work, tableWork{database: databaseName, table: tableName})
 		}
 	}
 
-	return summary, nil
+	_, _ = discConn.ExecContext(context.Background(), "ROLLBACK")
+	_ = discConn.Close()
+
+	if len(work) == 0 {
+		return summary, nil
+	}
+
+	if opts.Log != nil {
+		opts.Log.Info("starting data copy", "tables", len(work), "concurrency", concurrency, "rate_limit", opts.RateLimit)
+	}
+
+	limiter := throttle.New(opts.RateLimit)
+
+	workerCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var firstErr error
+
+	for _, w := range work {
+		mu.Lock()
+		failed := firstErr != nil
+		mu.Unlock()
+		if failed {
+			break
+		}
+
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(tw tableWork) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			err := copyOneTable(workerCtx, source, dest, tw, opts, &checkpoint, checkpointFile, &mu, &summary, limiter)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+					cancel()
+				}
+				mu.Unlock()
+			}
+		}(w)
+	}
+
+	wg.Wait()
+	return summary, firstErr
+}
+
+func copyOneTable(
+	ctx context.Context,
+	source *sql.DB,
+	dest *sql.DB,
+	tw tableWork,
+	opts CopyOptions,
+	checkpoint *state.DataCheckpoint,
+	checkpointFile string,
+	mu *sync.Mutex,
+	summary *CopySummary,
+	limiter *throttle.Limiter,
+) error {
+	tableKey := tw.database + "." + tw.table
+
+	mu.Lock()
+	progress := checkpoint.Tables[tableKey]
+	if progress.Done {
+		summary.Completed++
+		mu.Unlock()
+		if opts.Log != nil {
+			opts.Log.Debug("skipping completed table", "table", tableKey)
+		}
+		return nil
+	}
+	mu.Unlock()
+
+	if opts.Log != nil {
+		opts.Log.Debug("copying table", "table", tableKey, "chunk_size", opts.ChunkSize)
+	}
+
+	sourceConn, err := source.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("pin source connection for %s: %w", tableKey, err)
+	}
+	defer func() {
+		_, _ = sourceConn.ExecContext(context.Background(), "ROLLBACK")
+		_ = sourceConn.Close()
+	}()
+
+	if _, err := sourceConn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+		return fmt.Errorf("set source isolation for %s: %w", tableKey, err)
+	}
+	if _, err := sourceConn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
+		return fmt.Errorf("start snapshot for %s: %w", tableKey, err)
+	}
+
+	columns, err := listTableColumns(ctx, sourceConn, tw.database, tw.table)
+	if err != nil {
+		return fmt.Errorf("list columns for %s: %w", tableKey, err)
+	}
+	if len(columns) == 0 {
+		mu.Lock()
+		progress.Done = true
+		progress.UpdatedAt = time.Now().UTC()
+		checkpoint.Tables[tableKey] = progress
+		saveErr := state.SaveDataCheckpoint(checkpointFile, *checkpoint)
+		summary.Completed++
+		mu.Unlock()
+		return saveErr
+	}
+
+	keyColumns, err := listStableKeyColumns(ctx, sourceConn, tw.database, tw.table)
+	if err != nil {
+		return fmt.Errorf("stable key check for %s: %w", tableKey, err)
+	}
+	if len(keyColumns) == 0 {
+		return fmt.Errorf("incompatible_for_live_baseline: %s has no primary key or non-null unique key; add a stable key before v1 baseline migration", tableKey)
+	}
+
+	mu.Lock()
+	progress = checkpoint.Tables[tableKey]
+	mu.Unlock()
+
+	cursor, err := checkpointCursorArgs(progress, keyColumns)
+	if err != nil {
+		return fmt.Errorf("decode checkpoint cursor for %s: %w", tableKey, err)
+	}
+	if opts.Resume && progress.RowsCopied > 0 && len(cursor) == 0 {
+		cursor, err = destinationResumeCursor(ctx, dest, tw.database, tw.table, keyColumns)
+		if err != nil {
+			return fmt.Errorf("resume cursor for %s: %w", tableKey, err)
+		}
+		if len(cursor) > 0 {
+			if err := progress.SetCursorValues(cursor); err != nil {
+				return fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
+			}
+			progress.KeyColumns = append([]string(nil), keyColumns...)
+		}
+	}
+
+	insertSQL := buildInsertSQL(tw.database, tw.table, columns)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		selectSQL := buildKeysetSelectSQL(tw.database, tw.table, columns, keyColumns, len(cursor) > 0)
+		batch, lastKey, err := fetchKeysetBatch(ctx, sourceConn, selectSQL, opts.ChunkSize, cursor, columns, keyColumns)
+		if err != nil {
+			return fmt.Errorf("fetch batch for %s: %w", tableKey, err)
+		}
+		if len(batch) == 0 {
+			break
+		}
+
+		if limiter != nil {
+			limiter.Wait(len(batch))
+		}
+
+		if err := applyBatch(ctx, dest, insertSQL, batch); err != nil {
+			return fmt.Errorf("apply batch for %s: %w", tableKey, err)
+		}
+
+		progress.RowsCopied += int64(len(batch))
+		progress.KeyColumns = append([]string(nil), keyColumns...)
+		if err := progress.SetCursorValues(lastKey); err != nil {
+			return fmt.Errorf("encode checkpoint cursor for %s: %w", tableKey, err)
+		}
+		progress.UpdatedAt = time.Now().UTC()
+
+		mu.Lock()
+		checkpoint.Tables[tableKey] = progress
+		saveErr := state.SaveDataCheckpoint(checkpointFile, *checkpoint)
+		summary.RowsCopied += int64(len(batch))
+		summary.Batches++
+		mu.Unlock()
+		if saveErr != nil {
+			return saveErr
+		}
+
+		cursor = lastKey
+		if len(batch) < opts.ChunkSize {
+			break
+		}
+	}
+
+	mu.Lock()
+	progress.Done = true
+	progress.UpdatedAt = time.Now().UTC()
+	checkpoint.Tables[tableKey] = progress
+	saveErr := state.SaveDataCheckpoint(checkpointFile, *checkpoint)
+	summary.Completed++
+	mu.Unlock()
+
+	if opts.Log != nil {
+		opts.Log.Info("table copy complete", "table", tableKey, "rows", progress.RowsCopied)
+	}
+
+	return saveErr
 }
 
 // ValidateBaselineDataDryRun executes inserts inside transactions and always rolls them back.

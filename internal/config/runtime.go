@@ -49,6 +49,7 @@ type RuntimeConfig struct {
 	OperationTimeout time.Duration
 	StateDir         string
 	DowngradeProfile string
+	RateLimit        int
 	Log              *dblog.Logger
 
 	databasesRaw        string
@@ -65,6 +66,7 @@ func BindGlobalFlags(fs *flag.FlagSet, cfg *RuntimeConfig) {
 	fs.StringVar(&cfg.excludeDatabasesRaw, "exclude-databases", "information_schema,performance_schema,sys,mysql", "comma-separated excluded databases")
 	fs.StringVar(&cfg.includeObjectsRaw, "include-objects", "tables,views", "comma-separated object types")
 	fs.IntVar(&cfg.Concurrency, "concurrency", 4, "worker concurrency")
+	fs.IntVar(&cfg.RateLimit, "rate-limit", 0, "max rows per second (0 = unlimited)")
 	fs.BoolVar(&cfg.DryRun, "dry-run", false, "plan actions without applying changes")
 	fs.StringVar(&cfg.DryRunMode, "dry-run-mode", "plan", "dry-run behavior: plan, sandbox")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "verbose logs")
@@ -105,6 +107,9 @@ func (c *RuntimeConfig) Finalize() {
 func (c RuntimeConfig) ValidateBasic() error {
 	if c.Concurrency < 1 {
 		return errors.New("concurrency must be at least 1")
+	}
+	if c.RateLimit < 0 {
+		return errors.New("rate-limit must be >= 0")
 	}
 	if c.OperationTimeout < 0 {
 		return errors.New("operation-timeout must be >= 0")

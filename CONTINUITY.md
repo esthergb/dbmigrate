@@ -1,52 +1,49 @@
-Last updated: 2026-03-12
+# Continuity
+
+Last updated: 2026-03-13
 
 - Goal (incl. success criteria):
-  - Begin v2 track: structured JSON logging (`internal/log/` package).
-  - Success criteria: all operational output (debug, info, warn, error) goes through a structured logger; command result output (`writeResult`) remains unchanged; no external logging dependencies; all tests green.
+  - Complete code-quality skill v2 tracks: structured logging, concurrent data copy, rate limiting, progress reporting.
+  - Success criteria: `--concurrency` activates real parallel table copy; `--rate-limit` throttles rows/sec in both data copy and replication; `--verbose` enables debug-level structured logs; all tests green.
 - Constraints/Assumptions:
   - English docs.
   - Branch-first, PR-on-demand workflow (see AGENTS.md).
-  - No external logging dependencies (no zap, zerolog). Go stdlib `log/slog` is acceptable if Go version permits.
-  - Logger must be injectable for testing (interface, not concrete type).
-  - Keep command result output (`writeResult`) unchanged — logger is for operational/diagnostic output only.
+  - No external dependencies added (stdlib `log/slog` for logging, stdlib `sync` for concurrency).
+  - Concurrent mode uses per-connection snapshots, not a single global snapshot — documented tradeoff.
 - Key decisions:
   - Scope contract:
     - `v1`: shipped and hardened (PRs #74–#86, precheck audit improvements merged).
-    - `v2`: structured logging, routines/triggers/events, trigger-CDC, hybrid, GTID, user/grant, concurrency.
+    - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, trigger-CDC, hybrid, GTID, user/grant.
     - `v3`: managed/cloud environments.
-  - Structured logging is the first v2 track because it's low-risk, cross-cutting, and enables better observability for all future v2 features.
+  - `--verbose` maps to slog debug level.
+  - `internal/dblog` wraps `log/slog` (renamed from `internal/log` to avoid stdlib collision).
+  - `internal/throttle` implements simple token-bucket rate limiter (nil-safe).
+  - `--concurrency` default remains 4; `--rate-limit` default is 0 (unlimited).
 - State:
-  - `main` is up to date with all v1 hardening + precheck audit improvements merged.
-  - All PRs are closed.
-  - No active feature branches.
-- Done (v1 summary):
-  - PRs #74–#86 merged: v1 core, safety hardening, review remediation, agents/skills consolidation, precheck audit improvements.
-  - AGENTS.md updated with branch-first/PR-on-demand policy.
-  - 15+ prechecks with artifact persistence and report integration.
-  - Binlog replication with checkpoints, conflict policies, DDL handling, bounded buffering.
-  - 4 data verification modes.
-  - Full test suite green.
+  - `feat/concurrent-copy-ratelimit` branch active with all implementation done.
+  - Pending: commit, merge to main.
+- Done (v2 code-quality):
+  - Structured logging (`internal/dblog`): text/JSON modes, wired through RuntimeConfig.Log, debug logging in schema copy, data copy, replicate.
+  - Concurrent data copy: worker pool with semaphore, per-goroutine source connections with consistent snapshot, mutex-protected checkpoints, first-error cancellation.
+  - Rate limiting (`internal/throttle`): token-bucket limiter, wired into data copy and replication apply paths.
+  - Progress reporting: per-table Info log on completion, overall start log with table count/concurrency/rate.
+  - `--rate-limit` flag: config file support (YAML/JSON), CLI flag, validation.
+  - Tests: throttle package (4 tests), config validation and binding tests updated, all 15 packages green.
 - Now:
-  - Research phase for structured logging (review current output patterns, identify replacement points).
-  - Create `feat/structured-logging` branch.
-  - Implement `internal/log/` package per code-quality skill spec.
+  - Commit and merge `feat/concurrent-copy-ratelimit` to main.
 - Next:
-  - Wire logger through `RuntimeConfig`.
-  - Replace `fmt.Fprintf` operational output with logger calls (commands, internal packages).
-  - Add `--verbose` level wiring.
-  - Update docs.
+  - Routines/triggers/events migration (schema-objects skill).
+  - Granular schema verification.
+  - User/grant migration.
 - Open questions:
-  - UNCONFIRMED: whether to use Go stdlib `log/slog` (requires Go 1.21+) or custom minimal logger.
-  - UNCONFIRMED: whether `--verbose` should map to debug level or a separate verbosity flag.
+  - None.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/log/` (new package)
-    - `internal/config/runtime.go`
-    - `internal/cli/cli.go`
-    - `internal/commands/*.go`
-    - `internal/data/copy.go`
-    - `internal/schema/copy.go`
-    - `internal/replicate/binlog/*.go`
+    - `internal/throttle/limiter.go` (new package)
+    - `internal/data/copy.go` (concurrent refactor)
+    - `internal/replicate/binlog/run.go` (rate limiting)
+    - `internal/config/runtime.go`, `internal/config/file.go` (--rate-limit)
+    - `internal/cli/cli.go` (--rate-limit arg splitter)
   - Commands:
     - `go vet ./...`
     - `go test ./... -count=1`

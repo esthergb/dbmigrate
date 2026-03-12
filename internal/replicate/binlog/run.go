@@ -13,6 +13,7 @@ import (
 
 	"github.com/esthergb/dbmigrate/internal/dblog"
 	"github.com/esthergb/dbmigrate/internal/state"
+	"github.com/esthergb/dbmigrate/internal/throttle"
 )
 
 // Options controls checkpointed replication baseline behavior.
@@ -32,6 +33,7 @@ type Options struct {
 	SourceCAFile   string
 	SourceCertFile string
 	SourceKeyFile  string
+	RateLimit      int
 	Log            *dblog.Logger
 }
 
@@ -515,6 +517,8 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 		shapeTracker.observeBatch(batch)
 	}
 
+	limiter := throttle.New(opts.RateLimit)
+
 	lastFile := window.StartFile
 	lastPos := window.StartPos
 	var appliedEvents uint64
@@ -588,6 +592,10 @@ func applyWindowTransactional(ctx context.Context, source *sql.DB, dest *sql.DB,
 				AppliedPos:  lastPos,
 				Shape:       shapeTracker.snapshot(),
 			}
+		}
+
+		if limiter != nil {
+			limiter.Wait(len(batch.Events))
 		}
 
 		tx, err := beginDestinationTxFn(ctx, dest)

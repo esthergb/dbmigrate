@@ -277,6 +277,8 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 				IncludeDatabases: cfg.Databases,
 				ExcludeDatabases: cfg.ExcludeDatabases,
 				ChunkSize:        opts.ChunkSize,
+				Concurrency:      cfg.Concurrency,
+				RateLimit:        cfg.RateLimit,
 				Resume:           opts.Resume,
 				RequireEmptyDest: runData && !runSchema && opts.DestEmptyRequired && !opts.Force,
 				Log:              cfg.Log,

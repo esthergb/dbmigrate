@@ -125,6 +125,7 @@ func splitGlobalAndCommandArgs(raw []string) ([]string, []string, error) {
 		"exclude-databases": {},
 		"include-objects":   {},
 		"concurrency":       {},
+		"rate-limit":        {},
 		"tls-mode":          {},
 		"ca-file":           {},
 		"cert-file":         {},

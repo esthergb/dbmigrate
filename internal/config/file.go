@@ -22,6 +22,7 @@ type FileConfig struct {
 	ExcludeDatabases []string `json:"exclude_databases" yaml:"exclude-databases"`
 	IncludeObjects   []string `json:"include_objects" yaml:"include-objects"`
 	Concurrency      *int     `json:"concurrency" yaml:"concurrency"`
+	RateLimit        *int     `json:"rate_limit" yaml:"rate-limit"`
 	DryRun           *bool    `json:"dry_run" yaml:"dry-run"`
 	DryRunMode       *string  `json:"dry_run_mode" yaml:"dry-run-mode"`
 	Verbose          *bool    `json:"verbose" yaml:"verbose"`
@@ -118,6 +119,9 @@ func MergeFileConfig(target *RuntimeConfig, fileCfg FileConfig, explicit map[str
 	}
 	if _, ok := explicit["concurrency"]; !ok && fileCfg.Concurrency != nil {
 		target.Concurrency = *fileCfg.Concurrency
+	}
+	if _, ok := explicit["rate-limit"]; !ok && fileCfg.RateLimit != nil {
+		target.RateLimit = *fileCfg.RateLimit
 	}
 	if _, ok := explicit["dry-run"]; !ok && fileCfg.DryRun != nil {
 		target.DryRun = *fileCfg.DryRun
