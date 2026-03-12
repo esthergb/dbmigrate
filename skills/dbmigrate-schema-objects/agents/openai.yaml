@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Schema Objects"
+  short_description: "Implement routines/triggers/events migration and verification"
+  default_prompt: "Extend schema migration to cover stored procedures, functions, triggers, and events with cross-engine compatibility."

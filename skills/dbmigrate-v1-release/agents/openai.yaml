@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate v1 Release"
+  short_description: "Execute v1 release gates and signoff"
+  default_prompt: "Run v1 release gate validation: build, matrix, rehearsals, docs, and produce signoff decision."

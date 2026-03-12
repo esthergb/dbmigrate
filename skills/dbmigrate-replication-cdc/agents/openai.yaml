@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Replication CDC"
+  short_description: "Implement trigger-CDC, hybrid mode, and GTID support"
+  default_prompt: "Implement trigger-based CDC replication with setup/teardown lifecycle, hybrid per-table routing, and GTID start position support."

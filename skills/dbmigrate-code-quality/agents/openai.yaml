@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbmigrate Code Quality"
+  short_description: "Structured logging, concurrency, and performance patterns"
+  default_prompt: "Implement structured JSON logging, concurrent data copy, progress reporting, and rate limiting across dbmigrate packages."

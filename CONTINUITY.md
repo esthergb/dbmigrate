@@ -1,8 +1,10 @@
-Last updated: 2026-03-07
+Last updated: 2026-03-12
 
 - Goal (incl. success criteria):
-  - Implement the `Fast Safe v1 Release Rescue (Strict-LTS)` plan to close critical production blockers before release.
-  - Success means no deceptive v1 surface area, consistent baseline copy on hot systems, atomic replication checkpointing, scalable verify semantics, TLS wired end-to-end, redacted conflict artifacts by default, and CI/docs aligned.
+  - Ship a production-ready v1 for the genuinely supported self-managed lanes, with `plan` acting as the migration validator that surfaces documented incompatibilities before execution.
+  - Update AGENTS.md and skills directory with comprehensive project knowledge from v1 review (PR #85).
+  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into a single cohesive PR.
+  - Success criteria: merged `main` contains review-remediation, validator-hardening, updated agent playbook, and new v2-preparation skills.
 - Constraints/Assumptions:
   - Docs remain in English.
   - `Instructions.md` stays tracked.
@@ -22,12 +24,13 @@ Last updated: 2026-03-07
   - The frozen strict-lts release lane is distinct from supplemental upgrade-evidence scenarios so release-grade signoff is not muddied by broader non-frozen paths.
   - Local matrix infra for the frozen `v1` lane and the requested supplemental scenarios is merged via PR `#70`.
 - State:
-  - Current branch: `codex/chore/v1-release-gate-workflow-phase66`.
-  - PR `#74` (`Fast Safe v1 release rescue (strict-lts)`) is merged.
-  - PR `#75` (`chore: automate v1 release gate execution`) is merged.
-  - `main` was fast-forwarded locally and post-merge sanity checks were rerun.
-  - Baseline prior state is merged through PR `#73` on `main`.
-  - Three new review inputs are present and untracked:
+  - Current branch: `feat/agents-skills-v1-release-consolidated`.
+  - `main` includes merged PRs through `#85` (review-remediation bundle).
+  - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and will be consolidated into this PR.
+  - AGENTS.md has been rewritten with v1 current state, architecture map, code conventions, and 7 skills table.
+  - 4 new skills created: v1-release, schema-objects, replication-cdc, code-quality.
+  - 3 existing skills updated: phase-delivery, research-risk, test-matrix.
+  - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
     - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
@@ -180,16 +183,36 @@ Last updated: 2026-03-07
     - unexpected failures: none
   - Verified current branch before publish:
     - `go test ./...`
-    - `bash -n scripts/run-plugin-lifecycle-rehearsal.sh scripts/run-invisible-gipk-rehearsal.sh scripts/run-collation-rehearsal.sh scripts/run-verify-canonicalization-rehearsal.sh scripts/run-v1-signoff-rehearsals.sh`
   - Merged focused rehearsal evidence via PR `#72`.
   - Ran final release-decision verification on this branch:
     - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
     - `go test ./...`
   - Merged final `v1` release decision via PR `#73`.
+  - PR `#85` merged on `main`:
+    - review-remediation bundle
+    - state-dir locking and private atomic artifact writes
+    - plan-time FK cycle, schema feature, identifier portability, replication boundary/readiness, temporal/time-zone, data-shape, and manual-evidence validator coverage
+  - Updated AGENTS.md with comprehensive project knowledge:
+    - Current State (PR #85 status, v1 done, v2/v3 scope)
+    - Architecture Map with full package layout
+    - Code Conventions (error handling, identifier safety, linting)
+    - Expanded Dependency and Testing policies
+    - 7 skills in Skills table with usage guidance
+  - Created 4 new skills:
+    - `dbmigrate-v1-release`: release gate workflow, rehearsals, signoff
+    - `dbmigrate-schema-objects`: 5-PR plan for routines/triggers/events
+    - `dbmigrate-replication-cdc`: 5-PR plan for trigger-CDC, hybrid, GTID
+    - `dbmigrate-code-quality`: logging, concurrency, observability
+  - Updated 3 existing skills:
+    - `dbmigrate-phase-delivery`: v2 phases, architecture patterns, domain-specific skills
+    - `dbmigrate-research-risk`: v2 research domains (routines, triggers, events, CDC, GTID, user/grants, concurrency)
+    - `dbmigrate-test-matrix`: frozen v1 pairs, v2 expansion targets
 - Now:
-  - Wait for CI and review feedback on PR `#76`.
+  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into single PR.
+  - Cancel PR #76 after consolidation.
 - Next:
-  - Merge PR `#76` once checks are green and you confirm.
+  - Push consolidated branch and create new PR.
+  - Await user confirmation before merge.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether a later release pass will need a narrower MariaDB `11.4` vs `11.8` seed split beyond the current shared 11.x fixtures. This does not block the current signoff rehearsal pack.
 - Working set (files/ids/commands):
@@ -224,6 +247,9 @@ Last updated: 2026-03-07
     - merged PR `#73`
   - Commands:
     - `go test ./...`
+<<<<<<< Updated upstream
     - `./scripts/test-v1-matrix.sh`
     - `./scripts/run-v1-signoff-rehearsals.sh`
     - `docker compose -f docker-compose.yml config --services`
+=======
+>>>>>>> Stashed changes
