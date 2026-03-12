@@ -162,6 +162,9 @@ func detectMariaDBSequences(ctx context.Context, source *sql.DB, databases []str
 			ORDER BY SEQUENCE_NAME
 		`, databaseName)
 		if err != nil {
+			if isTableNotFoundError(err) {
+				continue
+			}
 			return nil, err
 		}
 		for rows.Next() {
@@ -395,4 +398,14 @@ func writeSchemaFeaturePrecheckReport(out io.Writer, cfg config.RuntimeConfig, r
 		}
 	}
 	return nil
+}
+
+func isTableNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unknown table") ||
+		strings.Contains(msg, "1109") ||
+		strings.Contains(msg, "er_unknown_table")
 }

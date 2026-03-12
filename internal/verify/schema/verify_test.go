@@ -1,6 +1,9 @@
 package schema
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestNormalizeCreateStatementIgnoresVolatileFormatting(t *testing.T) {
 	left := "CREATE TABLE `users` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n  `name` varchar(50) NOT NULL\n) ENGINE=InnoDB AUTO_INCREMENT=101"
@@ -80,6 +83,28 @@ func TestDiffObjectMaps(t *testing.T) {
 	}
 	if len(diffs) != 3 {
 		t.Fatalf("expected 3 diffs, got %d", len(diffs))
+	}
+}
+
+func TestVerifyRequiresAtLeastOneObjectType(t *testing.T) {
+	_, err := Verify(context.Background(), nil, nil, Options{})
+	if err == nil {
+		t.Fatal("expected error when no object type enabled")
+	}
+}
+
+func TestObjectTypeConstants(t *testing.T) {
+	if objectTypeProcedure != "procedure" {
+		t.Fatalf("unexpected procedure constant: %q", objectTypeProcedure)
+	}
+	if objectTypeFunction != "function" {
+		t.Fatalf("unexpected function constant: %q", objectTypeFunction)
+	}
+	if objectTypeTrigger != "trigger" {
+		t.Fatalf("unexpected trigger constant: %q", objectTypeTrigger)
+	}
+	if objectTypeEvent != "event" {
+		t.Fatalf("unexpected event constant: %q", objectTypeEvent)
 	}
 }
 

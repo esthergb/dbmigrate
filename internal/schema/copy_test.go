@@ -1,6 +1,43 @@
 package schema
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
+
+func TestExtractResultEmpty(t *testing.T) {
+	r := extractResult{}
+	if !r.empty() {
+		t.Fatal("expected empty result to report empty")
+	}
+	r.statements = []string{"CREATE TABLE x (id INT)"}
+	if r.empty() {
+		t.Fatal("expected non-empty result to report not empty")
+	}
+}
+
+func TestFetchRoutineCreateStatementUnknownType(t *testing.T) {
+	_, err := fetchRoutineCreateStatement(context.Background(), nil, "db", "fn", "AGGREGATE")
+	if err == nil {
+		t.Fatal("expected error for unknown routine type")
+	}
+}
+
+func TestCopySchemaRequiresAtLeastOneObjectType(t *testing.T) {
+	_, err := CopySchema(context.Background(), nil, nil, CopyOptions{})
+	if err == nil {
+		t.Fatal("expected error when no object type enabled")
+	}
+}
+
+func TestValidateSandboxRequiresAtLeastOneObjectType(t *testing.T) {
+	_, err := ValidateSchemaInSandbox(context.Background(), nil, nil, DryRunSandboxOptions{
+		MapDatabase: func(s string) string { return s },
+	})
+	if err == nil {
+		t.Fatal("expected error when no object type enabled")
+	}
+}
 
 func TestSelectDatabasesIncludeExclude(t *testing.T) {
 	all := []string{"information_schema", "db1", "db2", "db3", "mysql"}
