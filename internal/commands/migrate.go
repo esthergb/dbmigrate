@@ -106,7 +106,27 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 		destInstance := compat.ParseInstance(destVersion)
 
 		if runSchema {
-			pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+			compatReport := compat.Evaluate(
+				sourceInstance,
+				destInstance,
+				cfg.Databases,
+				cfg.DowngradeProfile,
+			)
+			if !compatReport.Compatible {
+				return WithExitCode(
+					ExitCodeDiff,
+					errors.New("version compatibility check failed; run plan for detailed report with remediation proposals"),
+				)
+			}
+
+			var precheckWarnings []compat.Finding
+			for _, f := range compatReport.Findings {
+				if f.Severity == "warn" || f.Severity == "info" {
+					precheckWarnings = append(precheckWarnings, f)
+				}
+			}
+
+			pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 			if err != nil {
 				return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
 			}
@@ -119,8 +139,13 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 					errors.New("schema precheck failed; source uses storage engines that are unsupported on destination"),
 				)
 			}
+			for _, f := range pluginReport.Findings {
+				if f.Severity == "warn" || f.Severity == "info" {
+					precheckWarnings = append(precheckWarnings, f)
+				}
+			}
 
-			invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+			invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 			if err != nil {
 				return fmt.Errorf("invisible/gipk precheck failed: %w", err)
 			}
@@ -132,6 +157,11 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 					ExitCodeDiff,
 					errors.New("schema precheck failed; invisible columns or generated invisible primary keys drift on destination"),
 				)
+			}
+			for _, f := range invisibleReport.Findings {
+				if f.Severity == "warn" || f.Severity == "info" {
+					precheckWarnings = append(precheckWarnings, f)
+				}
 			}
 
 			collationReport, err := runCollationPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
@@ -147,6 +177,11 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 					errors.New("schema precheck failed; source collations are unsupported on destination"),
 				)
 			}
+			for _, f := range collationReport.Findings {
+				if f.Severity == "warn" || f.Severity == "info" {
+					precheckWarnings = append(precheckWarnings, f)
+				}
+			}
 
 			precheckReport, err := runZeroDateDefaultsPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 			if err != nil {
@@ -160,6 +195,11 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 					ExitCodeDiff,
 					errors.New("schema precheck failed; zero-date defaults are incompatible with destination sql_mode"),
 				)
+			}
+			for _, f := range precheckReport.Findings {
+				if f.Severity == "warn" || f.Severity == "info" {
+					precheckWarnings = append(precheckWarnings, f)
+				}
 			}
 
 			schemaFeatureReport, err := runSchemaFeaturePrecheck(ctx, sourceDB, sourceInstance, destInstance, cfg.Databases, cfg.ExcludeDatabases)
@@ -188,6 +228,10 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 					ExitCodeDiff,
 					errors.New("schema precheck failed; identifier portability or parser drift is incompatible with destination in v1"),
 				)
+			}
+
+			for _, w := range precheckWarnings {
+				_, _ = fmt.Fprintf(out, "[migrate] precheck %s code=%s message=%s\n", w.Severity, w.Code, w.Message)
 			}
 		}
 

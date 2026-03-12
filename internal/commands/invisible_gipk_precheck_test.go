@@ -14,8 +14,14 @@ func TestDestinationSupportsInvisibleColumns(t *testing.T) {
 	if destinationSupportsInvisibleColumns(compat.ParseInstance("8.0.22 MySQL Community Server - GPL")) {
 		t.Fatal("did not expect MySQL 8.0.22 to support invisible columns")
 	}
-	if destinationSupportsInvisibleColumns(compat.ParseInstance("11.0.6-MariaDB-ubu2204")) {
-		t.Fatal("did not expect MariaDB to preserve MySQL invisible-column semantics")
+	if !destinationSupportsInvisibleColumns(compat.ParseInstance("11.0.6-MariaDB-ubu2204")) {
+		t.Fatal("expected MariaDB 11.0.6 to support invisible columns (since 10.3.3)")
+	}
+	if !destinationSupportsInvisibleColumns(compat.ParseInstance("10.3.3-MariaDB")) {
+		t.Fatal("expected MariaDB 10.3.3 to support invisible columns")
+	}
+	if destinationSupportsInvisibleColumns(compat.ParseInstance("10.3.2-MariaDB")) {
+		t.Fatal("did not expect MariaDB 10.3.2 to support invisible columns")
 	}
 }
 
@@ -109,6 +115,38 @@ func TestBuildInvisibleGIPKFindingsMySQLToMySQLCompatible(t *testing.T) {
 	}
 	if invisibleGIPKIncompatible(source, dest, report) {
 		t.Fatal("did not expect mysql84->mysql80 hidden-schema path to be incompatible")
+	}
+}
+
+func TestPersistAndLoadInvisibleGIPKPrecheckArtifact(t *testing.T) {
+	tmp := t.TempDir()
+	report := invisibleGIPKPrecheckReport{
+		Name:                 "invisible-gipk",
+		Incompatible:         true,
+		InvisibleColumnCount: 2,
+		InvisibleIndexCount:  1,
+		GIPKTableCount:       1,
+		InvisibleColumns: []invisibleColumnIssue{
+			{Database: "app", Table: "t1", Column: "c1", Extra: "INVISIBLE"},
+			{Database: "app", Table: "t2", Column: "c2", Extra: "INVISIBLE"},
+		},
+	}
+
+	if err := persistInvisibleGIPKPrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist invisible/gipk artifact: %v", err)
+	}
+	loaded, err := loadInvisibleGIPKPrecheckArtifact(tmp)
+	if err != nil {
+		t.Fatalf("load invisible/gipk artifact: %v", err)
+	}
+	if !loaded.Incompatible {
+		t.Fatal("expected loaded artifact to be incompatible")
+	}
+	if loaded.InvisibleColumnCount != 2 {
+		t.Fatalf("expected 2 invisible columns, got %d", loaded.InvisibleColumnCount)
+	}
+	if loaded.GIPKTableCount != 1 {
+		t.Fatalf("expected 1 GIPK table, got %d", loaded.GIPKTableCount)
 	}
 }
 

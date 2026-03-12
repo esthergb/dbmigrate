@@ -32,6 +32,10 @@ type reportSummary struct {
 	Artifacts                   reportArtifacts                  `json:"artifacts"`
 	CollationPrecheck           *collationPrecheckSummary        `json:"collation_precheck,omitempty"`
 	CollationPrecheckFilePath   string                           `json:"collation_precheck_file,omitempty"`
+	PluginLifecyclePrecheck     *pluginLifecyclePrecheckSummary  `json:"plugin_lifecycle_precheck,omitempty"`
+	PluginLifecyclePrecheckPath string                           `json:"plugin_lifecycle_precheck_file,omitempty"`
+	InvisibleGIPKPrecheck       *invisibleGIPKPrecheckSummary    `json:"invisible_gipk_precheck,omitempty"`
+	InvisibleGIPKPrecheckPath   string                           `json:"invisible_gipk_precheck_file,omitempty"`
 	VerifyDataReport            *verifyDataReportSummary         `json:"verify_data_report,omitempty"`
 	VerifyDataReportFilePath    string                           `json:"verify_data_report_file,omitempty"`
 	DataBaselineCheckpoint      *dataBaselineCheckpointSummary   `json:"data_baseline_checkpoint,omitempty"`
@@ -44,10 +48,27 @@ type reportSummary struct {
 
 type reportArtifacts struct {
 	CollationPrecheck         bool `json:"collation_precheck"`
+	PluginLifecyclePrecheck   bool `json:"plugin_lifecycle_precheck"`
+	InvisibleGIPKPrecheck     bool `json:"invisible_gipk_precheck"`
 	VerifyDataReport          bool `json:"verify_data_report"`
 	DataBaselineCheckpoint    bool `json:"data_baseline_checkpoint"`
 	ReplicationCheckpoint     bool `json:"replication_checkpoint"`
 	ReplicationConflictReport bool `json:"replication_conflict_report"`
+}
+
+type pluginLifecyclePrecheckSummary struct {
+	Path                   string `json:"path"`
+	Incompatible           bool   `json:"incompatible"`
+	UnsupportedAuthCount   int    `json:"unsupported_auth_count"`
+	UnsupportedEngineCount int    `json:"unsupported_engine_count"`
+}
+
+type invisibleGIPKPrecheckSummary struct {
+	Path                 string `json:"path"`
+	Incompatible         bool   `json:"incompatible"`
+	InvisibleColumnCount int    `json:"invisible_column_count"`
+	InvisibleIndexCount  int    `json:"invisible_index_count"`
+	GIPKTableCount       int    `json:"gipk_table_count"`
 }
 
 type collationPrecheckSummary struct {
@@ -110,7 +131,7 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 	if reportNeedsAttention(summary) {
 		status = "attention_required"
 	}
-	if !summary.Artifacts.CollationPrecheck && !summary.Artifacts.VerifyDataReport && !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
+	if !summary.Artifacts.CollationPrecheck && !summary.Artifacts.PluginLifecyclePrecheck && !summary.Artifacts.InvisibleGIPKPrecheck && !summary.Artifacts.VerifyDataReport && !summary.Artifacts.DataBaselineCheckpoint && !summary.Artifacts.ReplicationCheckpoint && !summary.Artifacts.ReplicationConflictReport {
 		status = "empty"
 	}
 
@@ -146,6 +167,12 @@ func runReport(_ context.Context, cfg config.RuntimeConfig, args []string, out i
 
 func reportNeedsAttention(summary reportSummary) bool {
 	if summary.CollationPrecheck != nil && summary.CollationPrecheck.Incompatible {
+		return true
+	}
+	if summary.PluginLifecyclePrecheck != nil && summary.PluginLifecyclePrecheck.Incompatible {
+		return true
+	}
+	if summary.InvisibleGIPKPrecheck != nil && summary.InvisibleGIPKPrecheck.Incompatible {
 		return true
 	}
 	if summary.VerifyDataReport != nil && summary.VerifyDataReport.DiffCount > 0 {
@@ -199,6 +226,45 @@ func loadReportSummary(stateDir string, includeSensitiveArtifacts bool) (reportS
 			ClientCompatibilityRiskCount: report.ClientCompatibilityRiskCount,
 		}
 		proposals = append(proposals, collationPrecheckProposals(report)...)
+	}
+
+	pluginLifecyclePath := pluginLifecyclePrecheckArtifactPath(stateDir)
+	if exists, err := fileExists(pluginLifecyclePath); err != nil {
+		return reportSummary{}, nil, err
+	} else if exists {
+		report, err := loadPluginLifecyclePrecheckArtifact(stateDir)
+		if err != nil {
+			return reportSummary{}, nil, err
+		}
+		summary.Artifacts.PluginLifecyclePrecheck = true
+		summary.PluginLifecyclePrecheckPath = pluginLifecyclePath
+		summary.PluginLifecyclePrecheck = &pluginLifecyclePrecheckSummary{
+			Path:                   pluginLifecyclePath,
+			Incompatible:           report.Incompatible,
+			UnsupportedAuthCount:   len(report.UnsupportedAuthPlugins),
+			UnsupportedEngineCount: len(report.UnsupportedStorageEngines),
+		}
+		proposals = append(proposals, pluginLifecyclePrecheckProposals(report)...)
+	}
+
+	invisibleGIPKPath := invisibleGIPKPrecheckArtifactPath(stateDir)
+	if exists, err := fileExists(invisibleGIPKPath); err != nil {
+		return reportSummary{}, nil, err
+	} else if exists {
+		report, err := loadInvisibleGIPKPrecheckArtifact(stateDir)
+		if err != nil {
+			return reportSummary{}, nil, err
+		}
+		summary.Artifacts.InvisibleGIPKPrecheck = true
+		summary.InvisibleGIPKPrecheckPath = invisibleGIPKPath
+		summary.InvisibleGIPKPrecheck = &invisibleGIPKPrecheckSummary{
+			Path:                 invisibleGIPKPath,
+			Incompatible:         report.Incompatible,
+			InvisibleColumnCount: report.InvisibleColumnCount,
+			InvisibleIndexCount:  report.InvisibleIndexCount,
+			GIPKTableCount:       report.GIPKTableCount,
+		}
+		proposals = append(proposals, invisibleGIPKPrecheckProposals(report)...)
 	}
 
 	verifyDataPath := verifyDataArtifactPath(stateDir)
@@ -410,10 +476,12 @@ func fileExists(path string) (bool, error) {
 func writeReportText(out io.Writer, payload reportResult) error {
 	if _, err := fmt.Fprintf(
 		out,
-		"[report] status=%s state_dir=%s artifacts(collation_precheck=%v verify_data=%v data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
+		"[report] status=%s state_dir=%s artifacts(collation_precheck=%v plugin_lifecycle=%v invisible_gipk=%v verify_data=%v data_baseline=%v replication_checkpoint=%v replication_conflict=%v) proposals=%d\n",
 		payload.Status,
 		payload.Summary.StateDir,
 		payload.Summary.Artifacts.CollationPrecheck,
+		payload.Summary.Artifacts.PluginLifecyclePrecheck,
+		payload.Summary.Artifacts.InvisibleGIPKPrecheck,
 		payload.Summary.Artifacts.VerifyDataReport,
 		payload.Summary.Artifacts.DataBaselineCheckpoint,
 		payload.Summary.Artifacts.ReplicationCheckpoint,
@@ -434,6 +502,35 @@ func writeReportText(out io.Writer, payload reportResult) error {
 			cp.DestServerCollation,
 			cp.UnsupportedDestinationCount,
 			cp.ClientCompatibilityRiskCount,
+		); err != nil {
+			return err
+		}
+	}
+
+	if payload.Summary.PluginLifecyclePrecheck != nil {
+		cp := payload.Summary.PluginLifecyclePrecheck
+		if _, err := fmt.Fprintf(
+			out,
+			"[report] plugin_lifecycle_precheck path=%s incompatible=%v unsupported_auth=%d unsupported_engines=%d\n",
+			cp.Path,
+			cp.Incompatible,
+			cp.UnsupportedAuthCount,
+			cp.UnsupportedEngineCount,
+		); err != nil {
+			return err
+		}
+	}
+
+	if payload.Summary.InvisibleGIPKPrecheck != nil {
+		cp := payload.Summary.InvisibleGIPKPrecheck
+		if _, err := fmt.Fprintf(
+			out,
+			"[report] invisible_gipk_precheck path=%s incompatible=%v invisible_columns=%d invisible_indexes=%d gipk_tables=%d\n",
+			cp.Path,
+			cp.Incompatible,
+			cp.InvisibleColumnCount,
+			cp.InvisibleIndexCount,
+			cp.GIPKTableCount,
 		); err != nil {
 			return err
 		}
@@ -561,6 +658,25 @@ func collationPrecheckProposals(report collationPrecheckReport) []string {
 	}
 	if report.ClientCompatibilityRiskCount > 0 {
 		proposals = append(proposals, "rehearse representative drivers and connection startup against the chosen collation set; server acceptance does not guarantee client-library compatibility.")
+	}
+	return proposals
+}
+
+func pluginLifecyclePrecheckProposals(report pluginLifecyclePrecheckReport) []string {
+	proposals := make([]string, 0, 2)
+	if len(report.UnsupportedStorageEngines) > 0 {
+		proposals = append(proposals, "convert tables using unsupported storage engines to a destination-supported engine (e.g. InnoDB) before migration, or exclude them from scope.")
+	}
+	if len(report.UnsupportedAuthPlugins) > 0 {
+		proposals = append(proposals, "rewrite or recreate accounts using unsupported authentication plugins with a destination-supported plugin before cutover.")
+	}
+	return proposals
+}
+
+func invisibleGIPKPrecheckProposals(report invisibleGIPKPrecheckReport) []string {
+	proposals := make([]string, 0, 1)
+	if report.InvisibleColumnCount > 0 || report.InvisibleIndexCount > 0 || report.GIPKTableCount > 0 {
+		proposals = append(proposals, "materialize or remove invisible columns, invisible indexes, and generated invisible primary keys on source before migration to a destination that does not support these features.")
 	}
 	return proposals
 }

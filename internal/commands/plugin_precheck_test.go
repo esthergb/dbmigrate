@@ -128,6 +128,52 @@ func TestPluginStatusEnabled(t *testing.T) {
 	}
 }
 
+func TestAuthPluginProposalEd25519(t *testing.T) {
+	proposal := authPluginProposal("ed25519")
+	if !strings.Contains(proposal, "not available on MySQL") {
+		t.Fatalf("expected ed25519-specific proposal, got %q", proposal)
+	}
+	proposal2 := authPluginProposal("client_ed25519")
+	if !strings.Contains(proposal2, "not available on MySQL") {
+		t.Fatalf("expected client_ed25519-specific proposal, got %q", proposal2)
+	}
+}
+
+func TestPersistAndLoadPluginLifecyclePrecheckArtifact(t *testing.T) {
+	tmp := t.TempDir()
+	report := pluginLifecyclePrecheckReport{
+		Name:         "plugin-lifecycle",
+		Incompatible: true,
+		UnsupportedAuthPlugins: []accountPluginIssue{{
+			User:   "app_user",
+			Host:   "%",
+			Plugin: "mysql_native_password",
+		}},
+		UnsupportedStorageEngines: []storageEngineIssue{{
+			Database: "app",
+			Table:    "audit_log",
+			Engine:   "aria",
+		}},
+	}
+
+	if err := persistPluginLifecyclePrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist plugin lifecycle artifact: %v", err)
+	}
+	loaded, err := loadPluginLifecyclePrecheckArtifact(tmp)
+	if err != nil {
+		t.Fatalf("load plugin lifecycle artifact: %v", err)
+	}
+	if !loaded.Incompatible {
+		t.Fatal("expected loaded artifact to be incompatible")
+	}
+	if len(loaded.UnsupportedAuthPlugins) != 1 {
+		t.Fatalf("expected 1 unsupported auth plugin, got %d", len(loaded.UnsupportedAuthPlugins))
+	}
+	if len(loaded.UnsupportedStorageEngines) != 1 {
+		t.Fatalf("expected 1 unsupported engine, got %d", len(loaded.UnsupportedStorageEngines))
+	}
+}
+
 func TestEngineSupportEnabled(t *testing.T) {
 	if !engineSupportEnabled("DEFAULT") {
 		t.Fatal("expected DEFAULT to be enabled")

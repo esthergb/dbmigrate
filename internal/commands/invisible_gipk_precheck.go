@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/schema"
+	"github.com/esthergb/dbmigrate/internal/state"
 	"github.com/esthergb/dbmigrate/internal/version"
 )
 
@@ -67,6 +70,7 @@ func runInvisibleGIPKPrecheck(
 	ctx context.Context,
 	source *sql.DB,
 	dest *sql.DB,
+	stateDir string,
 	includeDatabases []string,
 	excludeDatabases []string,
 ) (invisibleGIPKPrecheckReport, error) {
@@ -160,6 +164,45 @@ func runInvisibleGIPKPrecheck(
 
 	report.Findings = append(report.Findings, buildInvisibleGIPKFindings(sourceInstance, destInstance, report)...)
 	report.Incompatible = invisibleGIPKIncompatible(sourceInstance, destInstance, report)
+	if err := persistInvisibleGIPKPrecheckArtifact(stateDir, report); err != nil {
+		return report, err
+	}
+	return report, nil
+}
+
+func invisibleGIPKPrecheckArtifactPath(stateDir string) string {
+	baseDir := strings.TrimSpace(stateDir)
+	if baseDir == "" {
+		baseDir = "./state"
+	}
+	return filepath.Join(baseDir, "invisible-gipk-precheck.json")
+}
+
+func persistInvisibleGIPKPrecheckArtifact(stateDir string, report invisibleGIPKPrecheckReport) error {
+	path := invisibleGIPKPrecheckArtifactPath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir state-dir for invisible/gipk precheck artifact: %w", err)
+	}
+	raw, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal invisible/gipk precheck artifact: %w", err)
+	}
+	if err := state.WritePrivateFileAtomic(path, append(raw, '\n')); err != nil {
+		return fmt.Errorf("write invisible/gipk precheck artifact: %w", err)
+	}
+	return nil
+}
+
+func loadInvisibleGIPKPrecheckArtifact(stateDir string) (invisibleGIPKPrecheckReport, error) {
+	path := invisibleGIPKPrecheckArtifactPath(stateDir)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return invisibleGIPKPrecheckReport{}, fmt.Errorf("read invisible/gipk precheck artifact: %w", err)
+	}
+	var report invisibleGIPKPrecheckReport
+	if err := json.Unmarshal(raw, &report); err != nil {
+		return invisibleGIPKPrecheckReport{}, fmt.Errorf("parse invisible/gipk precheck artifact: %w", err)
+	}
 	return report, nil
 }
 
@@ -393,7 +436,13 @@ func gipkDriftsOnDestination(dest compat.Instance, report invisibleGIPKPrecheckR
 }
 
 func destinationSupportsInvisibleColumns(dest compat.Instance) bool {
-	return dest.Engine == compat.EngineMySQL && versionAtLeast(dest, 8, 0, 23)
+	if dest.Engine == compat.EngineMySQL {
+		return versionAtLeast(dest, 8, 0, 23)
+	}
+	if dest.Engine == compat.EngineMariaDB {
+		return versionAtLeast(dest, 10, 3, 3)
+	}
+	return false
 }
 
 func destinationSupportsInvisibleIndexes(dest compat.Instance) bool {

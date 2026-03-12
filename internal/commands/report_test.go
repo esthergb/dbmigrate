@@ -237,6 +237,104 @@ func TestRunReportJSONIncludesCollationArtifactAndProposals(t *testing.T) {
 	}
 }
 
+func TestRunReportJSONIncludesPluginLifecycleArtifactAndProposals(t *testing.T) {
+	tmp := t.TempDir()
+
+	report := pluginLifecyclePrecheckReport{
+		Name:         "plugin-lifecycle",
+		Incompatible: true,
+		UnsupportedStorageEngines: []storageEngineIssue{{
+			Database:           "app",
+			Table:              "audit_log",
+			Engine:             "aria",
+			DestinationSupport: "MISSING",
+		}},
+		UnsupportedAuthPlugins: []accountPluginIssue{{
+			User:   "app_user",
+			Host:   "%",
+			Plugin: "mysql_native_password",
+		}},
+	}
+	if err := persistPluginLifecyclePrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist plugin lifecycle artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected incompatible plugin lifecycle precheck to fail report by default")
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if !payload.Summary.Artifacts.PluginLifecyclePrecheck {
+		t.Fatal("expected plugin lifecycle precheck artifact in summary")
+	}
+	if payload.Summary.PluginLifecyclePrecheck == nil {
+		t.Fatal("expected plugin lifecycle precheck summary")
+	}
+	if payload.Summary.PluginLifecyclePrecheck.UnsupportedEngineCount != 1 {
+		t.Fatalf("unexpected engine count: %d", payload.Summary.PluginLifecyclePrecheck.UnsupportedEngineCount)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if len(payload.Proposals) != 2 {
+		t.Fatalf("expected 2 plugin proposals, got %#v", payload.Proposals)
+	}
+}
+
+func TestRunReportJSONIncludesInvisibleGIPKArtifactAndProposals(t *testing.T) {
+	tmp := t.TempDir()
+
+	report := invisibleGIPKPrecheckReport{
+		Name:                 "invisible-gipk",
+		Incompatible:         true,
+		InvisibleColumnCount: 1,
+		GIPKTableCount:       1,
+	}
+	if err := persistInvisibleGIPKPrecheckArtifact(tmp, report); err != nil {
+		t.Fatalf("persist invisible/gipk artifact: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runReport(context.Background(), config.RuntimeConfig{
+		StateDir: tmp,
+		JSON:     true,
+	}, nil, &out)
+	if err == nil {
+		t.Fatal("expected incompatible invisible/gipk precheck to fail report by default")
+	}
+
+	var payload reportResult
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if !payload.Summary.Artifacts.InvisibleGIPKPrecheck {
+		t.Fatal("expected invisible/gipk precheck artifact in summary")
+	}
+	if payload.Summary.InvisibleGIPKPrecheck == nil {
+		t.Fatal("expected invisible/gipk precheck summary")
+	}
+	if payload.Summary.InvisibleGIPKPrecheck.GIPKTableCount != 1 {
+		t.Fatalf("unexpected GIPK table count: %d", payload.Summary.InvisibleGIPKPrecheck.GIPKTableCount)
+	}
+	if payload.Status != "attention_required" {
+		t.Fatalf("unexpected status: %q", payload.Status)
+	}
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("expected 1 invisible/gipk proposal, got %#v", payload.Proposals)
+	}
+	if !strings.Contains(payload.Proposals[0], "materialize or remove") {
+		t.Fatalf("unexpected proposal: %q", payload.Proposals[0])
+	}
+}
+
 func TestRunReportJSONAllowsIncompatiblePrecheckOverride(t *testing.T) {
 	tmp := t.TempDir()
 
@@ -558,7 +656,7 @@ func TestRunReportTextNoArtifacts(t *testing.T) {
 	if !strings.Contains(text, "status=empty") {
 		t.Fatalf("expected empty status, got %q", text)
 	}
-	if !strings.Contains(text, "artifacts(collation_precheck=false verify_data=false data_baseline=false replication_checkpoint=false replication_conflict=false)") {
+	if !strings.Contains(text, "artifacts(collation_precheck=false plugin_lifecycle=false invisible_gipk=false verify_data=false data_baseline=false replication_checkpoint=false replication_conflict=false)") {
 		t.Fatalf("expected artifact summary, got %q", text)
 	}
 }

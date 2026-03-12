@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/esthergb/dbmigrate/internal/compat"
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/schema"
+	"github.com/esthergb/dbmigrate/internal/state"
 	"github.com/esthergb/dbmigrate/internal/version"
 )
 
@@ -72,6 +75,7 @@ func runPluginLifecyclePrecheck(
 	ctx context.Context,
 	source *sql.DB,
 	dest *sql.DB,
+	stateDir string,
 	includeDatabases []string,
 	excludeDatabases []string,
 ) (pluginLifecyclePrecheckReport, error) {
@@ -183,6 +187,45 @@ func runPluginLifecyclePrecheck(
 		})
 	}
 
+	if err := persistPluginLifecyclePrecheckArtifact(stateDir, report); err != nil {
+		return report, err
+	}
+	return report, nil
+}
+
+func pluginLifecyclePrecheckArtifactPath(stateDir string) string {
+	baseDir := strings.TrimSpace(stateDir)
+	if baseDir == "" {
+		baseDir = "./state"
+	}
+	return filepath.Join(baseDir, "plugin-lifecycle-precheck.json")
+}
+
+func persistPluginLifecyclePrecheckArtifact(stateDir string, report pluginLifecyclePrecheckReport) error {
+	path := pluginLifecyclePrecheckArtifactPath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mkdir state-dir for plugin lifecycle precheck artifact: %w", err)
+	}
+	raw, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal plugin lifecycle precheck artifact: %w", err)
+	}
+	if err := state.WritePrivateFileAtomic(path, append(raw, '\n')); err != nil {
+		return fmt.Errorf("write plugin lifecycle precheck artifact: %w", err)
+	}
+	return nil
+}
+
+func loadPluginLifecyclePrecheckArtifact(stateDir string) (pluginLifecyclePrecheckReport, error) {
+	path := pluginLifecyclePrecheckArtifactPath(stateDir)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return pluginLifecyclePrecheckReport{}, fmt.Errorf("read plugin lifecycle precheck artifact: %w", err)
+	}
+	var report pluginLifecyclePrecheckReport
+	if err := json.Unmarshal(raw, &report); err != nil {
+		return pluginLifecyclePrecheckReport{}, fmt.Errorf("parse plugin lifecycle precheck artifact: %w", err)
+	}
 	return report, nil
 }
 
@@ -432,6 +475,8 @@ func authPluginProposal(plugin string) string {
 		return "Rewrite accounts away from mysql_native_password before cutover or recreate them manually with a destination-supported plugin."
 	case "caching_sha2_password":
 		return "Confirm the destination and every client in scope supports caching_sha2_password; otherwise rewrite or reset credentials deliberately."
+	case "ed25519", "client_ed25519":
+		return "MariaDB ed25519 auth plugin is not available on MySQL. Rewrite affected accounts to caching_sha2_password or mysql_native_password before cross-engine migration."
 	case "unix_socket", "auth_socket":
 		return "Do not copy socket-authenticated accounts blindly across hosts. Recreate them with an explicit destination-local authentication strategy."
 	default:

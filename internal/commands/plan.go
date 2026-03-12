@@ -91,7 +91,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 			report.Compatible = false
 		}
 
-		pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		pluginReport, err := runPluginLifecyclePrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("plugin lifecycle precheck failed: %w", err)
 		}
@@ -102,7 +102,7 @@ func runPlan(ctx context.Context, cfg config.RuntimeConfig, _ []string, out io.W
 			report.Compatible = false
 		}
 
-		invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.Databases, cfg.ExcludeDatabases)
+		invisibleReport, err := runInvisibleGIPKPrecheck(ctx, sourceDB, destDB, cfg.StateDir, cfg.Databases, cfg.ExcludeDatabases)
 		if err != nil {
 			return fmt.Errorf("invisible/gipk precheck failed: %w", err)
 		}
