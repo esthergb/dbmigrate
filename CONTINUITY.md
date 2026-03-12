@@ -1,8 +1,10 @@
-Last updated: 2026-03-07
+Last updated: 2026-03-12
 
 - Goal (incl. success criteria):
-  - Remediate the confirmed issues from the fresh independent review on top of merged `main`, then evolve `plan` into the v1 migration validator that detects every documented incompatibility before execution.
-  - Success criteria: reviewed integrity/security/correctness gaps are fixed on this branch, docs match behavior, `go vet ./...` plus `go test ./...` are green, and the next phase closes remaining gaps so `plan` surfaces all documented incompatibilities.
+  - Ship a production-ready v1 for the genuinely supported self-managed lanes, with `plan` acting as the migration validator that surfaces documented incompatibilities before execution.
+  - Update AGENTS.md and skills directory with comprehensive project knowledge from v1 review (PR #85).
+  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into a single cohesive PR.
+  - Success criteria: merged `main` contains review-remediation, validator-hardening, updated agent playbook, and new v2-preparation skills.
 - Constraints/Assumptions:
   - English docs.
   - Keep `Instructions.md` tracked.
@@ -18,12 +20,27 @@ Last updated: 2026-03-07
     - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
   - PR rescue execution remains phased in small PRs.
 - State:
-  - Current branch: `codex/fix/v1-prI-review-remediation`.
-  - Base `main` includes merged PRs through `#84`.
+  - Current branch: `feat/agents-skills-v1-release-consolidated`.
+  - `main` includes merged PRs through `#85` (review-remediation bundle).
+  - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and will be consolidated into this PR.
+  - AGENTS.md has been rewritten with v1 current state, architecture map, code conventions, and 7 skills table.
+  - 4 new skills created: v1-release, schema-objects, replication-cdc, code-quality.
+  - 3 existing skills updated: phase-delivery, research-risk, test-matrix.
   - Untracked review files are present and intentionally untouched:
     - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
     - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
     - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
+  - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
+  - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
+  - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
+    - retargeted to frozen `v1` services: metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, verify canonicalization
+    - collation server-side scenarios retargeted to `v1`-relevant services, while the representative client probe intentionally uses `mysql80a`
+  - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
+  - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
+  - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
+  - Final release decision doc now exists at `docs/v1-release-decision.md`.
+  - User approved remote actions (push + PR creation) for phase66.
+  - PR `#76` is open for phase66 (`chore: add manual v1 release-gate workflow`).
 - Done:
   - Rescue PRs already merged on `main`:
     - `#74` fast-safe v1 rescue bundle.
@@ -36,16 +53,35 @@ Last updated: 2026-03-07
     - `#82` explicit source server-id override for binlog replication.
     - `#83` sanitize view definers during schema apply.
     - `#84` add global operation timeout support.
-  - Full strict-lts and focused rehearsal evidence docs were produced and merged in prior phases.
-  - Implemented PR E on `codex/fix/v1-prE-replication-buffer-bounds` (merged as `#81`):
-    - added bounded source-window buffering during binlog read (event count + estimated bytes) in `internal/replicate/binlog/load.go`
-    - fail-fast classification `source_window_buffer_limit_exceeded` with remediation guidance
-    - added tests for event-limit and byte-limit overflow paths in `internal/replicate/binlog/load_test.go`
-  - Documentation aligned:
-    - `README.md` replication checkpoint safety section
-    - `docs/operators-guide.md` replication checkpoint behavior section
-  - Validation passed:
-    - `go test ./internal/replicate/binlog`
+  - Merged PR `#75` and synced local `main`.
+  - Verified on merged `main` after PR `#75`:
+    - `go test ./...`
+    - `./scripts/test-v1-mysql84-to-mysql84.sh`
+  - Started post-merge workflow phase on `codex/chore/v1-release-gate-workflow-phase66`.
+  - Added manual GitHub workflow for release-gate execution:
+    - `.github/workflows/v1-release-gate.yml` (`workflow_dispatch`, `minimal|full`, artifact upload)
+  - Documented manual workflow usage and artifact behavior in:
+    - `README.md`
+    - `docs/v1-release-criteria.md`
+  - Revalidated phase66 changes locally:
+    - `go test ./...`
+    - `bash -n scripts/run-v1-release-gate.sh`
+  - Pushed `codex/chore/v1-release-gate-workflow-phase66` to `origin`.
+  - Opened PR `#76` against `main`.
+  - Added new release gate entrypoint:
+    - `scripts/run-v1-release-gate.sh`
+    - modes:
+      - `minimal`: release build + `go test ./...` + strict-lts smoke (`mysql84 -> mysql84`)
+      - `full`: `minimal` + full strict-lts matrix + focused signoff rehearsal pack
+    - outputs summary/manifest under `state/v1-release-gate/<timestamp>-<mode>/`
+  - Added Make targets:
+    - `release-gate-minimal`
+    - `release-gate-full`
+  - Documented gate runner usage in:
+    - `docs/v1-release-criteria.md`
+    - `README.md`
+  - Validated this phase locally:
+    - `bash -n scripts/run-v1-release-gate.sh`
     - `go test ./...`
   - Implemented PR F on `codex/fix/v1-prF-replication-server-id`:
     - added replicate CLI flag `--source-server-id` (`0` default = derived, explicit `1..4294967295` override)
@@ -115,11 +151,36 @@ Last updated: 2026-03-07
     - `go test ./internal/commands`
     - `go vet ./...`
     - `go test ./...`
+  - Merged focused rehearsal evidence via PR `#72`.
+  - Ran final release-decision verification on this branch:
+    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
+    - `go test ./...`
+  - Merged final `v1` release decision via PR `#73`.
+  - PR `#85` merged on `main`:
+    - review-remediation bundle
+    - state-dir locking and private atomic artifact writes
+    - plan-time FK cycle, schema feature, identifier portability, replication boundary/readiness, temporal/time-zone, data-shape, and manual-evidence validator coverage
+  - Updated AGENTS.md with comprehensive project knowledge:
+    - Current State (PR #85 status, v1 done, v2/v3 scope)
+    - Architecture Map with full package layout
+    - Code Conventions (error handling, identifier safety, linting)
+    - Expanded Dependency and Testing policies
+    - 7 skills in Skills table with usage guidance
+  - Created 4 new skills:
+    - `dbmigrate-v1-release`: release gate workflow, rehearsals, signoff
+    - `dbmigrate-schema-objects`: 5-PR plan for routines/triggers/events
+    - `dbmigrate-replication-cdc`: 5-PR plan for trigger-CDC, hybrid, GTID
+    - `dbmigrate-code-quality`: logging, concurrency, observability
+  - Updated 3 existing skills:
+    - `dbmigrate-phase-delivery`: v2 phases, architecture patterns, domain-specific skills
+    - `dbmigrate-research-risk`: v2 research domains (routines, triggers, events, CDC, GTID, user/grants, concurrency)
+    - `dbmigrate-test-matrix`: frozen v1 pairs, v2 expansion targets
 - Now:
-  - Commit and push the lint-only CI fix to the open PR `#85` branch.
+  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into single PR.
+  - Cancel PR #76 after consolidation.
 - Next:
-  - Re-check PR `#85` status after push and handle any remaining CI noise.
-  - After PR `#85` is green/merged, continue the remaining v1 release-hardening work from `main`.
+  - Push consolidated branch and create new PR.
+  - Await user confirmation before merge.
 - Open questions (UNCONFIRMED if needed):
   - UNCONFIRMED: whether to add stale-lock detection/lease recovery for `.dbmigrate.lock`, or keep manual cleanup as the explicit v1 tradeoff.
   - UNCONFIRMED: whether the user wants cloud-only / managed-environment unsupported inventories surfaced in `plan` now, even though `v1` support is self-managed only.
@@ -135,4 +196,6 @@ Last updated: 2026-03-07
   - Commands:
     - `go vet ./...`
     - `go test ./...`
-    - `gh pr checks 85`
+    - `./scripts/test-v1-matrix.sh`
+    - `./scripts/run-v1-signoff-rehearsals.sh`
+    - `docker compose -f docker-compose.yml config --services`

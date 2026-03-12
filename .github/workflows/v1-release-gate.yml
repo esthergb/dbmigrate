@@ -1,0 +1,45 @@
+name: v1-release-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Release gate mode"
+        required: true
+        default: minimal
+        type: choice
+        options:
+          - minimal
+          - full
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Run v1 release gate
+        id: gate
+        env:
+          DBMIGRATE_ENABLE_COMPAT_PROBES: "0"
+        run: |
+          output_root="./state/v1-release-gate/github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ inputs.mode }}"
+          ./scripts/run-v1-release-gate.sh --mode "${{ inputs.mode }}" --output-root "$output_root"
+          echo "output_root=$output_root" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release-gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-release-gate-${{ inputs.mode }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.gate.outputs.output_root }}
+          if-no-files-found: error
+          retention-days: 14

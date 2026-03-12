@@ -2,50 +2,79 @@
 
 Use this as the default milestone map.
 
-## Phase 0: Mandatory Research and Risk Artifacts
+## Completed (v1 core — PR #1 through #85)
 
-- Produce `docs/known-problems.md` with source links and mitigations.
-- Produce `docs/risk-checklist.md` for operators.
-- Block implementation until both documents exist and are review-ready.
+### Phase 0: Research and Risk Artifacts ✅
 
-## Phase 1: Repository Foundation
+### Phase 1: Repository Foundation ✅
 
-- Initialize Go module and CLI skeleton.
-- Add lint/format/test scripts and minimal CI workflow.
-- Add contribution workflow and PR template.
+### Phase 2: Connectivity and Plan Pipeline ✅
 
-## Phase 2: Connectivity and Plan Pipeline
+### Phase 3: Baseline Migration ✅
 
-- Implement config loading/validation and secure connection handling.
-- Implement `plan` command with compatibility warnings.
+### Phase 4: Verification Engine ✅
 
-## Phase 3: Baseline Migration
+### Phase 5: Incremental Replication (binlog) ✅
 
-- Implement schema extraction/apply and baseline data migration.
-- Add checkpoint/resume primitives reused later by replication.
+All v1 core is implemented and passing: 5 subcommands, 15+ prechecks, binlog replication with checkpoints, 4 data verification modes, dry-run sandbox, CI pipeline, Docker matrix with 14 services.
 
-## Phase 4: Verification Engine
+## Active — v1 Release Hardening
 
-- Implement schema verification.
-- Implement data verification modes: count/hash/sample/full-hash.
+### Phase 5.1: v1 Release Gate
 
-## Phase 5: Incremental Replication
+- Freeze v1 support matrix (strict-lts pairs).
+- Run fresh full Docker matrix and archive results.
+- Execute all focused rehearsals per `docs/v1-release-criteria.md`.
+- Synchronize `README.md` and operator docs with frozen v1 surface.
+- Complete signoff checklist and tag `v1.0.0`.
 
-- Implement binlog mode with transaction boundaries and checkpoints.
-- Implement DDL handling via `--apply-ddl` policy.
-- Implement conflict reports and default `fail` behavior.
+## Upcoming — v2 Features
 
-## Phase 6: CDC Fallback and Hybrid
+### Phase 6: Schema Objects Migration
 
-- Implement trigger CDC mode with explicit enable/teardown controls.
-- Implement hybrid routing for selected tables.
+- Extend `internal/schema/copy.go` for stored procedures, functions, triggers, events.
+- Add `SHOW CREATE PROCEDURE/FUNCTION/TRIGGER/EVENT` extraction.
+- Handle DEFINER rewriting and delimiter edge cases.
+- Extend `internal/verify/schema/verify.go` for routine/trigger/event comparison.
+- Update `--include-objects` to accept `routines,triggers,events`.
+- Add prechecks for cross-engine routine incompatibilities.
+- See `skills/dbmigrate-schema-objects` for detailed guidance.
 
-## Phase 7: User/Grant Migration and Reporting
+### Phase 7: Trigger-CDC and Hybrid Replication
 
-- Implement account/grant migration helper with selectable scope.
-- Emit detailed auth/plugin compatibility report.
+- Design CDC log table schema and trigger generation.
+- Implement `internal/replicate/cdc/` package.
+- Implement `--replication-mode=capture-triggers` with explicit `--enable-trigger-cdc` / `--teardown-cdc`.
+- Implement `--replication-mode=hybrid` for per-table routing.
+- Implement GTID support as `--start-from=gtid`.
+- See `skills/dbmigrate-replication-cdc` for detailed guidance.
 
-## Phase 8: Hardening and Release
+### Phase 8: User/Grant Migration
 
-- Run full local matrix.
-- Finalize docs, risk guidance, and release artifacts.
+- Implement extraction from `mysql.user` + `SHOW GRANTS`.
+- Selectable scope: business accounts only vs. include system accounts.
+- Auth plugin compatibility report with per-plugin remediation.
+- Apply grants on destination with rollback safety.
+
+### Phase 9: Concurrency and Observability
+
+- Real concurrent data copy using goroutines + semaphore (honor `--concurrency` flag).
+- Structured JSON logging with configurable levels.
+- Progress reporting: throughput, rows/sec, ETA per table.
+- Rate limiting for migration operations.
+- See `skills/dbmigrate-code-quality` for patterns.
+
+### Phase 10: Granular Schema Verification
+
+- Column-by-column verification via `INFORMATION_SCHEMA.COLUMNS`.
+- Index verification via `INFORMATION_SCHEMA.STATISTICS`.
+- Foreign key constraint verification.
+- Partition verification.
+- Implement flags: `--tolerate-collation-diffs`, `--ignore-table-options`.
+
+### Phase 11: Hardening and v2 Release
+
+- Full Docker matrix for all v2 features.
+- Update operator docs for new object types and replication modes.
+- Performance regression test suite.
+- Tag `v2.0.0`.

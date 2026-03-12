@@ -415,6 +415,14 @@ make release-gate-full
 ## CI operations note
 
 - Automatic GitHub Actions checks are the default validation path.
+- Manual release-gate workflow is available for release-manager evidence runs:
+
+```bash
+gh workflow run v1-release-gate.yml -f mode=minimal
+gh workflow run v1-release-gate.yml -f mode=full
+```
+
+- The workflow uploads gate artifacts from `state/v1-release-gate/...` as run artifacts.
 - Manual dispatch helper remains available for incidents where auto triggers are unavailable:
 
 ```bash
