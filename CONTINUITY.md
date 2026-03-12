@@ -1,201 +1,52 @@
 Last updated: 2026-03-12
 
 - Goal (incl. success criteria):
-  - Ship a production-ready v1 for the genuinely supported self-managed lanes, with `plan` acting as the migration validator that surfaces documented incompatibilities before execution.
-  - Update AGENTS.md and skills directory with comprehensive project knowledge from v1 review (PR #85).
-  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into a single cohesive PR.
-  - Success criteria: merged `main` contains review-remediation, validator-hardening, updated agent playbook, and new v2-preparation skills.
+  - Begin v2 track: structured JSON logging (`internal/log/` package).
+  - Success criteria: all operational output (debug, info, warn, error) goes through a structured logger; command result output (`writeResult`) remains unchanged; no external logging dependencies; all tests green.
 - Constraints/Assumptions:
   - English docs.
-  - Keep `Instructions.md` tracked.
-  - Keep `configs/mysql84-to-mariadb114.yaml` untracked.
-  - `v1` scope is only genuinely implemented/supported self-managed paths.
-  - Ask user before any remote push/PR creation.
+  - Branch-first, PR-on-demand workflow (see AGENTS.md).
+  - No external logging dependencies (no zap, zerolog). Go stdlib `log/slog` is acceptable if Go version permits.
+  - Logger must be injectable for testing (interface, not concrete type).
+  - Keep command result output (`writeResult`) unchanged — logger is for operational/diagnostic output only.
 - Key decisions:
-  - Scope contract is fixed:
-    - `v1`: only truly supported implemented paths.
-    - `v2`: surfaced-but-not-implemented CLI capabilities.
-    - `v3`: v2 + managed/cloud environments.
-  - DDL replay safety fence is active in v1:
-    - fail fast when replay window mixes schema-changing DDL and row events (`ddl_window_unsafe_live_metadata`).
-  - PR rescue execution remains phased in small PRs.
+  - Scope contract:
+    - `v1`: shipped and hardened (PRs #74–#86, precheck audit improvements merged).
+    - `v2`: structured logging, routines/triggers/events, trigger-CDC, hybrid, GTID, user/grant, concurrency.
+    - `v3`: managed/cloud environments.
+  - Structured logging is the first v2 track because it's low-risk, cross-cutting, and enables better observability for all future v2 features.
 - State:
-  - Current branch: `feat/agents-skills-v1-release-consolidated`.
-  - `main` includes merged PRs through `#85` (review-remediation bundle).
-  - PR `#76` (`chore: add manual v1 release-gate workflow`) is open and will be consolidated into this PR.
-  - AGENTS.md has been rewritten with v1 current state, architecture map, code conventions, and 7 skills table.
-  - 4 new skills created: v1-release, schema-objects, replication-cdc, code-quality.
-  - 3 existing skills updated: phase-delivery, research-risk, test-matrix.
-  - Untracked review files are present and intentionally untouched:
-    - `REVIEW_V1-PRE-RELEASE_GEMINI3.1PRO.md`
-    - `REVIEW_V1-PRE-RELEASE_OPUS4.6.md`
-    - `REVIEW_V1-PRE-RELEASE_GPT5.4.md`
-  - Full frozen `v1` matrix execution and supplemental execution have been recorded and merged.
-  - A dedicated tracked evidence report now exists at `docs/v1-matrix-evidence.md`.
-  - Focused signoff rehearsals have been retargeted where needed to the frozen `v1` service lane:
-    - retargeted to frozen `v1` services: metadata-lock, backup/restore, timezone, plugin lifecycle, replication shape, invisible/GIPK, verify canonicalization
-    - collation server-side scenarios retargeted to `v1`-relevant services, while the representative client probe intentionally uses `mysql80a`
-  - The initial partial pack root `state/v1-signoff-rehearsals/20260307T003054Z` is superseded by the clean archival root `state/v1-signoff-rehearsals/20260307T003408Z`.
-  - The collation rehearsal archival bug is fixed: incompatible `report` results are now captured as evidence and summarized instead of aborting the wrapper.
-  - A tracked focused-evidence doc now exists at `docs/v1-rehearsal-evidence.md`.
-  - Final release decision doc now exists at `docs/v1-release-decision.md`.
-  - User approved remote actions (push + PR creation) for phase66.
-  - PR `#76` is open for phase66 (`chore: add manual v1 release-gate workflow`).
-- Done:
-  - Rescue PRs already merged on `main`:
-    - `#74` fast-safe v1 rescue bundle.
-    - `#75` release-gate automation.
-    - `#77` v1 safety hardening (strict config/global flags/file perms/DSN validation).
-    - `#78` TLS default to `required`.
-    - `#79` typed baseline checkpoint cursors.
-    - `#80` mixed DDL+row replay fail-fast fence.
-    - `#81` bounded source-window buffering during binlog read.
-    - `#82` explicit source server-id override for binlog replication.
-    - `#83` sanitize view definers during schema apply.
-    - `#84` add global operation timeout support.
-  - Merged PR `#75` and synced local `main`.
-  - Verified on merged `main` after PR `#75`:
-    - `go test ./...`
-    - `./scripts/test-v1-mysql84-to-mysql84.sh`
-  - Started post-merge workflow phase on `codex/chore/v1-release-gate-workflow-phase66`.
-  - Added manual GitHub workflow for release-gate execution:
-    - `.github/workflows/v1-release-gate.yml` (`workflow_dispatch`, `minimal|full`, artifact upload)
-  - Documented manual workflow usage and artifact behavior in:
-    - `README.md`
-    - `docs/v1-release-criteria.md`
-  - Revalidated phase66 changes locally:
-    - `go test ./...`
-    - `bash -n scripts/run-v1-release-gate.sh`
-  - Pushed `codex/chore/v1-release-gate-workflow-phase66` to `origin`.
-  - Opened PR `#76` against `main`.
-  - Added new release gate entrypoint:
-    - `scripts/run-v1-release-gate.sh`
-    - modes:
-      - `minimal`: release build + `go test ./...` + strict-lts smoke (`mysql84 -> mysql84`)
-      - `full`: `minimal` + full strict-lts matrix + focused signoff rehearsal pack
-    - outputs summary/manifest under `state/v1-release-gate/<timestamp>-<mode>/`
-  - Added Make targets:
-    - `release-gate-minimal`
-    - `release-gate-full`
-  - Documented gate runner usage in:
-    - `docs/v1-release-criteria.md`
-    - `README.md`
-  - Validated this phase locally:
-    - `bash -n scripts/run-v1-release-gate.sh`
-    - `go test ./...`
-  - Implemented PR F on `codex/fix/v1-prF-replication-server-id`:
-    - added replicate CLI flag `--source-server-id` (`0` default = derived, explicit `1..4294967295` override)
-    - wired `SourceServerID` through replicate options into binlog syncer configuration
-    - added parser validation for out-of-range values and tests for explicit override behavior
-    - documented server-id override guidance in README and operators guide
-  - Validation passed for PR F:
-    - `go test ./internal/commands ./internal/replicate/binlog`
-    - `go test ./...`
-  - Implemented PR G on `codex/fix/v1-prG-view-definer-sanitization`:
-    - schema apply now sanitizes source `DEFINER=` clauses to `DEFINER=CURRENT_USER` before executing DDL
-    - sandbox schema validation path applies the same sanitization
-    - added schema unit tests for definer sanitization and sandbox rewrite interplay
-    - documented view-definer sanitization behavior in README and operators guide
-  - Validation passed for PR G:
-    - `go test ./internal/schema`
-    - `go test ./...`
-  - Implemented PR H on `codex/fix/v1-prH-operation-timeout`:
-    - added global `--operation-timeout` runtime flag and config-file support
-    - root CLI now wraps command execution with `context.WithTimeout` when timeout > 0
-    - invalid timeout values fail early in config-file loading and runtime validation
-    - documented operator-facing timeout behavior in README and operators guide
-  - Validation passed for PR H:
-    - `go test ./internal/config ./internal/cli`
-    - `go test ./...`
-  - On `codex/fix/v1-prI-review-remediation`, implemented review-driven hardening:
-    - state-dir single-writer lock plus private dir/file permissions and unique atomic temp files
-    - atomic/private writes reused by checkpoint, conflict, verify, collation, and zero-date artifacts
-    - replicate `--start-file` validation for bare binlog filenames only
-    - `report` now redacts plain conflict samples by default; `--include-sensitive-artifacts` is required to emit them
-    - `verify --data-mode sample` now also fails fast on tables without stable keys
-    - schema verify normalization preserves quoted/literal case drift instead of lowercasing everything
-    - sandbox schema rewrite now skips literals/comments instead of blind string replacement
-    - schema/data baseline now fail fast on intra-database FK cycles instead of pretending table ordering makes them safe
-    - dry-run sandbox DML validation now uses stable-key keyset pagination and per-batch rollback scopes
-    - `plan` now detects intra-database FK cycle groups and reports them as v1 incompatibilities before migrate
-    - stale-lock diagnostics now include lock path plus owner metadata and explicit manual recovery guidance
-    - `plan` now inventories cross-engine JSON columns plus MariaDB-only schema features (`SEQUENCE`, `WITH SYSTEM VERSIONING`)
-    - `migrate` fails on the same incompatible schema-feature classes before schema apply
-  - Extended `plan` validator coverage on this branch with additional documented incompatibility inventories:
-    - identifier portability precheck for destination reserved-word drift across databases/tables/views/columns
-    - parser-drift precheck for SQL-mode-sensitive view definitions (`ANSI_QUOTES`, `PIPES_AS_CONCAT`, `NO_BACKSLASH_ESCAPES`)
-    - `lower_case_table_names` portability checks for source/destination mismatch, case-fold collisions, and mixed-case identifiers across case-folding boundaries
-    - cross-engine replication boundary inventory for GTID state, file/position expectations, `log_bin`, `binlog_format`, and MySQL -> MariaDB row-event settings (`binlog_row_value_options`, `binlog_transaction_compression`)
-    - schema `migrate` now fails on incompatible identifier portability / parser-drift findings before schema apply
-    - replication-readiness inventory for source `log_bin`, `binlog_format`, `binlog_row_image`, and current binary-log handoff visibility
-    - temporal/time-zone portability inventory for source/destination `system_time_zone`, global/session `time_zone`, and mixed `TIMESTAMP`/`DATETIME` table usage
-    - data-shape precheck for keyless tables and representation-sensitive tables (approximate numerics, temporal columns, JSON, collation-sensitive text)
-    - manual-evidence findings for documented classes that cannot be proven from live metadata alone (backup/restore usability, metadata-lock runbook, transaction-shape rehearsal, dump-tool skew, view-definer review, replication grant hints)
-    - `migrate` now fails before baseline data copy when selected scope includes keyless tables
-  - Documentation aligned for the new validator slice:
-    - `README.md`
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
-    - `docs/risk-checklist.md`
-  - Validation passed on this branch:
-    - `go test ./internal/state ./internal/schema ./internal/data ./internal/verify/schema ./internal/verify/data ./internal/commands`
-    - `go vet ./...`
-    - `go test ./...`
-  - PR `#85` CI lint failures reproduced locally and fixed:
-    - removed `ineffassign` noise in replication-boundary GTID candidate selection
-    - replaced deprecated `strings.Title` uses in identifier-portability findings
-    - simplified boolean expression flagged by `QF1001`
-    - removed unused helpers in state-lock/state IO code
-  - Validation after the CI fix passed:
-    - `golangci-lint run ./...`
-    - `go test ./internal/commands`
-    - `go vet ./...`
-    - `go test ./...`
-  - Merged focused rehearsal evidence via PR `#72`.
-  - Ran final release-decision verification on this branch:
-    - `go build -trimpath -ldflags='-s -w' -o bin/dbmigrate ./cmd/dbmigrate`
-    - `go test ./...`
-  - Merged final `v1` release decision via PR `#73`.
-  - PR `#85` merged on `main`:
-    - review-remediation bundle
-    - state-dir locking and private atomic artifact writes
-    - plan-time FK cycle, schema feature, identifier portability, replication boundary/readiness, temporal/time-zone, data-shape, and manual-evidence validator coverage
-  - Updated AGENTS.md with comprehensive project knowledge:
-    - Current State (PR #85 status, v1 done, v2/v3 scope)
-    - Architecture Map with full package layout
-    - Code Conventions (error handling, identifier safety, linting)
-    - Expanded Dependency and Testing policies
-    - 7 skills in Skills table with usage guidance
-  - Created 4 new skills:
-    - `dbmigrate-v1-release`: release gate workflow, rehearsals, signoff
-    - `dbmigrate-schema-objects`: 5-PR plan for routines/triggers/events
-    - `dbmigrate-replication-cdc`: 5-PR plan for trigger-CDC, hybrid, GTID
-    - `dbmigrate-code-quality`: logging, concurrency, observability
-  - Updated 3 existing skills:
-    - `dbmigrate-phase-delivery`: v2 phases, architecture patterns, domain-specific skills
-    - `dbmigrate-research-risk`: v2 research domains (routines, triggers, events, CDC, GTID, user/grants, concurrency)
-    - `dbmigrate-test-matrix`: frozen v1 pairs, v2 expansion targets
+  - `main` is up to date with all v1 hardening + precheck audit improvements merged.
+  - All PRs are closed.
+  - No active feature branches.
+- Done (v1 summary):
+  - PRs #74–#86 merged: v1 core, safety hardening, review remediation, agents/skills consolidation, precheck audit improvements.
+  - AGENTS.md updated with branch-first/PR-on-demand policy.
+  - 15+ prechecks with artifact persistence and report integration.
+  - Binlog replication with checkpoints, conflict policies, DDL handling, bounded buffering.
+  - 4 data verification modes.
+  - Full test suite green.
 - Now:
-  - Consolidate PR #76 (v1 release-gate workflow) with AGENTS.md/skills updates into single PR.
-  - Cancel PR #76 after consolidation.
+  - Research phase for structured logging (review current output patterns, identify replacement points).
+  - Create `feat/structured-logging` branch.
+  - Implement `internal/log/` package per code-quality skill spec.
 - Next:
-  - Push consolidated branch and create new PR.
-  - Await user confirmation before merge.
-- Open questions (UNCONFIRMED if needed):
-  - UNCONFIRMED: whether to add stale-lock detection/lease recovery for `.dbmigrate.lock`, or keep manual cleanup as the explicit v1 tradeoff.
-  - UNCONFIRMED: whether the user wants cloud-only / managed-environment unsupported inventories surfaced in `plan` now, even though `v1` support is self-managed only.
+  - Wire logger through `RuntimeConfig`.
+  - Replace `fmt.Fprintf` operational output with logger calls (commands, internal packages).
+  - Add `--verbose` level wiring.
+  - Update docs.
+- Open questions:
+  - UNCONFIRMED: whether to use Go stdlib `log/slog` (requires Go 1.21+) or custom minimal logger.
+  - UNCONFIRMED: whether `--verbose` should map to debug level or a separate verbosity flag.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/state/*.go`
-    - `internal/commands/{plan,migrate,verify,replicate,report}*.go`
-    - `internal/{schema,data,verify}/**/*.go`
-    - `README.md`
-    - `docs/operators-guide.md`
-    - `docs/known-problems.md`
-    - `docs/risk-checklist.md`
+    - `internal/log/` (new package)
+    - `internal/config/runtime.go`
+    - `internal/cli/cli.go`
+    - `internal/commands/*.go`
+    - `internal/data/copy.go`
+    - `internal/schema/copy.go`
+    - `internal/replicate/binlog/*.go`
   - Commands:
     - `go vet ./...`
-    - `go test ./...`
-    - `./scripts/test-v1-matrix.sh`
-    - `./scripts/run-v1-signoff-rehearsals.sh`
-    - `docker compose -f docker-compose.yml config --services`
+    - `go test ./... -count=1`
