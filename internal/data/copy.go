@@ -303,6 +303,18 @@ func copyOneTable(
 		}
 	}
 
+	destConn, err := dest.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("pin dest connection for %s: %w", tableKey, err)
+	}
+	defer func() {
+		_, _ = destConn.ExecContext(context.Background(), "SET FOREIGN_KEY_CHECKS=1")
+		_ = destConn.Close()
+	}()
+	if _, err := destConn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS=0"); err != nil {
+		return fmt.Errorf("disable fk checks for %s: %w", tableKey, err)
+	}
+
 	insertSQL := buildInsertSQL(tw.database, tw.table, columns)
 	for {
 		if err := ctx.Err(); err != nil {
@@ -322,7 +334,7 @@ func copyOneTable(
 			limiter.Wait(len(batch))
 		}
 
-		if err := applyBatch(ctx, dest, insertSQL, batch); err != nil {
+		if err := applyBatch(ctx, destConn, insertSQL, batch); err != nil {
 			return fmt.Errorf("apply batch for %s: %w", tableKey, err)
 		}
 
@@ -742,7 +754,11 @@ func fetchKeysetBatch(
 	return batch, lastKey, nil
 }
 
-func applyBatch(ctx context.Context, db *sql.DB, insertSQL string, batch [][]any) error {
+type txBeginner interface {
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+}
+
+func applyBatch(ctx context.Context, db txBeginner, insertSQL string, batch [][]any) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
