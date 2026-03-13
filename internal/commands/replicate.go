@@ -18,6 +18,7 @@ import (
 type replicateOptions struct {
 	ReplicationMode  string
 	StartFrom        string
+	GTIDSet          string
 	MaxEvents        uint64
 	MaxLagSeconds    uint64
 	SourceServerID   uint64
@@ -70,12 +71,6 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication"),
 		)
 	}
-	if opts.StartFrom == "gtid" {
-		return WithExitCode(
-			ExitCodeDiff,
-			errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos"),
-		)
-	}
 	if opts.ReplicationMode != "binlog" {
 		return WithExitCode(
 			ExitCodeDiff,
@@ -114,6 +109,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			Resume:         opts.Resume,
 			StartFile:      opts.StartFile,
 			StartPos:       uint32(opts.StartPos),
+			GTIDSet:        opts.GTIDSet,
 			SourceDSN:      cfg.Source,
 			SourceTLSMode:  cfg.TLSMode,
 			SourceCAFile:   cfg.CAFile,
@@ -193,6 +189,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.BoolVar(&opts.Resume, "resume", true, "resume from replication checkpoint in --state-dir")
 	fs.StringVar(&opts.StartFile, "start-file", "", "start binlog file when no checkpoint exists")
 	fs.UintVar(&opts.StartPos, "start-pos", 4, "start binlog position when no checkpoint exists")
+	fs.StringVar(&opts.GTIDSet, "gtid-set", "", "GTID set to start from when --start-from=gtid (MySQL: uuid:interval, MariaDB: domain-server-seq)")
 
 	if err := fs.Parse(args); err != nil {
 		return replicateOptions{}, err
@@ -216,6 +213,14 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		if opts.StartFile == "" {
 			return replicateOptions{}, errors.New("--start-file is required when --start-from=binlog-file:pos")
 		}
+	}
+	if opts.StartFrom == "gtid" {
+		if strings.TrimSpace(opts.GTIDSet) == "" {
+			return replicateOptions{}, errors.New("--gtid-set is required when --start-from=gtid")
+		}
+	}
+	if strings.TrimSpace(opts.GTIDSet) != "" && opts.StartFrom != "gtid" {
+		return replicateOptions{}, errors.New("--gtid-set requires --start-from=gtid")
 	}
 	if err := validateBinlogFileName(opts.StartFile); err != nil {
 		return replicateOptions{}, err

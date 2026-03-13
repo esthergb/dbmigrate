@@ -1068,3 +1068,71 @@ func (f fakeSQLResult) LastInsertId() (int64, error) {
 func (f fakeSQLResult) RowsAffected() (int64, error) {
 	return f.rows, nil
 }
+
+func TestRunGTIDModePopulatesCheckpoint(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	sourceDB, _ := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	destDB, _ := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+
+	checkSourcePreflightFn = func(_ context.Context, _ *sql.DB) (preflightResult, error) {
+		return preflightResult{LogBinEnabled: true, BinlogFormat: "ROW", BinlogRowImage: "FULL"}, nil
+	}
+	querySourceGTIDSetFn = func(_ context.Context, _ *sql.DB) (string, error) {
+		return "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-10", nil
+	}
+	loadApplyBatchesFn = func(_ context.Context, _ *sql.DB, _ applyWindow, _ Options) ([]applyBatch, error) {
+		return nil, nil
+	}
+	queryBinlogPositionFn = func(_ context.Context, _ *sql.DB) (string, uint32, error) {
+		return "mysql-bin.000001", 4, nil
+	}
+	applyWindowFn = func(_ context.Context, _ *sql.DB, _ *sql.DB, _ applyWindow, _ Options) (applyResult, error) {
+		return applyResult{File: "mysql-bin.000001", Pos: 4}, nil
+	}
+	ensureDestinationCheckpointTableFn = func(_ context.Context, _ *sql.DB) error { return nil }
+	loadDestinationCheckpointFn = func(_ context.Context, _ *sql.DB) (destinationCheckpoint, bool, error) {
+		return destinationCheckpoint{}, false, nil
+	}
+	saveDestinationCheckpointTxFn = func(_ context.Context, _ txRunner, _ string, _ uint32, _ string) error {
+		return nil
+	}
+	checkGTIDEnabledFn = func(_ context.Context, _ *sql.DB) error { return nil }
+	removeConflictReportFn = func(_ string) error { return nil }
+	saveConflictReportFn = func(_ string, _ state.ReplicationConflictReport) error { return nil }
+	defer func() {
+		checkSourcePreflightFn = checkSourcePreflight
+		querySourceGTIDSetFn = querySourceGTIDSet
+		checkGTIDEnabledFn = checkGTIDEnabled
+		loadApplyBatchesFn = loadApplyBatchesFromSource
+		queryBinlogPositionFn = queryBinlogPosition
+		applyWindowFn = applyWindowTransactional
+		ensureDestinationCheckpointTableFn = ensureDestinationCheckpointTable
+		loadDestinationCheckpointFn = loadDestinationCheckpoint
+		saveDestinationCheckpointTxFn = saveDestinationCheckpointTx
+		removeConflictReportFn = removeConflictReport
+		saveConflictReportFn = state.SaveReplicationConflictReport
+	}()
+
+	summary, err := Run(ctx, sourceDB, destDB, dir, Options{
+		ApplyDDL:       "warn",
+		ConflictPolicy: "fail",
+		GTIDSet:        "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5",
+		SourceDSN:      "",
+	})
+	if err != nil {
+		t.Fatalf("expected Run success: %v", err)
+	}
+	if summary.GTIDSet != "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5" {
+		t.Fatalf("unexpected GTIDSet in summary: %q", summary.GTIDSet)
+	}
+
+	cp, err := state.LoadReplicationCheckpoint(dir + "/replication-checkpoint.json")
+	if err != nil {
+		t.Fatalf("load checkpoint: %v", err)
+	}
+	if cp.GTIDSet != "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-10" {
+		t.Fatalf("unexpected GTIDSet in checkpoint: %q", cp.GTIDSet)
+	}
+}

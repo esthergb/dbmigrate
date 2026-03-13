@@ -387,6 +387,43 @@ func TestStreamBufferUsageFailsWhenByteLimitExceeded(t *testing.T) {
 	}
 }
 
+func TestParseGTIDSetMySQL(t *testing.T) {
+	set, err := parseGTIDSet("mysql", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23")
+	if err != nil {
+		t.Fatalf("expected valid MySQL GTID set: %v", err)
+	}
+	if set == nil {
+		t.Fatal("expected non-nil GTID set")
+	}
+}
+
+func TestParseGTIDSetMariaDB(t *testing.T) {
+	set, err := parseGTIDSet("mariadb", "0-1-100")
+	if err != nil {
+		t.Fatalf("expected valid MariaDB GTID set: %v", err)
+	}
+	if set == nil {
+		t.Fatal("expected non-nil GTID set")
+	}
+}
+
+func TestParseGTIDSetInvalidMySQL(t *testing.T) {
+	_, err := parseGTIDSet("mysql", "not-a-gtid")
+	if err == nil {
+		t.Fatal("expected error for invalid MySQL GTID set")
+	}
+}
+
+func TestParseGTIDSetDefaultFlavor(t *testing.T) {
+	set, err := parseGTIDSet("", "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-5")
+	if err != nil {
+		t.Fatalf("expected valid GTID set for empty flavor: %v", err)
+	}
+	if set == nil {
+		t.Fatal("expected non-nil GTID set")
+	}
+}
+
 func stubLoadHooks(t *testing.T) func() {
 	t.Helper()
 

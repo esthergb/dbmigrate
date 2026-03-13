@@ -28,6 +28,7 @@ type Options struct {
 	Resume         bool
 	StartFile      string
 	StartPos       uint32
+	GTIDSet        string
 	SourceDSN      string
 	SourceTLSMode  string
 	SourceCAFile   string
@@ -47,6 +48,7 @@ type Summary struct {
 	SourceRowImage string
 	StartFile      string
 	StartPos       uint32
+	GTIDSet        string
 	SourceEndFile  string
 	SourceEndPos   uint32
 	EndFile        string
@@ -60,6 +62,7 @@ type applyWindow struct {
 	StartPos  uint32
 	EndFile   string
 	EndPos    uint32
+	GTIDSet   string
 }
 
 type applyResult struct {
@@ -100,6 +103,8 @@ type txRunner interface {
 var (
 	checkSourcePreflightFn             = checkSourcePreflight
 	queryBinlogPositionFn              = queryBinlogPosition
+	querySourceGTIDSetFn               = querySourceGTIDSet
+	checkGTIDEnabledFn                 = checkGTIDEnabled
 	loadApplyBatchesFn                 = loadApplyBatchesFromSource
 	beginDestinationTxFn               = beginDestinationTx
 	applyWindowFn                      = applyWindowTransactional
@@ -132,9 +137,17 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		return Summary{}, errors.New("start-pos must be >= 4")
 	}
 
+	gtidMode := strings.TrimSpace(opts.GTIDSet) != ""
+
 	preflight, err := checkSourcePreflightFn(ctx, source)
 	if err != nil {
 		return Summary{}, err
+	}
+
+	if gtidMode {
+		if err := checkGTIDEnabledFn(ctx, source); err != nil {
+			return Summary{}, err
+		}
 	}
 
 	checkpointFile := filepath.Join(stateDir, "replication-checkpoint.json")
@@ -158,27 +171,44 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		}
 	}
 
+	gtidSet := opts.GTIDSet
+	if opts.Resume && checkpoint.GTIDSet != "" && gtidMode {
+		gtidSet = checkpoint.GTIDSet
+	}
+
 	startFile := opts.StartFile
 	startPos := opts.StartPos
-	if opts.Resume && checkpoint.BinlogFile != "" {
+	if opts.Resume && checkpoint.BinlogFile != "" && !gtidMode {
 		startFile = checkpoint.BinlogFile
 		startPos = checkpoint.BinlogPos
 	}
-	if startPos == 0 {
+	if startPos == 0 && !gtidMode {
 		startPos = 4
 	}
 
 	if opts.Log != nil {
-		opts.Log.Debug("replication setup", "resume", opts.Resume, "start_file", startFile, "start_pos", startPos, "apply_ddl", opts.ApplyDDL, "conflict_policy", opts.ConflictPolicy)
+		opts.Log.Debug("replication setup", "resume", opts.Resume, "gtid_mode", gtidMode, "gtid_set", gtidSet, "start_file", startFile, "start_pos", startPos, "apply_ddl", opts.ApplyDDL, "conflict_policy", opts.ConflictPolicy)
 	}
 
-	if startFile == "" {
+	if !gtidMode && startFile == "" {
 		file, pos, err := queryBinlogPositionFn(ctx, source)
 		if err != nil {
 			return Summary{}, fmt.Errorf("query source start position: %w", err)
 		}
 		startFile = file
 		startPos = pos
+	}
+
+	if gtidMode && strings.TrimSpace(gtidSet) == "" {
+		set, err := querySourceGTIDSetFn(ctx, source)
+		if err != nil {
+			return Summary{}, fmt.Errorf("query source GTID set: %w", err)
+		}
+		gtidSet = set
+	}
+
+	if gtidMode {
+		opts.GTIDSet = gtidSet
 	}
 
 	sourceEndFile, sourceEndPos, err := queryBinlogPositionFn(ctx, source)
@@ -194,6 +224,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		StartPos:  startPos,
 		EndFile:   sourceEndFile,
 		EndPos:    sourceEndPos,
+		GTIDSet:   opts.GTIDSet,
 	}, opts)
 	if err != nil {
 		report := buildConflictReport(opts, startFile, startPos, sourceEndFile, sourceEndPos, err)
@@ -212,6 +243,12 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 
 	checkpoint.BinlogFile = applied.File
 	checkpoint.BinlogPos = applied.Pos
+	if gtidMode {
+		endGTID, err := querySourceGTIDSetFn(ctx, source)
+		if err == nil && strings.TrimSpace(endGTID) != "" {
+			checkpoint.GTIDSet = endGTID
+		}
+	}
 	checkpoint.ApplyDDL = opts.ApplyDDL
 	checkpoint.Shape = applied.Shape
 	checkpoint.UpdatedAt = timeNowFn().UTC()
@@ -231,6 +268,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		SourceRowImage: preflight.BinlogRowImage,
 		StartFile:      startFile,
 		StartPos:       startPos,
+		GTIDSet:        opts.GTIDSet,
 		SourceEndFile:  sourceEndFile,
 		SourceEndPos:   sourceEndPos,
 		EndFile:        applied.File,
@@ -295,6 +333,43 @@ func queryBinlogPosition(ctx context.Context, db *sql.DB) (string, uint32, error
 		return "", 0, lastErr
 	}
 	return "", 0, errors.New("unable to determine binlog position")
+}
+
+func querySourceGTIDSet(ctx context.Context, db *sql.DB) (string, error) {
+	queries := []struct {
+		sql    string
+		column string
+	}{
+		{"SELECT @@GLOBAL.gtid_executed", "@@GLOBAL.gtid_executed"},
+		{"SELECT @@GLOBAL.gtid_current_pos", "@@GLOBAL.gtid_current_pos"},
+	}
+	for _, q := range queries {
+		var raw any
+		if err := db.QueryRowContext(ctx, q.sql).Scan(&raw); err != nil {
+			continue
+		}
+		val := toString(raw)
+		if strings.TrimSpace(val) != "" {
+			return val, nil
+		}
+	}
+	return "", errors.New("unable to query source GTID set: neither gtid_executed nor gtid_current_pos is available")
+}
+
+func checkGTIDEnabled(ctx context.Context, db *sql.DB) error {
+	var modeRaw any
+	if err := db.QueryRowContext(ctx, "SELECT @@GLOBAL.gtid_mode").Scan(&modeRaw); err == nil {
+		mode := strings.ToUpper(strings.TrimSpace(toString(modeRaw)))
+		if mode != "ON" {
+			return fmt.Errorf("source gtid_mode=%s; GTID replication requires gtid_mode=ON (MySQL)", mode)
+		}
+		return nil
+	}
+	var strictRaw any
+	if err := db.QueryRowContext(ctx, "SELECT @@GLOBAL.gtid_strict_mode").Scan(&strictRaw); err == nil {
+		return nil
+	}
+	return errors.New("source does not support GTID: neither gtid_mode nor gtid_strict_mode variable is available")
 }
 
 func checkSourcePreflight(ctx context.Context, db *sql.DB) (preflightResult, error) {

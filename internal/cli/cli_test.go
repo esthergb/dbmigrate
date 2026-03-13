@@ -408,7 +408,7 @@ func TestRunReplicateUnsupportedMode(t *testing.T) {
 	}
 }
 
-func TestRunReplicateUnsupportedStartFromGTID(t *testing.T) {
+func TestRunReplicateStartFromGTIDWithoutGTIDSet(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
@@ -417,8 +417,8 @@ func TestRunReplicateUnsupportedStartFromGTID(t *testing.T) {
 		"--start-from", "gtid",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 2 {
-		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
+	if code != 3 {
+		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
 	}
 }
 
