@@ -83,6 +83,12 @@ func CopyBaselineData(ctx context.Context, source *sql.DB, dest *sql.DB, stateDi
 	if concurrency < 1 {
 		concurrency = 1
 	}
+	if concurrency > 1 && opts.Log != nil {
+		opts.Log.Warn(
+			"baseline copy is running with concurrency > 1: each worker opens its own snapshot, so the overall baseline is NOT globally consistent across tables; use concurrency=1 for live sources that require cross-table consistency",
+			"concurrency", concurrency,
+		)
+	}
 
 	checkpointFile := filepath.Join(stateDir, "data-baseline-checkpoint.json")
 	checkpoint := state.NewDataCheckpoint()
@@ -829,14 +835,16 @@ func ensureDestinationTablesAreEmpty(ctx context.Context, db *sql.DB, databaseNa
 	sort.Strings(sorted)
 
 	for _, tableName := range sorted {
-		query := fmt.Sprintf("SELECT COUNT(*) FROM %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName))
-		var count int64
-		if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
-			return err
+		query := fmt.Sprintf("SELECT 1 FROM %s.%s LIMIT 1", quoteIdentifier(databaseName), quoteIdentifier(tableName))
+		var one int
+		err := db.QueryRowContext(ctx, query).Scan(&one)
+		if err == nil {
+			return fmt.Errorf("table %s.%s already contains rows", databaseName, tableName)
 		}
-		if count > 0 {
-			return fmt.Errorf("table %s.%s already contains %d rows", databaseName, tableName, count)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
 		}
+		return err
 	}
 	return nil
 }
