@@ -51,8 +51,8 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 	if cfg.Source == "" || cfg.Dest == "" {
 		return WithExitCode(ExitCodeVerifyFailed, errors.New("verify requires both --source and --dest (or config file equivalents)"))
 	}
-	if unsupported := unsupportedV1IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
-		return WithExitCode(ExitCodeDiff, reservedV2ObjectsError(cfg.IncludeObjects))
+	if unsupported := unsupportedV2IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
+		return WithExitCode(ExitCodeDiff, fmt.Errorf("--include-objects contains unknown types (%s); supported: tables, views, routines, triggers, events", strings.Join(unsupported, ",")))
 	}
 	if cfg.DryRun {
 		return writeResult(
@@ -83,11 +83,14 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 
 		includeTables := hasObject(cfg.IncludeObjects, "tables")
 		includeViews := hasObject(cfg.IncludeObjects, "views")
+		includeRoutines := hasObject(cfg.IncludeObjects, "routines")
+		includeTriggers := hasObject(cfg.IncludeObjects, "triggers")
+		includeEvents := hasObject(cfg.IncludeObjects, "events")
 
 		switch opts.VerifyLevel {
 		case "schema":
-			if !includeTables && !includeViews {
-				return WithExitCode(ExitCodeVerifyFailed, errors.New("schema verification requires tables/views in --include-objects"))
+			if !includeTables && !includeViews && !includeRoutines && !includeTriggers && !includeEvents {
+				return WithExitCode(ExitCodeVerifyFailed, errors.New("schema verification requires at least one object type in --include-objects"))
 			}
 
 			summary, err := schemaVerify.Verify(ctx, sourceDB, destDB, schemaVerify.Options{
@@ -95,6 +98,9 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 				ExcludeDatabases: cfg.ExcludeDatabases,
 				IncludeTables:    includeTables,
 				IncludeViews:     includeViews,
+				IncludeRoutines:  includeRoutines,
+				IncludeTriggers:  includeTriggers,
+				IncludeEvents:    includeEvents,
 			})
 			if err != nil {
 				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("schema verification failed: %w", err))

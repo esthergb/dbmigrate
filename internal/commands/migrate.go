@@ -57,15 +57,18 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 
 	runSchema := opts.SchemaOnly || (!opts.SchemaOnly && !opts.DataOnly)
 	runData := opts.DataOnly || (!opts.SchemaOnly && !opts.DataOnly)
-	if unsupported := unsupportedV1IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
-		return WithExitCode(ExitCodeDiff, reservedV2ObjectsError(cfg.IncludeObjects))
+	if unsupported := unsupportedV2IncludeObjects(cfg.IncludeObjects); len(unsupported) > 0 {
+		return WithExitCode(ExitCodeDiff, fmt.Errorf("--include-objects contains unknown types (%s); supported: tables, views, routines, triggers, events", strings.Join(unsupported, ",")))
 	}
 	includeTables := hasObject(cfg.IncludeObjects, "tables")
 	includeViews := hasObject(cfg.IncludeObjects, "views")
+	includeRoutines := hasObject(cfg.IncludeObjects, "routines")
+	includeTriggers := hasObject(cfg.IncludeObjects, "triggers")
+	includeEvents := hasObject(cfg.IncludeObjects, "events")
 
 	if cfg.DryRun {
 		if cfg.DryRunMode == "sandbox" {
-			return runMigrateDryRunSandbox(ctx, cfg, runSchema, runData, includeTables, includeViews, opts, out)
+			return runMigrateDryRunSandbox(ctx, cfg, runSchema, runData, includeTables, includeViews, includeRoutines, includeTriggers, includeEvents, opts, out)
 		}
 		message := fmt.Sprintf(
 			"dry-run: migrate plan ready (schema=%v data=%v chunk_size=%d resume=%v)",
@@ -242,11 +245,14 @@ func runMigrate(ctx context.Context, cfg config.RuntimeConfig, args []string, ou
 				ExcludeDatabases:  cfg.ExcludeDatabases,
 				IncludeTables:     includeTables,
 				IncludeViews:      includeViews,
+				IncludeRoutines:   includeRoutines,
+				IncludeTriggers:   includeTriggers,
+				IncludeEvents:     includeEvents,
 				DestEmptyRequired: opts.DestEmptyRequired && !opts.Force,
 				Log:               cfg.Log,
 			}
-			if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews {
-				return errors.New("schema migration currently supports tables/views in --include-objects")
+			if !schemaOptions.IncludeTables && !schemaOptions.IncludeViews && !schemaOptions.IncludeRoutines && !schemaOptions.IncludeTriggers && !schemaOptions.IncludeEvents {
+				return errors.New("schema migration requires at least one object type in --include-objects")
 			}
 
 			schemaSummary, err = schema.CopySchema(ctx, sourceDB, destDB, schemaOptions)
@@ -352,11 +358,14 @@ func runMigrateDryRunSandbox(
 	runData bool,
 	includeTables bool,
 	includeViews bool,
+	includeRoutines bool,
+	includeTriggers bool,
+	includeEvents bool,
 	opts migrateOptions,
 	out io.Writer,
 ) error {
-	if runSchema && !includeTables && !includeViews {
-		return errors.New("schema migration currently supports tables/views in --include-objects")
+	if runSchema && !includeTables && !includeViews && !includeRoutines && !includeTriggers && !includeEvents {
+		return errors.New("schema migration requires at least one object type in --include-objects")
 	}
 	if runData && !includeTables {
 		return errors.New("data migration requires tables in --include-objects")
@@ -402,6 +411,9 @@ func runMigrateDryRunSandbox(
 			ExcludeDatabases: cfg.ExcludeDatabases,
 			IncludeTables:    includeTables,
 			IncludeViews:     runSchema && includeViews,
+			IncludeRoutines:  runSchema && includeRoutines,
+			IncludeTriggers:  runSchema && includeTriggers,
+			IncludeEvents:    runSchema && includeEvents,
 			MapDatabase:      mapDatabase,
 		})
 		report.Validated += schemaSummary.Validated

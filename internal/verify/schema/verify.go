@@ -20,8 +20,12 @@ var (
 )
 
 const (
-	objectTypeTable = "table"
-	objectTypeView  = "view"
+	objectTypeTable     = "table"
+	objectTypeView      = "view"
+	objectTypeProcedure = "procedure"
+	objectTypeFunction  = "function"
+	objectTypeTrigger   = "trigger"
+	objectTypeEvent     = "event"
 
 	diffKindMissingInDestination = "missing_in_destination"
 	diffKindMissingInSource      = "missing_in_source"
@@ -34,6 +38,9 @@ type Options struct {
 	ExcludeDatabases []string
 	IncludeTables    bool
 	IncludeViews     bool
+	IncludeRoutines  bool
+	IncludeTriggers  bool
+	IncludeEvents    bool
 }
 
 // Diff describes one schema-level mismatch.
@@ -68,8 +75,8 @@ func Verify(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Su
 	if source == nil || dest == nil {
 		return Summary{}, errors.New("source and destination connections are required")
 	}
-	if !opts.IncludeTables && !opts.IncludeViews {
-		return Summary{}, errors.New("at least one object type must be enabled (tables or views)")
+	if !opts.IncludeTables && !opts.IncludeViews && !opts.IncludeRoutines && !opts.IncludeTriggers && !opts.IncludeEvents {
+		return Summary{}, errors.New("at least one object type must be enabled")
 	}
 
 	sourceDatabases, err := listDatabases(ctx, source)
@@ -86,11 +93,11 @@ func Verify(ctx context.Context, source *sql.DB, dest *sql.DB, opts Options) (Su
 
 	summary := Summary{Databases: len(selectedDatabases)}
 	for _, databaseName := range selectedDatabases {
-		sourceObjects, err := listObjectDefinitions(ctx, source, databaseName, opts.IncludeTables, opts.IncludeViews)
+		sourceObjects, err := listObjectDefinitions(ctx, source, databaseName, opts)
 		if err != nil {
 			return summary, fmt.Errorf("inspect source schema for %s: %w", databaseName, err)
 		}
-		destObjects, err := listObjectDefinitions(ctx, dest, databaseName, opts.IncludeTables, opts.IncludeViews)
+		destObjects, err := listObjectDefinitions(ctx, dest, databaseName, opts)
 		if err != nil {
 			return summary, fmt.Errorf("inspect destination schema for %s: %w", databaseName, err)
 		}
@@ -130,17 +137,17 @@ func listDatabases(ctx context.Context, db *sql.DB) ([]string, error) {
 	return out, nil
 }
 
-func listObjectDefinitions(ctx context.Context, db *sql.DB, databaseName string, includeTables bool, includeViews bool) (map[string]objectDef, error) {
+func listObjectDefinitions(ctx context.Context, db *sql.DB, databaseName string, opts Options) (map[string]objectDef, error) {
 	out := map[string]objectDef{}
 
-	if includeTables {
+	if opts.IncludeTables {
 		names, err := listObjectsByType(ctx, db, databaseName, "BASE TABLE")
 		if err != nil {
 			return nil, err
 		}
 		for _, objectName := range names {
 			query := fmt.Sprintf("SHOW CREATE TABLE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
-			createSQL, err := fetchShowCreate(ctx, db, query)
+			createSQL, err := fetchShowCreate(ctx, db, query, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -154,14 +161,14 @@ func listObjectDefinitions(ctx context.Context, db *sql.DB, databaseName string,
 		}
 	}
 
-	if includeViews {
+	if opts.IncludeViews {
 		names, err := listObjectsByType(ctx, db, databaseName, "VIEW")
 		if err != nil {
 			return nil, err
 		}
 		for _, objectName := range names {
 			query := fmt.Sprintf("SHOW CREATE VIEW %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
-			createSQL, err := fetchShowCreate(ctx, db, query)
+			createSQL, err := fetchShowCreate(ctx, db, query, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -175,7 +182,154 @@ func listObjectDefinitions(ctx context.Context, db *sql.DB, databaseName string,
 		}
 	}
 
+	if opts.IncludeRoutines {
+		procNames, err := listRoutinesByType(ctx, db, databaseName, "PROCEDURE")
+		if err != nil {
+			return nil, err
+		}
+		for _, objectName := range procNames {
+			query := fmt.Sprintf("SHOW CREATE PROCEDURE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
+			createSQL, err := fetchShowCreate(ctx, db, query, 2)
+			if err != nil {
+				return nil, err
+			}
+			key := objectTypeProcedure + ":" + objectName
+			out[key] = objectDef{
+				ObjectType: objectTypeProcedure,
+				ObjectName: objectName,
+				CreateSQL:  createSQL,
+				normalized: normalizeCreateStatement(createSQL),
+			}
+		}
+		funcNames, err := listRoutinesByType(ctx, db, databaseName, "FUNCTION")
+		if err != nil {
+			return nil, err
+		}
+		for _, objectName := range funcNames {
+			query := fmt.Sprintf("SHOW CREATE FUNCTION %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
+			createSQL, err := fetchShowCreate(ctx, db, query, 2)
+			if err != nil {
+				return nil, err
+			}
+			key := objectTypeFunction + ":" + objectName
+			out[key] = objectDef{
+				ObjectType: objectTypeFunction,
+				ObjectName: objectName,
+				CreateSQL:  createSQL,
+				normalized: normalizeCreateStatement(createSQL),
+			}
+		}
+	}
+
+	if opts.IncludeTriggers {
+		names, err := listTriggerNames(ctx, db, databaseName)
+		if err != nil {
+			return nil, err
+		}
+		for _, objectName := range names {
+			query := fmt.Sprintf("SHOW CREATE TRIGGER %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
+			createSQL, err := fetchShowCreate(ctx, db, query, 2)
+			if err != nil {
+				return nil, err
+			}
+			key := objectTypeTrigger + ":" + objectName
+			out[key] = objectDef{
+				ObjectType: objectTypeTrigger,
+				ObjectName: objectName,
+				CreateSQL:  createSQL,
+				normalized: normalizeCreateStatement(createSQL),
+			}
+		}
+	}
+
+	if opts.IncludeEvents {
+		names, err := listEventNames(ctx, db, databaseName)
+		if err != nil {
+			return nil, err
+		}
+		for _, objectName := range names {
+			query := fmt.Sprintf("SHOW CREATE EVENT %s.%s", quoteIdentifier(databaseName), quoteIdentifier(objectName))
+			createSQL, err := fetchShowCreate(ctx, db, query, 3)
+			if err != nil {
+				return nil, err
+			}
+			key := objectTypeEvent + ":" + objectName
+			out[key] = objectDef{
+				ObjectType: objectTypeEvent,
+				ObjectName: objectName,
+				CreateSQL:  createSQL,
+				normalized: normalizeCreateStatement(createSQL),
+			}
+		}
+	}
+
 	return out, nil
+}
+
+func listRoutinesByType(ctx context.Context, db *sql.DB, databaseName string, routineType string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT ROUTINE_NAME
+		FROM information_schema.ROUTINES
+		WHERE ROUTINE_SCHEMA = ? AND ROUTINE_TYPE = ?
+		ORDER BY ROUTINE_NAME
+	`, databaseName, routineType)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+func listTriggerNames(ctx context.Context, db *sql.DB, databaseName string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT TRIGGER_NAME
+		FROM information_schema.TRIGGERS
+		WHERE TRIGGER_SCHEMA = ?
+		ORDER BY TRIGGER_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+func listEventNames(ctx context.Context, db *sql.DB, databaseName string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT EVENT_NAME
+		FROM information_schema.EVENTS
+		WHERE EVENT_SCHEMA = ?
+		ORDER BY EVENT_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
 }
 
 func listObjectsByType(ctx context.Context, db *sql.DB, databaseName string, objectType string) ([]string, error) {
@@ -206,7 +360,7 @@ func listObjectsByType(ctx context.Context, db *sql.DB, databaseName string, obj
 	return out, nil
 }
 
-func fetchShowCreate(ctx context.Context, db *sql.DB, query string) (string, error) {
+func fetchShowCreate(ctx context.Context, db *sql.DB, query string, col int) (string, error) {
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return "", err
@@ -219,8 +373,8 @@ func fetchShowCreate(ctx context.Context, db *sql.DB, query string) (string, err
 	if err != nil {
 		return "", err
 	}
-	if len(columns) < 2 {
-		return "", errors.New("unexpected SHOW CREATE result format")
+	if len(columns) <= col {
+		return "", fmt.Errorf("unexpected SHOW CREATE result: expected column %d, got %d columns", col, len(columns))
 	}
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
@@ -238,7 +392,7 @@ func fetchShowCreate(ctx context.Context, db *sql.DB, query string) (string, err
 		return "", err
 	}
 
-	createSQL := strings.TrimSpace(string(values[1]))
+	createSQL := strings.TrimSpace(string(values[col]))
 	if createSQL == "" {
 		return "", errors.New("empty CREATE statement")
 	}

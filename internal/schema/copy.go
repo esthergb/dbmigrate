@@ -27,6 +27,9 @@ type CopyOptions struct {
 	ExcludeDatabases  []string
 	IncludeTables     bool
 	IncludeViews      bool
+	IncludeRoutines   bool
+	IncludeTriggers   bool
+	IncludeEvents     bool
 	DestEmptyRequired bool
 	Log               *dblog.Logger
 }
@@ -36,6 +39,9 @@ type CopySummary struct {
 	Databases  int
 	Tables     int
 	Views      int
+	Routines   int
+	Triggers   int
+	Events     int
 	Statements int
 }
 
@@ -45,6 +51,9 @@ type DryRunSandboxOptions struct {
 	ExcludeDatabases []string
 	IncludeTables    bool
 	IncludeViews     bool
+	IncludeRoutines  bool
+	IncludeTriggers  bool
+	IncludeEvents    bool
 	MapDatabase      func(sourceDatabase string) string
 }
 
@@ -60,8 +69,8 @@ func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOpti
 	if source == nil || dest == nil {
 		return CopySummary{}, errors.New("source and destination connections are required")
 	}
-	if !opts.IncludeTables && !opts.IncludeViews {
-		return CopySummary{}, errors.New("at least one schema object type must be enabled (tables or views)")
+	if !opts.IncludeTables && !opts.IncludeViews && !opts.IncludeRoutines && !opts.IncludeTriggers && !opts.IncludeEvents {
+		return CopySummary{}, errors.New("at least one schema object type must be enabled")
 	}
 
 	allDatabases, err := listDatabases(ctx, source)
@@ -85,24 +94,30 @@ func CopySchema(ctx context.Context, source *sql.DB, dest *sql.DB, opts CopyOpti
 
 	summary := CopySummary{}
 	for _, databaseName := range selectedDatabases {
-		statements, tableCount, viewCount, err := extractCreateStatements(ctx, source, databaseName, opts.IncludeTables, opts.IncludeViews)
+		objResult, err := extractAllObjects(ctx, source, databaseName, opts)
 		if err != nil {
 			return summary, fmt.Errorf("extract schema for %s: %w", databaseName, err)
 		}
-		if len(statements) == 0 {
+		if objResult.empty() {
 			continue
 		}
 		if opts.Log != nil {
-			opts.Log.Debug("applying schema", "database", databaseName, "tables", tableCount, "views", viewCount, "statements", len(statements))
+			opts.Log.Debug("applying schema", "database", databaseName,
+				"tables", objResult.tableCount, "views", objResult.viewCount,
+				"routines", objResult.routineCount, "triggers", objResult.triggerCount,
+				"events", objResult.eventCount, "statements", len(objResult.statements))
 		}
-		if err := applyStatements(ctx, dest, databaseName, statements); err != nil {
+		if err := applyStatements(ctx, dest, databaseName, objResult.statements); err != nil {
 			return summary, fmt.Errorf("apply schema for %s: %w", databaseName, err)
 		}
 
 		summary.Databases++
-		summary.Tables += tableCount
-		summary.Views += viewCount
-		summary.Statements += len(statements)
+		summary.Tables += objResult.tableCount
+		summary.Views += objResult.viewCount
+		summary.Routines += objResult.routineCount
+		summary.Triggers += objResult.triggerCount
+		summary.Events += objResult.eventCount
+		summary.Statements += len(objResult.statements)
 	}
 
 	return summary, nil
@@ -116,8 +131,8 @@ func ValidateSchemaInSandbox(ctx context.Context, source *sql.DB, dest *sql.DB, 
 	if opts.MapDatabase == nil {
 		return DryRunSandboxSummary{}, errors.New("MapDatabase is required")
 	}
-	if !opts.IncludeTables && !opts.IncludeViews {
-		return DryRunSandboxSummary{}, errors.New("at least one schema object type must be enabled (tables or views)")
+	if !opts.IncludeTables && !opts.IncludeViews && !opts.IncludeRoutines && !opts.IncludeTriggers && !opts.IncludeEvents {
+		return DryRunSandboxSummary{}, errors.New("at least one schema object type must be enabled")
 	}
 
 	allDatabases, err := listDatabases(ctx, source)
@@ -136,10 +151,18 @@ func ValidateSchemaInSandbox(ctx context.Context, source *sql.DB, dest *sql.DB, 
 			return summary, fmt.Errorf("sandbox database mapping is empty for source %q", sourceDatabase)
 		}
 
-		statements, _, _, err := extractCreateStatements(ctx, source, sourceDatabase, opts.IncludeTables, opts.IncludeViews)
+		copyOpts := CopyOptions{
+			IncludeTables:   opts.IncludeTables,
+			IncludeViews:    opts.IncludeViews,
+			IncludeRoutines: opts.IncludeRoutines,
+			IncludeTriggers: opts.IncludeTriggers,
+			IncludeEvents:   opts.IncludeEvents,
+		}
+		objResult, err := extractAllObjects(ctx, source, sourceDatabase, copyOpts)
 		if err != nil {
 			return summary, fmt.Errorf("extract schema for %s: %w", sourceDatabase, err)
 		}
+		statements := objResult.statements
 		if len(statements) == 0 {
 			continue
 		}
@@ -241,46 +264,236 @@ func countUserTables(ctx context.Context, db *sql.DB, excluded []string) (int, e
 	return count, nil
 }
 
-func extractCreateStatements(ctx context.Context, source *sql.DB, databaseName string, includeTables bool, includeViews bool) ([]string, int, int, error) {
-	var statements []string
-	tableCount := 0
-	viewCount := 0
+type extractResult struct {
+	statements   []string
+	tableCount   int
+	viewCount    int
+	routineCount int
+	triggerCount int
+	eventCount   int
+}
 
-	if includeTables {
+func (r extractResult) empty() bool {
+	return len(r.statements) == 0
+}
+
+func extractAllObjects(ctx context.Context, source *sql.DB, databaseName string, opts CopyOptions) (extractResult, error) {
+	var result extractResult
+
+	if opts.IncludeTables {
 		tableNames, err := queryObjectNames(ctx, source, databaseName, "BASE TABLE")
 		if err != nil {
-			return nil, 0, 0, err
+			return extractResult{}, err
 		}
 		tableNames, err = orderTableNamesByForeignKeys(ctx, source, databaseName, tableNames)
 		if err != nil {
-			return nil, 0, 0, err
+			return extractResult{}, err
 		}
 		for _, tableName := range tableNames {
 			stmt, err := fetchCreateStatement(ctx, source, fmt.Sprintf("SHOW CREATE TABLE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(tableName)))
 			if err != nil {
-				return nil, 0, 0, err
+				return extractResult{}, err
 			}
-			statements = append(statements, stmt)
-			tableCount++
+			result.statements = append(result.statements, stmt)
+			result.tableCount++
 		}
 	}
 
-	if includeViews {
+	if opts.IncludeViews {
 		viewNames, err := queryObjectNames(ctx, source, databaseName, "VIEW")
 		if err != nil {
-			return nil, 0, 0, err
+			return extractResult{}, err
 		}
 		for _, viewName := range viewNames {
 			stmt, err := fetchCreateStatement(ctx, source, fmt.Sprintf("SHOW CREATE VIEW %s.%s", quoteIdentifier(databaseName), quoteIdentifier(viewName)))
 			if err != nil {
-				return nil, 0, 0, err
+				return extractResult{}, err
 			}
-			statements = append(statements, stmt)
-			viewCount++
+			result.statements = append(result.statements, stmt)
+			result.viewCount++
 		}
 	}
 
-	return statements, tableCount, viewCount, nil
+	if opts.IncludeRoutines {
+		routineNames, err := queryRoutineNames(ctx, source, databaseName)
+		if err != nil {
+			return extractResult{}, err
+		}
+		for _, r := range routineNames {
+			stmt, err := fetchRoutineCreateStatement(ctx, source, databaseName, r.name, r.routineType)
+			if err != nil {
+				return extractResult{}, err
+			}
+			result.statements = append(result.statements, stmt)
+			result.routineCount++
+		}
+	}
+
+	if opts.IncludeTriggers {
+		triggerNames, err := queryTriggerNames(ctx, source, databaseName)
+		if err != nil {
+			return extractResult{}, err
+		}
+		for _, triggerName := range triggerNames {
+			stmt, err := fetchTriggerCreateStatement(ctx, source, databaseName, triggerName)
+			if err != nil {
+				return extractResult{}, err
+			}
+			result.statements = append(result.statements, stmt)
+			result.triggerCount++
+		}
+	}
+
+	if opts.IncludeEvents {
+		eventNames, err := queryEventNames(ctx, source, databaseName)
+		if err != nil {
+			return extractResult{}, err
+		}
+		for _, eventName := range eventNames {
+			stmt, err := fetchEventCreateStatement(ctx, source, databaseName, eventName)
+			if err != nil {
+				return extractResult{}, err
+			}
+			result.statements = append(result.statements, stmt)
+			result.eventCount++
+		}
+	}
+
+	return result, nil
+}
+
+type routineRef struct {
+	name        string
+	routineType string
+}
+
+func queryRoutineNames(ctx context.Context, source *sql.DB, databaseName string) ([]routineRef, error) {
+	rows, err := source.QueryContext(ctx, `
+		SELECT ROUTINE_NAME, ROUTINE_TYPE
+		FROM information_schema.ROUTINES
+		WHERE ROUTINE_SCHEMA = ?
+		ORDER BY ROUTINE_TYPE, ROUTINE_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []routineRef
+	for rows.Next() {
+		var name, rtype string
+		if err := rows.Scan(&name, &rtype); err != nil {
+			return nil, err
+		}
+		out = append(out, routineRef{name: name, routineType: rtype})
+	}
+	return out, rows.Err()
+}
+
+func fetchRoutineCreateStatement(ctx context.Context, source *sql.DB, databaseName, name, routineType string) (string, error) {
+	var query string
+	switch strings.ToUpper(routineType) {
+	case "PROCEDURE":
+		query = fmt.Sprintf("SHOW CREATE PROCEDURE %s.%s", quoteIdentifier(databaseName), quoteIdentifier(name))
+	case "FUNCTION":
+		query = fmt.Sprintf("SHOW CREATE FUNCTION %s.%s", quoteIdentifier(databaseName), quoteIdentifier(name))
+	default:
+		return "", fmt.Errorf("unknown routine type %q", routineType)
+	}
+	return fetchCreateStatementAtColumn(ctx, source, query, 2)
+}
+
+func queryTriggerNames(ctx context.Context, source *sql.DB, databaseName string) ([]string, error) {
+	rows, err := source.QueryContext(ctx, `
+		SELECT TRIGGER_NAME
+		FROM information_schema.TRIGGERS
+		WHERE TRIGGER_SCHEMA = ?
+		ORDER BY TRIGGER_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+func fetchTriggerCreateStatement(ctx context.Context, source *sql.DB, databaseName, name string) (string, error) {
+	query := fmt.Sprintf("SHOW CREATE TRIGGER %s.%s", quoteIdentifier(databaseName), quoteIdentifier(name))
+	return fetchCreateStatementAtColumn(ctx, source, query, 2)
+}
+
+func queryEventNames(ctx context.Context, source *sql.DB, databaseName string) ([]string, error) {
+	rows, err := source.QueryContext(ctx, `
+		SELECT EVENT_NAME
+		FROM information_schema.EVENTS
+		WHERE EVENT_SCHEMA = ?
+		ORDER BY EVENT_NAME
+	`, databaseName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+func fetchEventCreateStatement(ctx context.Context, source *sql.DB, databaseName, name string) (string, error) {
+	query := fmt.Sprintf("SHOW CREATE EVENT %s.%s", quoteIdentifier(databaseName), quoteIdentifier(name))
+	return fetchCreateStatementAtColumn(ctx, source, query, 3)
+}
+
+func fetchCreateStatementAtColumn(ctx context.Context, source *sql.DB, query string, col int) (string, error) {
+	rows, err := source.QueryContext(ctx, query)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	if len(cols) <= col {
+		return "", fmt.Errorf("unexpected SHOW CREATE result: expected column %d, got %d columns", col, len(cols))
+	}
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+		return "", sql.ErrNoRows
+	}
+
+	values := make([]sql.RawBytes, len(cols))
+	scanArgs := make([]any, len(cols))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+	if err := rows.Scan(scanArgs...); err != nil {
+		return "", err
+	}
+
+	stmt := strings.TrimSpace(string(values[col]))
+	if stmt == "" {
+		return "", errors.New("empty CREATE statement")
+	}
+	return stmt, nil
 }
 
 func queryObjectNames(ctx context.Context, source *sql.DB, databaseName string, objectType string) ([]string, error) {
