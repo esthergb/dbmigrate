@@ -18,11 +18,11 @@ Last updated: 2026-03-13
     - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, granular verify, user/grant, trigger-CDC, hybrid, GTID.
     - `v3`: managed/cloud environments.
   - CDC JSON serialization: explicit column-by-column JSON_OBJECT() with null handling.
-  - Hybrid routing: `--cdc-tables db.table1,db.table2` CSV flag, not config file.
-  - GTID checkpoint: store GTID set alongside binlog file:pos in ReplicationCheckpoint.
+  - Hybrid routing: `--cdc-databases` / `--binlog-databases` / `--table-routing` CSV flags.
+  - GTID checkpoint: GTIDSet stored alongside binlog file:pos in ReplicationCheckpoint JSON.
 - State:
   - `main` is current: v2 batch 1 + batch 2 all merged (PRs #87-#90, #89 FK fix).
-  - 16 packages green, CI green.
+  - 17 packages green, CI green.
 - Done (v2 batch 1 — code quality):
   - Structured logging, concurrent data copy, rate limiting, progress reporting.
 - Done (v2 batch 2 — schema/users):
@@ -30,19 +30,25 @@ Last updated: 2026-03-13
   - Granular schema verification (column/index/FK/partition diffs).
   - User/grant migration (`migrate-users` subcommand).
   - FK check fix for concurrent baseline copy.
+- Done (v2 batch 3 — replication):
+  - T3 `feat/replication-gtid`: `--start-from=gtid` + `--gtid-set` flag; `parseGTIDSet()` for MySQL/MariaDB; `checkGTIDEnabled()` preflight; GTID checkpoint resume/save; `GTIDSet` in `ReplicationCheckpoint`.
+  - T1 `feat/replication-cdc`: `internal/replicate/cdc` package with `SetupCDC`, `TeardownCDC`, `ReadCDCEvents`, `PurgeCDCEvents`, `Run`; CDC log table + AFTER triggers; `--replication-mode=capture-triggers`; `--enable-trigger-cdc` / `--teardown-cdc` flags.
+  - T2 `feat/replication-hybrid`: `internal/replicate/hybrid` package with `Run`, `ParseTableRouting`, `DatabasesForMode`; `--replication-mode=hybrid`; `--table-routing`, `--cdc-databases`, `--binlog-databases` flags.
 - Now:
-  - Implementing `feat/replication-gtid` (T3) and `feat/replication-cdc` (T1a+T1b+T1c) in parallel.
+  - All three branches committed. Awaiting user confirmation for PRs/merge.
 - Next:
-  - `feat/replication-hybrid` (T2) after T1 merges.
+  - Merge T3 → T1 → T2 in order (T1 depends on CDC pkg, T2 depends on both).
+  - v3 scope: managed/cloud deployments.
 - Open questions:
   - None.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/replicate/binlog/load.go` (GTID start path)
-    - `internal/replicate/binlog/run.go` (GTID options, checkpoint)
-    - `internal/replicate/cdc/` (new package — setup, reader, run)
-    - `internal/state/replication.go` (GTIDSet field, CDCCheckpoint)
-    - `internal/commands/replicate.go` (wire CDC and GTID)
+    - `internal/replicate/binlog/load.go` (GTID start path, parseGTIDSet)
+    - `internal/replicate/binlog/run.go` (GTIDSet in Options/Summary/applyWindow, injectable fns)
+    - `internal/replicate/cdc/` (setup, reader, run — new package)
+    - `internal/replicate/hybrid/` (run — new package)
+    - `internal/state/replication.go` (GTIDSet field)
+    - `internal/commands/replicate.go` (wire CDC, hybrid, GTID)
   - Commands:
     - `go vet ./...`
     - `go test ./... -count=1`
