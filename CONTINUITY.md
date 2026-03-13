@@ -1,44 +1,54 @@
 # Continuity
 
-Last updated: 2026-03-13
+Last updated: 2026-03-14
 
 - Goal (incl. success criteria):
-  - Publish a v2 review report and a remediation plan that convert the current audit findings into explicit engineering decisions and implementation instructions.
+  - Implement the v2 remediation plan across phases 0–6 on branch `chore/docs-v2-review-remediation`.
   - Success criteria:
-    - `docs/v2-review-report.md` exists and captures release decisions, risks, and findings.
-    - `docs/v2-remediation-plan.md` exists and defines the implementation order, detailed fix instructions, tests, and acceptance gates.
-    - `CONTINUITY.md` reflects the documentation track on branch `chore/docs-v2-review-remediation`.
+    - All 7 phases committed with conventional commits, tests passing, `go vet` clean.
+    - Branch pushed to remote; ready for PR/merge review.
 - Constraints/Assumptions:
-  - English docs.
-  - Branch-first, PR-on-demand workflow (see `AGENTS.md`).
-  - This branch is documentation-only; no product code changes are part of this task.
-  - No new dependencies.
-  - The review decisions must prefer operator safety over feature breadth.
+  - English docs, no new dependencies, operator-safety over feature breadth.
+  - Branch-first, PR-on-demand. No direct commits to `main`.
 - Key decisions:
-  - `hybrid` must not be treated as production-ready until routing is enforced in both CDC and binlog phases.
-  - Trigger-based CDC must not be treated as durable until checkpoint ordering is fixed and row matching uses stable keys.
-  - Concurrent baseline copy must be documented as not globally consistent for live-write workloads unless a true snapshot strategy is implemented.
-  - The remediation output should be split into:
-    - a review/decision document for release posture,
-    - an implementation plan with ordered fixes and acceptance criteria.
+  - `capture-triggers` and `hybrid` modes are hard-gated (fail at parse time) until correctness fixes land.
+  - CDC checkpoint is saved before purge; purge failure is non-fatal.
+  - CDC UPDATE/DELETE require a stable PK or non-null unique key; keyless tables are rejected explicitly.
+  - Hybrid routing is enforced end-to-end: each table has exactly one owner (CDC or binlog) at apply time.
+  - Baseline concurrency > 1 emits an operator warning about snapshot inconsistency.
+  - `server_id` is persisted per state-dir (random UUID-like uint32) to avoid DSN-derived collisions.
+  - Destination emptiness check uses `SELECT 1 LIMIT 1` + `sql.ErrNoRows` instead of `COUNT(*)`.
 - State:
   - Working branch: `chore/docs-v2-review-remediation`.
-  - Repo was clean when the branch was created from `main`.
+  - All 7 phases committed and pushed (6 commits on this branch after the docs commits).
+  - All 16 packages passing, `go vet` clean.
 - Done:
-  - Completed a focused senior code review and security audit of v2 replication/data-copy paths.
-  - Identified critical issues in CDC durability ordering, hybrid routing correctness, and baseline consistency semantics.
-  - Created the documentation branch for the review deliverables.
+  - Phase 0: Safety gates for `capture-triggers` and `hybrid` in `internal/commands/replicate.go`.
+  - Phase 1: CDC durability ordering fixed in `internal/replicate/cdc/run.go`.
+  - Phase 2: Hybrid routing enforced: `ValidateRouting`, `tableSetForMode`, `ExcludeTables` in binlog, `IncludeTables`/`ExcludeTables` in CDC, wired through `hybrid.Run`.
+  - Phase 3: CDC UPDATE/DELETE now use key-based matching (`listStableKeyColumns` in `cdc/setup.go`, `getDestKeyColumnsFn` in `cdc/run.go`). Pre-existing nil-dereference bug in `cdc/run_test.go` fixed.
+  - Phase 4: `CopyBaselineData` emits a log warning when `concurrency > 1`.
+  - Phase 5: `state.LoadOrCreateServerID` persists a stable random `server_id` per state-dir; binlog `Run` resolves it before streaming.
+  - Phase 6: `ensureDestinationTablesAreEmpty` uses `SELECT 1 LIMIT 1` + `errors.Is(err, sql.ErrNoRows)`.
+  - Regression tests added for all phases (safety gates, CDC ordering, key-based matching, routing validation, server_id persistence).
 - Now:
-  - Writing the review report and remediation plan.
+  - Idle. All planned phases complete.
 - Next:
-  - Hand the docs to the user for review.
-  - If approved, open follow-up implementation branches per remediation phase.
+  - Open PR from `chore/docs-v2-review-remediation` → `main` when user is ready.
+  - Phase 7 (security hardening: conflict-report redaction, TLS warnings, privilege docs) is deferred.
 - Open questions:
-  - Whether the user wants a single follow-up implementation branch or one branch per remediation phase after reviewing the docs.
+  - None currently.
 - Working set (files/ids/commands):
-  - Files:
-    - `CONTINUITY.md`
-    - `docs/v2-review-report.md`
-    - `docs/v2-remediation-plan.md`
+  - Key files changed:
+    - `internal/commands/replicate.go` (Phase 0)
+    - `internal/replicate/cdc/run.go` (Phases 1, 2, 3)
+    - `internal/replicate/cdc/setup.go` (Phase 3 — listStableKeyColumns)
+    - `internal/replicate/hybrid/run.go` (Phase 2)
+    - `internal/replicate/binlog/run.go` (Phases 2, 5)
+    - `internal/replicate/binlog/load.go` (Phase 2 — ExcludeTables filter)
+    - `internal/data/copy.go` (Phases 4, 6)
+    - `internal/state/server_id.go` (Phase 5 — new file)
   - Commands:
-    - `git branch --show-current`
+    - `go test ./... -count=1`
+    - `go vet ./...`
+    - `git push origin chore/docs-v2-review-remediation`
