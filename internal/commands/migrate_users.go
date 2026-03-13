@@ -22,11 +22,11 @@ type migrateUsersOptions struct {
 }
 
 type migrateUsersResult struct {
-	Command string           `json:"command"`
-	Status  string           `json:"status"`
-	Summary users.UserSummary `json:"summary"`
-	Timestamp time.Time      `json:"timestamp"`
-	Version string           `json:"version"`
+	Command   string            `json:"command"`
+	Status    string            `json:"status"`
+	Summary   users.UserSummary `json:"summary"`
+	Timestamp time.Time         `json:"timestamp"`
+	Version   string            `json:"version"`
 }
 
 func runMigrateUsers(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
