@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,11 +14,13 @@ import (
 	"github.com/esthergb/dbmigrate/internal/config"
 	"github.com/esthergb/dbmigrate/internal/db"
 	"github.com/esthergb/dbmigrate/internal/replicate/binlog"
+	"github.com/esthergb/dbmigrate/internal/replicate/cdc"
 )
 
 type replicateOptions struct {
 	ReplicationMode  string
 	StartFrom        string
+	GTIDSet          string
 	MaxEvents        uint64
 	MaxLagSeconds    uint64
 	SourceServerID   uint64
@@ -64,25 +67,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			),
 		)
 	}
-	if opts.EnableTriggerCDC || opts.TeardownCDC {
+	if opts.ReplicationMode == "hybrid" {
 		return WithExitCode(
 			ExitCodeDiff,
-			errors.New("trigger CDC mode is not implemented yet; --enable-trigger-cdc/--teardown-cdc are reserved for capture-triggers/hybrid replication"),
-		)
-	}
-	if opts.StartFrom == "gtid" {
-		return WithExitCode(
-			ExitCodeDiff,
-			errors.New("start-from gtid is not implemented yet; use --start-from=auto or --start-from=binlog-file:pos"),
-		)
-	}
-	if opts.ReplicationMode != "binlog" {
-		return WithExitCode(
-			ExitCodeDiff,
-			fmt.Errorf(
-				"replication-mode %q is not implemented yet; currently supported mode is binlog (planned: capture-triggers, hybrid)",
-				opts.ReplicationMode,
-			),
+			errors.New("replication-mode hybrid is not implemented yet; use binlog or capture-triggers"),
 		)
 	}
 
@@ -102,6 +90,10 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 		defer func() {
 			_ = destDB.Close()
 		}()
+
+		if opts.ReplicationMode == "capture-triggers" {
+			return runCaptureTriggers(ctx, sourceDB, destDB, cfg, opts, out)
+		}
 
 		summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
 			ApplyDDL:       opts.ApplyDDL,
@@ -162,6 +154,97 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 	})
 }
 
+func runCaptureTriggers(ctx context.Context, sourceDB, destDB *sql.DB, cfg config.RuntimeConfig, opts replicateOptions, out io.Writer) error {
+	databases, err := cdcSchemasFromDB(ctx, sourceDB, cfg)
+	if err != nil {
+		return err
+	}
+
+	if opts.TeardownCDC {
+		for _, schema := range databases {
+			tables, err := cdcTablesFromDB(ctx, sourceDB, schema)
+			if err != nil {
+				return err
+			}
+			if err := cdc.TeardownCDC(ctx, sourceDB, schema, tables); err != nil {
+				return fmt.Errorf("teardown CDC for %s: %w", schema, err)
+			}
+		}
+		return writeResult(out, cfg, "replicate", "ok", "CDC triggers and log tables removed")
+	}
+
+	if opts.EnableTriggerCDC {
+		for _, schema := range databases {
+			tables, err := cdcTablesFromDB(ctx, sourceDB, schema)
+			if err != nil {
+				return err
+			}
+			if err := cdc.SetupCDC(ctx, sourceDB, schema, tables); err != nil {
+				return fmt.Errorf("setup CDC for %s: %w", schema, err)
+			}
+		}
+		return writeResult(out, cfg, "replicate", "ok", "CDC triggers and log tables created")
+	}
+
+	summary, err := cdc.Run(ctx, sourceDB, destDB, cfg.StateDir, cdc.Options{
+		ConflictPolicy: opts.ConflictPolicy,
+		ConflictValues: opts.ConflictValues,
+		MaxEvents:      opts.MaxEvents,
+		Resume:         opts.Resume,
+		RateLimit:      cfg.RateLimit,
+		Log:            cfg.Log,
+	})
+	if err != nil {
+		return fmt.Errorf("CDC replicate failed: %w", err)
+	}
+	return writeResult(out, cfg, "replicate", "ok",
+		fmt.Sprintf("CDC replication applied_events=%d last_cdc_id=%d conflict_policy=%s checkpoint=%s",
+			summary.AppliedEvents, summary.LastCDCID, summary.ConflictPolicy, summary.CheckpointFile))
+}
+
+func cdcSchemasFromDB(ctx context.Context, source *sql.DB, cfg config.RuntimeConfig) ([]string, error) {
+	rows, err := source.QueryContext(ctx,
+		`SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA
+		 WHERE SCHEMA_NAME NOT IN ('information_schema','performance_schema','sys','mysql')
+		 ORDER BY SCHEMA_NAME`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list CDC schemas: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var schemas []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, fmt.Errorf("scan CDC schema: %w", err)
+		}
+		schemas = append(schemas, s)
+	}
+	return schemas, rows.Err()
+}
+
+func cdcTablesFromDB(ctx context.Context, source *sql.DB, schema string) ([]string, error) {
+	rows, err := source.QueryContext(ctx,
+		`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
+		 WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
+		 ORDER BY TABLE_NAME`,
+		schema,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list CDC tables for %s: %w", schema, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var tables []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("scan CDC table for %s: %w", schema, err)
+		}
+		tables = append(tables, t)
+	}
+	return tables, rows.Err()
+}
+
 func parseReplicateOptions(args []string) (replicateOptions, error) {
 	opts := replicateOptions{
 		ReplicationMode: "binlog",
@@ -193,6 +276,7 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.BoolVar(&opts.Resume, "resume", true, "resume from replication checkpoint in --state-dir")
 	fs.StringVar(&opts.StartFile, "start-file", "", "start binlog file when no checkpoint exists")
 	fs.UintVar(&opts.StartPos, "start-pos", 4, "start binlog position when no checkpoint exists")
+	fs.StringVar(&opts.GTIDSet, "gtid-set", "", "GTID set to start from when --start-from=gtid (MySQL: uuid:interval, MariaDB: domain-server-seq)")
 
 	if err := fs.Parse(args); err != nil {
 		return replicateOptions{}, err
@@ -216,6 +300,14 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 		if opts.StartFile == "" {
 			return replicateOptions{}, errors.New("--start-file is required when --start-from=binlog-file:pos")
 		}
+	}
+	if opts.StartFrom == "gtid" {
+		if strings.TrimSpace(opts.GTIDSet) == "" {
+			return replicateOptions{}, errors.New("--gtid-set is required when --start-from=gtid")
+		}
+	}
+	if strings.TrimSpace(opts.GTIDSet) != "" && opts.StartFrom != "gtid" {
+		return replicateOptions{}, errors.New("--gtid-set requires --start-from=gtid")
 	}
 	if err := validateBinlogFileName(opts.StartFile); err != nil {
 		return replicateOptions{}, err
