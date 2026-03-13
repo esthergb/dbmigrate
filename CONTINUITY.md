@@ -3,52 +3,42 @@
 Last updated: 2026-03-13
 
 - Goal (incl. success criteria):
-  - Complete remaining v2 replication tracks: trigger-based CDC, hybrid replication mode, GTID support.
-  - Success criteria: `--replication-mode=capture-triggers` works end-to-end; `--replication-mode=hybrid` routes tables between binlog and CDC; `--start-from=gtid` starts from GTID position on both MySQL and MariaDB; all tests green, CI green.
+  - Publish a v2 review report and a remediation plan that convert the current audit findings into explicit engineering decisions and implementation instructions.
+  - Success criteria:
+    - `docs/v2-review-report.md` exists and captures release decisions, risks, and findings.
+    - `docs/v2-remediation-plan.md` exists and defines the implementation order, detailed fix instructions, tests, and acceptance gates.
+    - `CONTINUITY.md` reflects the documentation track on branch `chore/docs-v2-review-remediation`.
 - Constraints/Assumptions:
   - English docs.
-  - Branch-first, PR-on-demand workflow (see AGENTS.md).
-  - No new external dependencies (go-mysql-org/go-mysql already supports GTID syncing).
-  - Trigger names must be deterministic, prefixed `__dbmigrate_`, and fit within 64-char MySQL identifier limit.
-  - CDC log table uses per-database scope (one log table per database, not per table).
-  - GTID cross-engine (MySQL GTID from MariaDB source or vice versa) is explicitly unsupported.
+  - Branch-first, PR-on-demand workflow (see `AGENTS.md`).
+  - This branch is documentation-only; no product code changes are part of this task.
+  - No new dependencies.
+  - The review decisions must prefer operator safety over feature breadth.
 - Key decisions:
-  - Scope contract:
-    - `v1`: shipped and hardened (PRs #74–#90).
-    - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, granular verify, user/grant, trigger-CDC, hybrid, GTID.
-    - `v3`: managed/cloud environments.
-  - CDC JSON serialization: explicit column-by-column JSON_OBJECT() with null handling.
-  - Hybrid routing: `--cdc-databases` / `--binlog-databases` / `--table-routing` CSV flags.
-  - GTID checkpoint: GTIDSet stored alongside binlog file:pos in ReplicationCheckpoint JSON.
+  - `hybrid` must not be treated as production-ready until routing is enforced in both CDC and binlog phases.
+  - Trigger-based CDC must not be treated as durable until checkpoint ordering is fixed and row matching uses stable keys.
+  - Concurrent baseline copy must be documented as not globally consistent for live-write workloads unless a true snapshot strategy is implemented.
+  - The remediation output should be split into:
+    - a review/decision document for release posture,
+    - an implementation plan with ordered fixes and acceptance criteria.
 - State:
-  - `main` is current: v2 batch 1 + batch 2 all merged (PRs #87-#90, #89 FK fix).
-  - 17 packages green, CI green.
-- Done (v2 batch 1 — code quality):
-  - Structured logging, concurrent data copy, rate limiting, progress reporting.
-- Done (v2 batch 2 — schema/users):
-  - Routines/triggers/events migration and schema verification.
-  - Granular schema verification (column/index/FK/partition diffs).
-  - User/grant migration (`migrate-users` subcommand).
-  - FK check fix for concurrent baseline copy.
-- Done (v2 batch 3 — replication):
-  - T3 `feat/replication-gtid`: `--start-from=gtid` + `--gtid-set` flag; `parseGTIDSet()` for MySQL/MariaDB; `checkGTIDEnabled()` preflight; GTID checkpoint resume/save; `GTIDSet` in `ReplicationCheckpoint`.
-  - T1 `feat/replication-cdc`: `internal/replicate/cdc` package with `SetupCDC`, `TeardownCDC`, `ReadCDCEvents`, `PurgeCDCEvents`, `Run`; CDC log table + AFTER triggers; `--replication-mode=capture-triggers`; `--enable-trigger-cdc` / `--teardown-cdc` flags.
-  - T2 `feat/replication-hybrid`: `internal/replicate/hybrid` package with `Run`, `ParseTableRouting`, `DatabasesForMode`; `--replication-mode=hybrid`; `--table-routing`, `--cdc-databases`, `--binlog-databases` flags.
+  - Working branch: `chore/docs-v2-review-remediation`.
+  - Repo was clean when the branch was created from `main`.
+- Done:
+  - Completed a focused senior code review and security audit of v2 replication/data-copy paths.
+  - Identified critical issues in CDC durability ordering, hybrid routing correctness, and baseline consistency semantics.
+  - Created the documentation branch for the review deliverables.
 - Now:
-  - All three branches committed. Awaiting user confirmation for PRs/merge.
+  - Writing the review report and remediation plan.
 - Next:
-  - Merge T3 → T1 → T2 in order (T1 depends on CDC pkg, T2 depends on both).
-  - v3 scope: managed/cloud deployments.
+  - Hand the docs to the user for review.
+  - If approved, open follow-up implementation branches per remediation phase.
 - Open questions:
-  - None.
+  - Whether the user wants a single follow-up implementation branch or one branch per remediation phase after reviewing the docs.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/replicate/binlog/load.go` (GTID start path, parseGTIDSet)
-    - `internal/replicate/binlog/run.go` (GTIDSet in Options/Summary/applyWindow, injectable fns)
-    - `internal/replicate/cdc/` (setup, reader, run — new package)
-    - `internal/replicate/hybrid/` (run — new package)
-    - `internal/state/replication.go` (GTIDSet field)
-    - `internal/commands/replicate.go` (wire CDC, hybrid, GTID)
+    - `CONTINUITY.md`
+    - `docs/v2-review-report.md`
+    - `docs/v2-remediation-plan.md`
   - Commands:
-    - `go vet ./...`
-    - `go test ./... -count=1`
+    - `git branch --show-current`
