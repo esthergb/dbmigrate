@@ -26,27 +26,27 @@ type TableRouting map[string]TableMode
 
 // Options controls hybrid replication behavior.
 type Options struct {
-	ApplyDDL         string
-	ConflictPolicy   string
-	ConflictValues   string
-	MaxEvents        uint64
-	MaxLagSeconds    uint64
-	SourceServerID   uint32
-	Idempotent       bool
-	Resume           bool
-	StartFile        string
-	StartPos         uint32
-	GTIDSet          string
-	Routing          TableRouting
-	CDCDatabases     []string
-	BinlogDatabases  []string
-	SourceDSN        string
-	SourceTLSMode    string
-	SourceCAFile     string
-	SourceCertFile   string
-	SourceKeyFile    string
-	RateLimit        int
-	Log              *dblog.Logger
+	ApplyDDL        string
+	ConflictPolicy  string
+	ConflictValues  string
+	MaxEvents       uint64
+	MaxLagSeconds   uint64
+	SourceServerID  uint32
+	Idempotent      bool
+	Resume          bool
+	StartFile       string
+	StartPos        uint32
+	GTIDSet         string
+	Routing         TableRouting
+	CDCDatabases    []string
+	BinlogDatabases []string
+	SourceDSN       string
+	SourceTLSMode   string
+	SourceCAFile    string
+	SourceCertFile  string
+	SourceKeyFile   string
+	RateLimit       int
+	Log             *dblog.Logger
 }
 
 // Summary reports hybrid replication results.
