@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/esthergb/dbmigrate/internal/replicate/binlog"
@@ -193,5 +194,183 @@ func TestDatabasesForModeFiltered(t *testing.T) {
 	binlogDBs := DatabasesForMode(routing, TableModeBinlog, nil)
 	if len(binlogDBs) != 1 || binlogDBs[0] != "logs" {
 		t.Fatalf("expected [logs] for binlog routing, got %v", binlogDBs)
+	}
+}
+
+func TestValidateRoutingValid(t *testing.T) {
+	routing := TableRouting{
+		"app.orders":  TableModeCaptureTriggers,
+		"app.events":  TableModeBinlog,
+		"logs.access": TableModeBinlog,
+	}
+	if err := ValidateRouting(routing); err != nil {
+		t.Fatalf("expected no error for valid routing, got: %v", err)
+	}
+}
+
+func TestValidateRoutingEmpty(t *testing.T) {
+	if err := ValidateRouting(nil); err != nil {
+		t.Fatalf("expected no error for empty routing, got: %v", err)
+	}
+}
+
+func TestValidateRoutingInvalidKey(t *testing.T) {
+	routing := TableRouting{
+		"orders": TableModeBinlog,
+	}
+	if err := ValidateRouting(routing); err == nil {
+		t.Fatal("expected error for key without schema prefix")
+	}
+}
+
+func TestValidateRoutingEmptySchema(t *testing.T) {
+	routing := TableRouting{
+		".orders": TableModeBinlog,
+	}
+	if err := ValidateRouting(routing); err == nil {
+		t.Fatal("expected error for empty schema in routing key")
+	}
+}
+
+func TestValidateRoutingEmptyTable(t *testing.T) {
+	routing := TableRouting{
+		"app.": TableModeBinlog,
+	}
+	if err := ValidateRouting(routing); err == nil {
+		t.Fatal("expected error for empty table in routing key")
+	}
+}
+
+func TestTableSetForMode(t *testing.T) {
+	routing := TableRouting{
+		"app.orders":  TableModeCaptureTriggers,
+		"App.Events":  TableModeBinlog,
+		"logs.access": TableModeBinlog,
+	}
+	cdcSet := tableSetForMode(routing, TableModeCaptureTriggers)
+	if _, ok := cdcSet["app.orders"]; !ok {
+		t.Fatalf("expected app.orders in CDC set, got %v", cdcSet)
+	}
+	if len(cdcSet) != 1 {
+		t.Fatalf("expected exactly 1 CDC table, got %d: %v", len(cdcSet), cdcSet)
+	}
+	binlogSet := tableSetForMode(routing, TableModeBinlog)
+	if _, ok := binlogSet["app.events"]; !ok {
+		t.Fatalf("expected app.events (lower-cased) in binlog set, got %v", binlogSet)
+	}
+	if _, ok := binlogSet["logs.access"]; !ok {
+		t.Fatalf("expected logs.access in binlog set, got %v", binlogSet)
+	}
+}
+
+func TestRunCDCReceivesIncludeTables(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origCDC := cdcRunFn
+	origBinlog := binlogRunFn
+	defer func() {
+		cdcRunFn = origCDC
+		binlogRunFn = origBinlog
+	}()
+
+	var capturedCDCOpts cdc.Options
+	cdcRunFn = func(_ context.Context, _, _ *sql.DB, _ string, o cdc.Options) (cdc.Summary, error) {
+		capturedCDCOpts = o
+		return cdc.Summary{}, nil
+	}
+	binlogRunFn = func(_ context.Context, _, _ *sql.DB, _ string, _ binlog.Options) (binlog.Summary, error) {
+		return binlog.Summary{}, nil
+	}
+
+	_, runErr := Run(context.Background(), source, dest, t.TempDir(), Options{
+		CDCDatabases: []string{"app"},
+		Routing: TableRouting{
+			"app.orders": TableModeCaptureTriggers,
+			"app.events": TableModeBinlog,
+		},
+	})
+	if runErr != nil {
+		t.Fatalf("expected success: %v", runErr)
+	}
+	if _, ok := capturedCDCOpts.IncludeTables["app.orders"]; !ok {
+		t.Fatalf("expected app.orders in CDC IncludeTables, got %v", capturedCDCOpts.IncludeTables)
+	}
+	if _, ok := capturedCDCOpts.ExcludeTables["app.events"]; !ok {
+		t.Fatalf("expected app.events in CDC ExcludeTables, got %v", capturedCDCOpts.ExcludeTables)
+	}
+}
+
+func TestRunBinlogReceivesExcludeCDCTables(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origCDC := cdcRunFn
+	origBinlog := binlogRunFn
+	defer func() {
+		cdcRunFn = origCDC
+		binlogRunFn = origBinlog
+	}()
+
+	cdcRunFn = func(_ context.Context, _, _ *sql.DB, _ string, _ cdc.Options) (cdc.Summary, error) {
+		return cdc.Summary{}, nil
+	}
+	var capturedBinlogOpts binlog.Options
+	binlogRunFn = func(_ context.Context, _, _ *sql.DB, _ string, o binlog.Options) (binlog.Summary, error) {
+		capturedBinlogOpts = o
+		return binlog.Summary{}, nil
+	}
+
+	_, runErr := Run(context.Background(), source, dest, t.TempDir(), Options{
+		CDCDatabases:    []string{"app"},
+		BinlogDatabases: []string{"app"},
+		Routing: TableRouting{
+			"app.orders": TableModeCaptureTriggers,
+			"app.events": TableModeBinlog,
+		},
+	})
+	if runErr != nil {
+		t.Fatalf("expected success: %v", runErr)
+	}
+	if _, ok := capturedBinlogOpts.ExcludeTables["app.orders"]; !ok {
+		t.Fatalf("expected app.orders excluded from binlog, got ExcludeTables=%v", capturedBinlogOpts.ExcludeTables)
+	}
+}
+
+func TestRunInvalidRoutingFails(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	_, runErr := Run(context.Background(), source, dest, t.TempDir(), Options{
+		Routing: TableRouting{
+			"orders": TableModeBinlog,
+		},
+	})
+	if runErr == nil {
+		t.Fatal("expected error for invalid routing key")
+	}
+	if !strings.Contains(runErr.Error(), "invalid routing") {
+		t.Fatalf("unexpected error: %v", runErr)
 	}
 }

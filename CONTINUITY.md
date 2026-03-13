@@ -1,54 +1,54 @@
 # Continuity
 
-Last updated: 2026-03-13
+Last updated: 2026-03-14
 
 - Goal (incl. success criteria):
-  - Complete remaining v2 replication tracks: trigger-based CDC, hybrid replication mode, GTID support.
-  - Success criteria: `--replication-mode=capture-triggers` works end-to-end; `--replication-mode=hybrid` routes tables between binlog and CDC; `--start-from=gtid` starts from GTID position on both MySQL and MariaDB; all tests green, CI green.
+  - Implement the v2 remediation plan across phases 0–6 on branch `chore/docs-v2-review-remediation`.
+  - Success criteria:
+    - All 7 phases committed with conventional commits, tests passing, `go vet` clean.
+    - Branch pushed to remote; ready for PR/merge review.
 - Constraints/Assumptions:
-  - English docs.
-  - Branch-first, PR-on-demand workflow (see AGENTS.md).
-  - No new external dependencies (go-mysql-org/go-mysql already supports GTID syncing).
-  - Trigger names must be deterministic, prefixed `__dbmigrate_`, and fit within 64-char MySQL identifier limit.
-  - CDC log table uses per-database scope (one log table per database, not per table).
-  - GTID cross-engine (MySQL GTID from MariaDB source or vice versa) is explicitly unsupported.
+  - English docs, no new dependencies, operator-safety over feature breadth.
+  - Branch-first, PR-on-demand. No direct commits to `main`.
 - Key decisions:
-  - Scope contract:
-    - `v1`: shipped and hardened (PRs #74–#90).
-    - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, granular verify, user/grant, trigger-CDC, hybrid, GTID.
-    - `v3`: managed/cloud environments.
-  - CDC JSON serialization: explicit column-by-column JSON_OBJECT() with null handling.
-  - Hybrid routing: `--cdc-databases` / `--binlog-databases` / `--table-routing` CSV flags.
-  - GTID checkpoint: GTIDSet stored alongside binlog file:pos in ReplicationCheckpoint JSON.
+  - `capture-triggers` and `hybrid` modes are hard-gated (fail at parse time) until correctness fixes land.
+  - CDC checkpoint is saved before purge; purge failure is non-fatal.
+  - CDC UPDATE/DELETE require a stable PK or non-null unique key; keyless tables are rejected explicitly.
+  - Hybrid routing is enforced end-to-end: each table has exactly one owner (CDC or binlog) at apply time.
+  - Baseline concurrency > 1 emits an operator warning about snapshot inconsistency.
+  - `server_id` is persisted per state-dir (random UUID-like uint32) to avoid DSN-derived collisions.
+  - Destination emptiness check uses `SELECT 1 LIMIT 1` + `sql.ErrNoRows` instead of `COUNT(*)`.
 - State:
-  - `main` is current: v2 batch 1 + batch 2 all merged (PRs #87-#90, #89 FK fix).
-  - 17 packages green, CI green.
-- Done (v2 batch 1 — code quality):
-  - Structured logging, concurrent data copy, rate limiting, progress reporting.
-- Done (v2 batch 2 — schema/users):
-  - Routines/triggers/events migration and schema verification.
-  - Granular schema verification (column/index/FK/partition diffs).
-  - User/grant migration (`migrate-users` subcommand).
-  - FK check fix for concurrent baseline copy.
-- Done (v2 batch 3 — replication):
-  - T3 `feat/replication-gtid`: `--start-from=gtid` + `--gtid-set` flag; `parseGTIDSet()` for MySQL/MariaDB; `checkGTIDEnabled()` preflight; GTID checkpoint resume/save; `GTIDSet` in `ReplicationCheckpoint`.
-  - T1 `feat/replication-cdc`: `internal/replicate/cdc` package with `SetupCDC`, `TeardownCDC`, `ReadCDCEvents`, `PurgeCDCEvents`, `Run`; CDC log table + AFTER triggers; `--replication-mode=capture-triggers`; `--enable-trigger-cdc` / `--teardown-cdc` flags.
-  - T2 `feat/replication-hybrid`: `internal/replicate/hybrid` package with `Run`, `ParseTableRouting`, `DatabasesForMode`; `--replication-mode=hybrid`; `--table-routing`, `--cdc-databases`, `--binlog-databases` flags.
+  - Working branch: `chore/docs-v2-review-remediation`.
+  - All 7 phases committed and pushed (6 commits on this branch after the docs commits).
+  - All 16 packages passing, `go vet` clean.
+- Done:
+  - Phase 0: Safety gates for `capture-triggers` and `hybrid` in `internal/commands/replicate.go`.
+  - Phase 1: CDC durability ordering fixed in `internal/replicate/cdc/run.go`.
+  - Phase 2: Hybrid routing enforced: `ValidateRouting`, `tableSetForMode`, `ExcludeTables` in binlog, `IncludeTables`/`ExcludeTables` in CDC, wired through `hybrid.Run`.
+  - Phase 3: CDC UPDATE/DELETE now use key-based matching (`listStableKeyColumns` in `cdc/setup.go`, `getDestKeyColumnsFn` in `cdc/run.go`). Pre-existing nil-dereference bug in `cdc/run_test.go` fixed.
+  - Phase 4: `CopyBaselineData` emits a log warning when `concurrency > 1`.
+  - Phase 5: `state.LoadOrCreateServerID` persists a stable random `server_id` per state-dir; binlog `Run` resolves it before streaming.
+  - Phase 6: `ensureDestinationTablesAreEmpty` uses `SELECT 1 LIMIT 1` + `errors.Is(err, sql.ErrNoRows)`.
+  - Regression tests added for all phases (safety gates, CDC ordering, key-based matching, routing validation, server_id persistence).
 - Now:
-  - All three branches committed. Awaiting user confirmation for PRs/merge.
+  - Idle. All planned phases complete.
 - Next:
-  - Merge T3 → T1 → T2 in order (T1 depends on CDC pkg, T2 depends on both).
-  - v3 scope: managed/cloud deployments.
+  - Open PR from `chore/docs-v2-review-remediation` → `main` when user is ready.
+  - Phase 7 (security hardening: conflict-report redaction, TLS warnings, privilege docs) is deferred.
 - Open questions:
-  - None.
+  - None currently.
 - Working set (files/ids/commands):
-  - Files:
-    - `internal/replicate/binlog/load.go` (GTID start path, parseGTIDSet)
-    - `internal/replicate/binlog/run.go` (GTIDSet in Options/Summary/applyWindow, injectable fns)
-    - `internal/replicate/cdc/` (setup, reader, run — new package)
-    - `internal/replicate/hybrid/` (run — new package)
-    - `internal/state/replication.go` (GTIDSet field)
-    - `internal/commands/replicate.go` (wire CDC, hybrid, GTID)
+  - Key files changed:
+    - `internal/commands/replicate.go` (Phase 0)
+    - `internal/replicate/cdc/run.go` (Phases 1, 2, 3)
+    - `internal/replicate/cdc/setup.go` (Phase 3 — listStableKeyColumns)
+    - `internal/replicate/hybrid/run.go` (Phase 2)
+    - `internal/replicate/binlog/run.go` (Phases 2, 5)
+    - `internal/replicate/binlog/load.go` (Phase 2 — ExcludeTables filter)
+    - `internal/data/copy.go` (Phases 4, 6)
+    - `internal/state/server_id.go` (Phase 5 — new file)
   - Commands:
-    - `go vet ./...`
     - `go test ./... -count=1`
+    - `go vet ./...`
+    - `git push origin chore/docs-v2-review-remediation`

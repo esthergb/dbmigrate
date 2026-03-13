@@ -36,6 +36,10 @@ type Options struct {
 	SourceKeyFile  string
 	RateLimit      int
 	Log            *dblog.Logger
+	// ExcludeTables is an optional set of "schema.table" keys (lower-cased) to
+	// skip during row-event apply. Used by hybrid mode to prevent the binlog
+	// phase from replaying events that are owned by the CDC phase.
+	ExcludeTables map[string]struct{}
 }
 
 // Summary reports checkpoint update results.
@@ -136,6 +140,12 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	if opts.StartPos > 0 && opts.StartPos < 4 {
 		return Summary{}, errors.New("start-pos must be >= 4")
 	}
+
+	stableID, err := state.LoadOrCreateServerID(stateDir, opts.SourceServerID)
+	if err != nil {
+		return Summary{}, fmt.Errorf("resolve replication server_id: %w", err)
+	}
+	opts.SourceServerID = stableID
 
 	gtidMode := strings.TrimSpace(opts.GTIDSet) != ""
 

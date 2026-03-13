@@ -263,6 +263,32 @@ func TestParseReplicateOptionsGTIDSetValid(t *testing.T) {
 	}
 }
 
+func TestParseReplicateOptionsCaptureTriggersFails(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--replication-mode=capture-triggers"})
+	if err == nil {
+		t.Fatal("expected error for capture-triggers mode")
+	}
+	if !strings.Contains(err.Error(), "not yet production-ready") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+	if !strings.Contains(err.Error(), "phases 1 and 3") {
+		t.Fatalf("expected remediation reference in error: %v", err)
+	}
+}
+
+func TestParseReplicateOptionsHybridFails(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--replication-mode=hybrid"})
+	if err == nil {
+		t.Fatal("expected error for hybrid mode")
+	}
+	if !strings.Contains(err.Error(), "not yet production-ready") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+	if !strings.Contains(err.Error(), "phase 2") {
+		t.Fatalf("expected remediation reference in error: %v", err)
+	}
+}
+
 func TestRunReplicateMaxLagSecondsAllowedInDryRun(t *testing.T) {
 	var out bytes.Buffer
 	err := runReplicate(context.Background(), config.RuntimeConfig{

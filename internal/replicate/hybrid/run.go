@@ -56,11 +56,43 @@ type Summary struct {
 	Mode          string
 }
 
+// ValidateRouting checks that a TableRouting definition has no conflicts:
+//   - every entry must have the format "schema.table"
+//   - no table may appear with two different modes
+//   - no table may be assigned to both CDC and binlog databases implicitly
+func ValidateRouting(routing TableRouting) error {
+	for key := range routing {
+		parts := strings.SplitN(key, ".", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return fmt.Errorf("invalid routing key %q: expected \"schema.table\"", key)
+		}
+	}
+	return nil
+}
+
+// tableSetForMode returns the lower-cased "schema.table" keys routed to the given mode.
+func tableSetForMode(routing TableRouting, mode TableMode) map[string]struct{} {
+	out := make(map[string]struct{}, len(routing))
+	for key, m := range routing {
+		if m == mode {
+			out[strings.ToLower(key)] = struct{}{}
+		}
+	}
+	return out
+}
+
 // Run executes hybrid replication: CDC for configured tables, binlog for the rest.
 func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options) (Summary, error) {
 	if source == nil || dest == nil {
 		return Summary{}, errors.New("hybrid: source and destination connections are required")
 	}
+
+	if err := ValidateRouting(opts.Routing); err != nil {
+		return Summary{}, fmt.Errorf("hybrid: invalid routing: %w", err)
+	}
+
+	cdcTableSet := tableSetForMode(opts.Routing, TableModeCaptureTriggers)
+	binlogTableSet := tableSetForMode(opts.Routing, TableModeBinlog)
 
 	cdcStateDir := filepath.Join(stateDir, "hybrid-cdc")
 	binlogStateDir := filepath.Join(stateDir, "hybrid-binlog")
@@ -69,7 +101,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	var binlogSummary binlog.Summary
 
 	if len(opts.CDCDatabases) > 0 {
-		cs, err := runCDCPhase(ctx, source, dest, cdcStateDir, opts)
+		cs, err := runCDCPhase(ctx, source, dest, cdcStateDir, opts, cdcTableSet, binlogTableSet)
 		if err != nil {
 			return Summary{}, fmt.Errorf("hybrid CDC phase: %w", err)
 		}
@@ -77,7 +109,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	}
 
 	if len(opts.BinlogDatabases) > 0 || len(opts.CDCDatabases) == 0 {
-		bs, err := runBinlogPhase(ctx, source, dest, binlogStateDir, opts)
+		bs, err := runBinlogPhase(ctx, source, dest, binlogStateDir, opts, cdcTableSet, binlogTableSet)
 		if err != nil {
 			return Summary{}, fmt.Errorf("hybrid binlog phase: %w", err)
 		}
@@ -91,8 +123,8 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 	}, nil
 }
 
-func runCDCPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options) (cdc.Summary, error) {
-	return cdcRunFn(ctx, source, dest, stateDir, cdc.Options{
+func runCDCPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options, cdcTables map[string]struct{}, binlogTables map[string]struct{}) (cdc.Summary, error) {
+	cdcOpts := cdc.Options{
 		ApplyDDL:         opts.ApplyDDL,
 		ConflictPolicy:   opts.ConflictPolicy,
 		ConflictValues:   opts.ConflictValues,
@@ -101,11 +133,18 @@ func runCDCPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir str
 		Resume:           opts.Resume,
 		RateLimit:        opts.RateLimit,
 		Log:              opts.Log,
-	})
+	}
+	if len(cdcTables) > 0 {
+		cdcOpts.IncludeTables = cdcTables
+	}
+	if len(binlogTables) > 0 {
+		cdcOpts.ExcludeTables = binlogTables
+	}
+	return cdcRunFn(ctx, source, dest, stateDir, cdcOpts)
 }
 
-func runBinlogPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options) (binlog.Summary, error) {
-	return binlogRunFn(ctx, source, dest, stateDir, binlog.Options{
+func runBinlogPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opts Options, cdcTables map[string]struct{}, binlogTables map[string]struct{}) (binlog.Summary, error) {
+	binlogOpts := binlog.Options{
 		ApplyDDL:       opts.ApplyDDL,
 		ConflictPolicy: opts.ConflictPolicy,
 		ConflictValues: opts.ConflictValues,
@@ -124,7 +163,11 @@ func runBinlogPhase(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir 
 		SourceKeyFile:  opts.SourceKeyFile,
 		RateLimit:      opts.RateLimit,
 		Log:            opts.Log,
-	})
+	}
+	if len(cdcTables) > 0 {
+		binlogOpts.ExcludeTables = cdcTables
+	}
+	return binlogRunFn(ctx, source, dest, stateDir, binlogOpts)
 }
 
 var (
