@@ -137,6 +137,12 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		return Summary{}, errors.New("start-pos must be >= 4")
 	}
 
+	stableID, err := state.LoadOrCreateServerID(stateDir, opts.SourceServerID)
+	if err != nil {
+		return Summary{}, fmt.Errorf("resolve replication server_id: %w", err)
+	}
+	opts.SourceServerID = stableID
+
 	gtidMode := strings.TrimSpace(opts.GTIDSet) != ""
 
 	preflight, err := checkSourcePreflightFn(ctx, source)
