@@ -88,7 +88,6 @@ var (
 	readCDCEventsFn  = ReadCDCEvents
 	purgeCDCEventsFn = PurgeCDCEvents
 	listDatabasesFn  = listDatabases
-	listTablesFn     = listTables
 	applyEventFn     = applyEvent
 )
 
@@ -139,28 +138,6 @@ func filterDatabases(all []string, include []string, exclude []string) []string 
 		out = append(out, db)
 	}
 	return out
-}
-
-func listTables(ctx context.Context, source *sql.DB, schema string) ([]string, error) {
-	rows, err := source.QueryContext(ctx,
-		`SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
-		 WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
-		 ORDER BY TABLE_NAME`,
-		schema,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list tables for %s: %w", schema, err)
-	}
-	defer func() { _ = rows.Close() }()
-	var tables []string
-	for rows.Next() {
-		var t string
-		if err := rows.Scan(&t); err != nil {
-			return nil, fmt.Errorf("scan table for %s: %w", schema, err)
-		}
-		tables = append(tables, t)
-	}
-	return tables, rows.Err()
 }
 
 func normalizeConflictPolicy(p string) string {
@@ -255,7 +232,7 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 }
 
 func applyEvent(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, opts Options) error {
-	cols, err := getDestColumns(ctx, dest, schema, event.TableName)
+	cols, err := getDestColumnsFn(ctx, dest, schema, event.TableName)
 	if err != nil {
 		return err
 	}
