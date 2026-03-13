@@ -237,6 +237,32 @@ func TestRunReplicateStartFromGTIDRequiresGTIDSet(t *testing.T) {
 	}
 }
 
+func TestParseReplicateOptionsGTIDSetRequiresStartFromGTID(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--gtid-set=abc-123"})
+	if err == nil {
+		t.Fatal("expected error: --gtid-set without --start-from=gtid")
+	}
+	if !strings.Contains(err.Error(), "--gtid-set requires --start-from=gtid") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseReplicateOptionsGTIDSetValid(t *testing.T) {
+	opts, err := parseReplicateOptions([]string{
+		"--start-from=gtid",
+		"--gtid-set=3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23",
+	})
+	if err != nil {
+		t.Fatalf("expected parse success: %v", err)
+	}
+	if opts.StartFrom != "gtid" {
+		t.Fatalf("expected start-from gtid, got %q", opts.StartFrom)
+	}
+	if opts.GTIDSet != "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23" {
+		t.Fatalf("unexpected gtid-set %q", opts.GTIDSet)
+	}
+}
+
 func TestRunReplicateMaxLagSecondsAllowedInDryRun(t *testing.T) {
 	var out bytes.Buffer
 	err := runReplicate(context.Background(), config.RuntimeConfig{

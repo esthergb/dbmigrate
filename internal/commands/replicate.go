@@ -67,12 +67,6 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			),
 		)
 	}
-	if opts.ReplicationMode == "hybrid" {
-		return WithExitCode(
-			ExitCodeDiff,
-			errors.New("replication-mode hybrid is not implemented yet; use binlog or capture-triggers"),
-		)
-	}
 
 	return withStateDirLock(cfg, func() error {
 		sourceDB, err := db.OpenAndPingWithTLS(ctx, cfg.Source, tlsOptionsFromRuntime(cfg))
@@ -106,6 +100,7 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 			Resume:         opts.Resume,
 			StartFile:      opts.StartFile,
 			StartPos:       uint32(opts.StartPos),
+			GTIDSet:        opts.GTIDSet,
 			SourceDSN:      cfg.Source,
 			SourceTLSMode:  cfg.TLSMode,
 			SourceCAFile:   cfg.CAFile,
