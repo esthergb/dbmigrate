@@ -7,7 +7,7 @@ Operational guardrail:
 
 ## Current status
 
-This repository is in phased development, with merged work through Phase 64.
+This repository is in phased development, with merged work through Phase 64 plus v2 remediation phases 0–6.
 
 Merged capability families:
 - research and operator risk baseline
@@ -18,6 +18,7 @@ Merged capability families:
 - conflict policy, DDL safety, and conflict-report enrichment
 - downgrade-profile enforcement and compatibility prechecks
 - operator rehearsals for metadata locks, rollback evidence, time-zone drift, plugin lifecycle, transaction shape, hidden schema, collation risk, and verify canonicalization
+- v2 remediation: safety gates, CDC durability ordering, hybrid routing enforcement, key-based CDC apply, baseline consistency warning, stable server_id persistence, and scalability improvements
 
 Current process:
 - Delivery is phase-based via small PRs from `codex/*` branches.
@@ -286,8 +287,17 @@ dbmigrate replicate --source "mysql://..." --dest "mysql://..." --replication-mo
 
 Replication mode selection:
 - `--replication-mode=binlog` is the currently implemented mode.
-- `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are reserved for `v2`; today they fail fast with an explicit "not implemented yet" error.
+- `--replication-mode=capture-triggers` and `--replication-mode=hybrid` are reserved for `v2`; they fail fast at option parse time with an actionable error pointing to the relevant remediation plan phases (see [docs/v2-remediation-plan.md](docs/v2-remediation-plan.md)).
 - `--enable-trigger-cdc` and `--teardown-cdc` are also reserved for `v2` and currently fail fast with explicit guidance.
+
+**v2 remediation status (merged):**
+- Phase 0: Safety gates for `capture-triggers` and `hybrid` modes
+- Phase 1: CDC checkpoint saved before purge; purge failure is non-fatal
+- Phase 2: Hybrid routing enforced end-to-end (each table has exactly one owner at apply time)
+- Phase 3: CDC UPDATE/DELETE use key-based matching (PK or non-null unique key only); keyless tables rejected explicitly
+- Phase 4: Baseline concurrency > 1 emits operator warning about snapshot inconsistency
+- Phase 5: Replication `server_id` persisted per state-dir (random stable uint32) to avoid DSN-derived collisions
+- Phase 6: Destination emptiness check uses `SELECT 1 LIMIT 1` instead of `COUNT(*)`
 
 Replication start selection:
 - `--start-from=auto` (default) uses checkpoint/resume behavior.
@@ -457,6 +467,8 @@ make ci-manual BRANCH=codex/feat/report-fail-default-phase27
 
 - [v1 release plan](docs/v1-release-plan.md)
 - [Development plan](docs/development-plan.md)
+- [v2 review report](docs/v2-review-report.md) — comprehensive security audit and release decisions for v2 features
+- [v2 remediation plan](docs/v2-remediation-plan.md) — phased implementation roadmap for v2 correctness fixes
 - [Known migration problems](docs/known-problems.md)
 - [Operator risk checklist](docs/risk-checklist.md)
 - [Operators guide](docs/operators-guide.md)
