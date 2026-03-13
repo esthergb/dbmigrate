@@ -114,6 +114,7 @@ func quoteLiteral(s string) string {
 }
 
 var listTableColumnsFn = listTableColumns
+var listStableKeyColumnsFn = listStableKeyColumns
 
 func listTableColumns(ctx context.Context, db *sql.DB, schema string, table string) ([]string, error) {
 	rows, err := db.QueryContext(ctx,
@@ -136,6 +137,92 @@ func listTableColumns(ctx context.Context, db *sql.DB, schema string, table stri
 		cols = append(cols, c)
 	}
 	return cols, rows.Err()
+}
+
+func listStableKeyColumns(ctx context.Context, db *sql.DB, schema string, table string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
+		FROM information_schema.STATISTICS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+		ORDER BY
+			CASE WHEN INDEX_NAME = 'PRIMARY' THEN 0 ELSE 1 END,
+			NON_UNIQUE,
+			INDEX_NAME,
+			SEQ_IN_INDEX
+	`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("list key columns for %s.%s: %w", schema, table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	indexes := map[string][]string{}
+	nonUnique := map[string]int{}
+	orderedIndexes := make([]string, 0, 4)
+	for rows.Next() {
+		var indexName string
+		var uniqueFlag int
+		var columnName string
+		var seq int
+		if err := rows.Scan(&indexName, &uniqueFlag, &columnName, &seq); err != nil {
+			return nil, err
+		}
+		if _, ok := indexes[indexName]; !ok {
+			orderedIndexes = append(orderedIndexes, indexName)
+		}
+		indexes[indexName] = append(indexes[indexName], columnName)
+		nonUnique[indexName] = uniqueFlag
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	notNull, err := listNotNullColumnsForCDC(ctx, db, schema, table)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, indexName := range orderedIndexes {
+		if nonUnique[indexName] != 0 {
+			continue
+		}
+		cols := indexes[indexName]
+		if len(cols) == 0 {
+			continue
+		}
+		eligible := true
+		for _, col := range cols {
+			if _, ok := notNull[col]; !ok {
+				eligible = false
+				break
+			}
+		}
+		if !eligible {
+			continue
+		}
+		return cols, nil
+	}
+	return nil, nil
+}
+
+func listNotNullColumnsForCDC(ctx context.Context, db *sql.DB, schema string, table string) (map[string]struct{}, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT COLUMN_NAME
+		FROM information_schema.COLUMNS
+		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND IS_NULLABLE = 'NO'
+	`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("list not-null columns for %s.%s: %w", schema, table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]struct{}{}
+	for rows.Next() {
+		var c string
+		if err := rows.Scan(&c); err != nil {
+			return nil, err
+		}
+		out[c] = struct{}{}
+	}
+	return out, rows.Err()
 }
 
 // SetupCDC creates the CDC log table and triggers for the given tables in a schema.
