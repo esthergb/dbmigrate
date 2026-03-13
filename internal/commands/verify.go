@@ -23,6 +23,15 @@ type verifyOptions struct {
 	SampleSize  int
 }
 
+type verifySchemaGranularResult struct {
+	Command     string                       `json:"command"`
+	Status      string                       `json:"status"`
+	VerifyLevel string                       `json:"verify_level"`
+	Summary     schemaVerify.GranularSummary `json:"summary"`
+	Timestamp   time.Time                    `json:"timestamp"`
+	Version     string                       `json:"version"`
+}
+
 type verifySchemaResult struct {
 	Command     string               `json:"command"`
 	Status      string               `json:"status"`
@@ -117,6 +126,36 @@ func runVerify(ctx context.Context, cfg config.RuntimeConfig, args []string, out
 						summary.MissingInDestination,
 						summary.MissingInSource,
 						summary.DefinitionMismatches,
+					),
+				)
+			}
+			return nil
+		case "schema-granular":
+			if !includeTables {
+				return WithExitCode(ExitCodeVerifyFailed, errors.New("schema-granular verification requires tables in --include-objects"))
+			}
+
+			granularSummary, err := schemaVerify.VerifyGranular(ctx, sourceDB, destDB, schemaVerify.Options{
+				IncludeDatabases: cfg.Databases,
+				ExcludeDatabases: cfg.ExcludeDatabases,
+				IncludeTables:    true,
+			})
+			if err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, fmt.Errorf("schema-granular verification failed: %w", err))
+			}
+
+			if err := writeGranularVerifyResult(out, cfg, granularSummary); err != nil {
+				return WithExitCode(ExitCodeVerifyFailed, err)
+			}
+			if len(granularSummary.Diffs) > 0 {
+				return WithExitCode(
+					ExitCodeDiff,
+					fmt.Errorf(
+						"granular schema differences detected: column_diffs=%d index_diffs=%d fk_diffs=%d partition_diffs=%d",
+						granularSummary.ColumnDiffs,
+						granularSummary.IndexDiffs,
+						granularSummary.FKDiffs,
+						granularSummary.PartitionDiffs,
 					),
 				)
 			}
@@ -259,7 +298,7 @@ func parseVerifyOptions(args []string) (verifyOptions, error) {
 
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.StringVar(&opts.VerifyLevel, "verify-level", "schema", "verification level (schema|data)")
+	fs.StringVar(&opts.VerifyLevel, "verify-level", "schema", "verification level (schema|schema-granular|data)")
 	fs.StringVar(&opts.DataMode, "data-mode", "count", "data verification mode (count|hash|sample|full-hash)")
 	fs.IntVar(&opts.SampleSize, "sample-size", 1000, "rows per table to hash in data-mode=sample")
 	if err := fs.Parse(args); err != nil {
@@ -269,7 +308,7 @@ func parseVerifyOptions(args []string) (verifyOptions, error) {
 		return verifyOptions{}, errors.New("sample-size must be >= 1")
 	}
 	switch opts.VerifyLevel {
-	case "schema", "data":
+	case "schema", "schema-granular", "data":
 		// valid
 	default:
 		return verifyOptions{}, fmt.Errorf("invalid verify-level %q", opts.VerifyLevel)
@@ -318,6 +357,47 @@ func writeSchemaVerifyResult(out io.Writer, cfg config.RuntimeConfig, level stri
 
 	for _, diff := range summary.Diffs {
 		if _, err := fmt.Fprintf(out, "[verify] diff kind=%s database=%s object=%s:%s\n", diff.Kind, diff.Database, diff.ObjectType, diff.ObjectName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeGranularVerifyResult(out io.Writer, cfg config.RuntimeConfig, summary schemaVerify.GranularSummary) error {
+	status := "ok"
+	if len(summary.Diffs) > 0 {
+		status = "diff"
+	}
+
+	if cfg.JSON {
+		payload := verifySchemaGranularResult{
+			Command:     "verify",
+			Status:      status,
+			VerifyLevel: "schema-granular",
+			Summary:     summary,
+			Timestamp:   time.Now().UTC(),
+			Version:     version.Version,
+		}
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if _, err := fmt.Fprintf(
+		out,
+		"[verify] level=schema-granular status=%s databases=%d tables_compared=%d column_diffs=%d index_diffs=%d fk_diffs=%d partition_diffs=%d\n",
+		status,
+		summary.Databases,
+		summary.TablesCompared,
+		summary.ColumnDiffs,
+		summary.IndexDiffs,
+		summary.FKDiffs,
+		summary.PartitionDiffs,
+	); err != nil {
+		return err
+	}
+	for _, d := range summary.Diffs {
+		if _, err := fmt.Fprintf(out, "[verify] diff kind=%s database=%s table=%s object=%s\n", d.Kind, d.Database, d.Table, d.ObjectName); err != nil {
 			return err
 		}
 	}
