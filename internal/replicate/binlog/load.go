@@ -90,12 +90,24 @@ func streamWindowEvents(ctx context.Context, window applyWindow, opts Options) (
 	syncer := replication.NewBinlogSyncer(syncCfg)
 	defer syncer.Close()
 
-	streamer, err := syncer.StartSync(goMySQL.Position{
-		Name: window.StartFile,
-		Pos:  window.StartPos,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("start source binlog sync: %w", err)
+	var streamer *replication.BinlogStreamer
+	if strings.TrimSpace(window.GTIDSet) != "" {
+		gtidSet, err := parseGTIDSet(syncCfg.Flavor, window.GTIDSet)
+		if err != nil {
+			return nil, fmt.Errorf("parse GTID set for binlog sync: %w", err)
+		}
+		streamer, err = syncer.StartSyncGTID(gtidSet)
+		if err != nil {
+			return nil, fmt.Errorf("start source binlog sync (GTID): %w", err)
+		}
+	} else {
+		streamer, err = syncer.StartSync(goMySQL.Position{
+			Name: window.StartFile,
+			Pos:  window.StartPos,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("start source binlog sync: %w", err)
+		}
 	}
 
 	currentFile := window.StartFile
@@ -879,6 +891,23 @@ func classifyDDL(query string) (ddlClassification, bool) {
 		return ddlClassRisky, true
 	default:
 		return ddlClassRisky, true
+	}
+}
+
+func parseGTIDSet(flavor string, gtidSet string) (goMySQL.GTIDSet, error) {
+	switch strings.ToLower(strings.TrimSpace(flavor)) {
+	case "mariadb":
+		set, err := goMySQL.ParseMariadbGTIDSet(gtidSet)
+		if err != nil {
+			return nil, fmt.Errorf("parse MariaDB GTID set %q: %w", gtidSet, err)
+		}
+		return set, nil
+	default:
+		set, err := goMySQL.ParseMysqlGTIDSet(gtidSet)
+		if err != nil {
+			return nil, fmt.Errorf("parse MySQL GTID set %q: %w", gtidSet, err)
+		}
+		return set, nil
 	}
 }
 

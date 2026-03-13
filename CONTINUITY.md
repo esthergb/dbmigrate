@@ -3,47 +3,46 @@
 Last updated: 2026-03-13
 
 - Goal (incl. success criteria):
-  - Complete code-quality skill v2 tracks: structured logging, concurrent data copy, rate limiting, progress reporting.
-  - Success criteria: `--concurrency` activates real parallel table copy; `--rate-limit` throttles rows/sec in both data copy and replication; `--verbose` enables debug-level structured logs; all tests green.
+  - Complete remaining v2 replication tracks: trigger-based CDC, hybrid replication mode, GTID support.
+  - Success criteria: `--replication-mode=capture-triggers` works end-to-end; `--replication-mode=hybrid` routes tables between binlog and CDC; `--start-from=gtid` starts from GTID position on both MySQL and MariaDB; all tests green, CI green.
 - Constraints/Assumptions:
   - English docs.
   - Branch-first, PR-on-demand workflow (see AGENTS.md).
-  - No external dependencies added (stdlib `log/slog` for logging, stdlib `sync` for concurrency).
-  - Concurrent mode uses per-connection snapshots, not a single global snapshot — documented tradeoff.
+  - No new external dependencies (go-mysql-org/go-mysql already supports GTID syncing).
+  - Trigger names must be deterministic, prefixed `__dbmigrate_`, and fit within 64-char MySQL identifier limit.
+  - CDC log table uses per-database scope (one log table per database, not per table).
+  - GTID cross-engine (MySQL GTID from MariaDB source or vice versa) is explicitly unsupported.
 - Key decisions:
   - Scope contract:
-    - `v1`: shipped and hardened (PRs #74–#86, precheck audit improvements merged).
-    - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, trigger-CDC, hybrid, GTID, user/grant.
+    - `v1`: shipped and hardened (PRs #74–#90).
+    - `v2`: structured logging, concurrent copy, rate limiting, routines/triggers/events, granular verify, user/grant, trigger-CDC, hybrid, GTID.
     - `v3`: managed/cloud environments.
-  - `--verbose` maps to slog debug level.
-  - `internal/dblog` wraps `log/slog` (renamed from `internal/log` to avoid stdlib collision).
-  - `internal/throttle` implements simple token-bucket rate limiter (nil-safe).
-  - `--concurrency` default remains 4; `--rate-limit` default is 0 (unlimited).
+  - CDC JSON serialization: explicit column-by-column JSON_OBJECT() with null handling.
+  - Hybrid routing: `--cdc-tables db.table1,db.table2` CSV flag, not config file.
+  - GTID checkpoint: store GTID set alongside binlog file:pos in ReplicationCheckpoint.
 - State:
-  - `feat/concurrent-copy-ratelimit` branch active with all implementation done.
-  - Pending: commit, merge to main.
-- Done (v2 code-quality):
-  - Structured logging (`internal/dblog`): text/JSON modes, wired through RuntimeConfig.Log, debug logging in schema copy, data copy, replicate.
-  - Concurrent data copy: worker pool with semaphore, per-goroutine source connections with consistent snapshot, mutex-protected checkpoints, first-error cancellation.
-  - Rate limiting (`internal/throttle`): token-bucket limiter, wired into data copy and replication apply paths.
-  - Progress reporting: per-table Info log on completion, overall start log with table count/concurrency/rate.
-  - `--rate-limit` flag: config file support (YAML/JSON), CLI flag, validation.
-  - Tests: throttle package (4 tests), config validation and binding tests updated, all 15 packages green.
+  - `main` is current: v2 batch 1 + batch 2 all merged (PRs #87-#90, #89 FK fix).
+  - 16 packages green, CI green.
+- Done (v2 batch 1 — code quality):
+  - Structured logging, concurrent data copy, rate limiting, progress reporting.
+- Done (v2 batch 2 — schema/users):
+  - Routines/triggers/events migration and schema verification.
+  - Granular schema verification (column/index/FK/partition diffs).
+  - User/grant migration (`migrate-users` subcommand).
+  - FK check fix for concurrent baseline copy.
 - Now:
-  - Commit and merge `feat/concurrent-copy-ratelimit` to main.
+  - Implementing `feat/replication-gtid` (T3) and `feat/replication-cdc` (T1a+T1b+T1c) in parallel.
 - Next:
-  - Routines/triggers/events migration (schema-objects skill).
-  - Granular schema verification.
-  - User/grant migration.
+  - `feat/replication-hybrid` (T2) after T1 merges.
 - Open questions:
   - None.
 - Working set (files/ids/commands):
   - Files:
-    - `internal/throttle/limiter.go` (new package)
-    - `internal/data/copy.go` (concurrent refactor)
-    - `internal/replicate/binlog/run.go` (rate limiting)
-    - `internal/config/runtime.go`, `internal/config/file.go` (--rate-limit)
-    - `internal/cli/cli.go` (--rate-limit arg splitter)
+    - `internal/replicate/binlog/load.go` (GTID start path)
+    - `internal/replicate/binlog/run.go` (GTID options, checkpoint)
+    - `internal/replicate/cdc/` (new package — setup, reader, run)
+    - `internal/state/replication.go` (GTIDSet field, CDCCheckpoint)
+    - `internal/commands/replicate.go` (wire CDC and GTID)
   - Commands:
     - `go vet ./...`
     - `go test ./... -count=1`

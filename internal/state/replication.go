@@ -12,6 +12,7 @@ type ReplicationCheckpoint struct {
 	Version    int                         `json:"version"`
 	BinlogFile string                      `json:"binlog_file"`
 	BinlogPos  uint32                      `json:"binlog_pos"`
+	GTIDSet    string                      `json:"gtid_set,omitempty"`
 	ApplyDDL   string                      `json:"apply_ddl"`
 	Shape      ReplicationTransactionShape `json:"shape,omitempty"`
 	UpdatedAt  time.Time                   `json:"updated_at"`

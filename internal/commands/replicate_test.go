@@ -237,21 +237,39 @@ func TestRunReplicateTriggerCDCFlagsFailFast(t *testing.T) {
 	}
 }
 
-func TestRunReplicateStartFromGTIDFailsFast(t *testing.T) {
-	var out bytes.Buffer
-	err := runReplicate(context.Background(), config.RuntimeConfig{
-		Source: "mysql://src",
-		Dest:   "mysql://dst",
-	}, []string{"--start-from=gtid"}, &out)
+func TestParseReplicateOptionsStartFromGTIDRequiresGTIDSet(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--start-from=gtid"})
 	if err == nil {
-		t.Fatal("expected start-from gtid unsupported error")
+		t.Fatal("expected error: --start-from=gtid without --gtid-set")
 	}
-	code, ok := ResolveExitCode(err)
-	if !ok || code != ExitCodeDiff {
-		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
-	}
-	if !strings.Contains(err.Error(), "start-from gtid is not implemented yet") {
+	if !strings.Contains(err.Error(), "--gtid-set is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseReplicateOptionsGTIDSetRequiresStartFromGTID(t *testing.T) {
+	_, err := parseReplicateOptions([]string{"--gtid-set=abc-123"})
+	if err == nil {
+		t.Fatal("expected error: --gtid-set without --start-from=gtid")
+	}
+	if !strings.Contains(err.Error(), "--gtid-set requires --start-from=gtid") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseReplicateOptionsGTIDSetValid(t *testing.T) {
+	opts, err := parseReplicateOptions([]string{
+		"--start-from=gtid",
+		"--gtid-set=3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23",
+	})
+	if err != nil {
+		t.Fatalf("expected parse success: %v", err)
+	}
+	if opts.StartFrom != "gtid" {
+		t.Fatalf("expected start-from gtid, got %q", opts.StartFrom)
+	}
+	if opts.GTIDSet != "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23" {
+		t.Fatalf("unexpected gtid-set %q", opts.GTIDSet)
 	}
 }
 
