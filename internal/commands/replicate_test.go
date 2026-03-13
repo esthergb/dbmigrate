@@ -201,46 +201,36 @@ func TestParseReplicateOptionsInvalidConflictPolicy(t *testing.T) {
 	}
 }
 
-func TestRunReplicateUnsupportedModeFailsFast(t *testing.T) {
+func TestRunReplicateCaptureTriggersModeRequiresStateDir(t *testing.T) {
 	var out bytes.Buffer
 	err := runReplicate(context.Background(), config.RuntimeConfig{
 		Source: "mysql://src",
 		Dest:   "mysql://dst",
 	}, []string{"--replication-mode=capture-triggers"}, &out)
 	if err == nil {
-		t.Fatal("expected unsupported replication mode error")
-	}
-	code, ok := ResolveExitCode(err)
-	if !ok || code != ExitCodeDiff {
-		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
-	}
-	if !strings.Contains(err.Error(), "not implemented yet") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal("expected error (state-dir or DB)")
 	}
 }
 
-func TestRunReplicateTriggerCDCFlagsFailFast(t *testing.T) {
+func TestRunReplicateEnableTriggerCDCRequiresCaptureTriggers(t *testing.T) {
 	var out bytes.Buffer
 	err := runReplicate(context.Background(), config.RuntimeConfig{
 		Source: "mysql://src",
 		Dest:   "mysql://dst",
 	}, []string{"--enable-trigger-cdc"}, &out)
 	if err == nil {
-		t.Fatal("expected trigger cdc unsupported error")
-	}
-	code, ok := ResolveExitCode(err)
-	if !ok || code != ExitCodeDiff {
-		t.Fatalf("expected exit code %d, got code=%d ok=%v err=%v", ExitCodeDiff, code, ok, err)
-	}
-	if !strings.Contains(err.Error(), "trigger CDC mode is not implemented yet") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal("expected error (state-dir or DB required)")
 	}
 }
 
-func TestParseReplicateOptionsStartFromGTIDRequiresGTIDSet(t *testing.T) {
-	_, err := parseReplicateOptions([]string{"--start-from=gtid"})
+func TestRunReplicateStartFromGTIDRequiresGTIDSet(t *testing.T) {
+	var out bytes.Buffer
+	err := runReplicate(context.Background(), config.RuntimeConfig{
+		Source: "mysql://src",
+		Dest:   "mysql://dst",
+	}, []string{"--start-from=gtid"}, &out)
 	if err == nil {
-		t.Fatal("expected error: --start-from=gtid without --gtid-set")
+		t.Fatal("expected parse error: --gtid-set required")
 	}
 	if !strings.Contains(err.Error(), "--gtid-set is required") {
 		t.Fatalf("unexpected error: %v", err)

@@ -394,7 +394,7 @@ func TestRunReplicateDryRun(t *testing.T) {
 	}
 }
 
-func TestRunReplicateUnsupportedMode(t *testing.T) {
+func TestRunReplicateCaptureTriggersModeConnects(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
@@ -403,12 +403,12 @@ func TestRunReplicateUnsupportedMode(t *testing.T) {
 		"--replication-mode", "capture-triggers",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 2 {
-		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
+	if code != 3 {
+		t.Fatalf("expected exit code 3 (connect failure), got %d output=%s", code, out.String())
 	}
 }
 
-func TestRunReplicateStartFromGTIDWithoutGTIDSet(t *testing.T) {
+func TestRunReplicateStartFromGTIDWithoutGTIDSetCLI(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
@@ -418,7 +418,7 @@ func TestRunReplicateStartFromGTIDWithoutGTIDSet(t *testing.T) {
 	}
 	code := Run(context.Background(), args, &out, &out)
 	if code != 3 {
-		t.Fatalf("expected exit code 3, got %d output=%s", code, out.String())
+		t.Fatalf("expected exit code 3 (parse error: --gtid-set required), got %d output=%s", code, out.String())
 	}
 }
 
@@ -479,7 +479,7 @@ func TestRunReplicateInvalidIdempotentConflictPolicy(t *testing.T) {
 	}
 }
 
-func TestRunReplicateEnableTriggerCDCUnsupported(t *testing.T) {
+func TestRunReplicateEnableTriggerCDCConnects(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
@@ -488,12 +488,12 @@ func TestRunReplicateEnableTriggerCDCUnsupported(t *testing.T) {
 		"--enable-trigger-cdc",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 2 {
-		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
+	if code != 3 {
+		t.Fatalf("expected exit code 3 (connect failure), got %d output=%s", code, out.String())
 	}
 }
 
-func TestRunReplicateTeardownCDCUnsupported(t *testing.T) {
+func TestRunReplicateTeardownCDCConnects(t *testing.T) {
 	var out bytes.Buffer
 	args := []string{
 		"replicate",
@@ -502,8 +502,8 @@ func TestRunReplicateTeardownCDCUnsupported(t *testing.T) {
 		"--teardown-cdc",
 	}
 	code := Run(context.Background(), args, &out, &out)
-	if code != 2 {
-		t.Fatalf("expected exit code 2, got %d output=%s", code, out.String())
+	if code != 3 {
+		t.Fatalf("expected exit code 3 (connect failure), got %d output=%s", code, out.String())
 	}
 }
 
