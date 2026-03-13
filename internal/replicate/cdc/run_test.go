@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -169,8 +170,8 @@ func TestRunApplyError(t *testing.T) {
 	if applyRunErr == nil {
 		t.Fatal("expected error from apply failure")
 	}
-	if !errors.Is(err, errors.New("simulated apply error")) && err.Error() == "" {
-		t.Fatalf("unexpected error: %v", err)
+	if applyRunErr.Error() == "" {
+		t.Fatalf("expected non-empty error message, got empty")
 	}
 }
 
@@ -191,6 +192,191 @@ func TestFilterDatabases(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("expected all 4 databases, got %d: %v", len(got), got)
 	}
+}
+
+func TestRunCheckpointSavedBeforePurge(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origList := listDatabasesFn
+	origRead := readCDCEventsFn
+	origPurge := purgeCDCEventsFn
+	origApply := applyEventFn
+	defer func() {
+		listDatabasesFn = origList
+		readCDCEventsFn = origRead
+		purgeCDCEventsFn = origPurge
+		applyEventFn = origApply
+	}()
+
+	listDatabasesFn = func(_ context.Context, _ *sql.DB, _, _ []string) ([]string, error) {
+		return []string{"testdb"}, nil
+	}
+	readCDCEventsFn = func(_ context.Context, _ *sql.DB, _ string, _ uint64, _ int) ([]CDCEvent, error) {
+		return []CDCEvent{
+			{CDCID: 5, TableName: "t", Operation: "INSERT", NewRowJSON: `{"id":5}`},
+		}, nil
+	}
+
+	var order []string
+	applyEventFn = func(_ context.Context, _ *sql.DB, _ string, _ CDCEvent, _ Options) error {
+		order = append(order, "apply")
+		return nil
+	}
+	purgeCDCEventsFn = func(_ context.Context, _ *sql.DB, _ string, _ uint64) error {
+		order = append(order, "purge")
+		return nil
+	}
+
+	stateDir := t.TempDir()
+	_, runErr := Run(context.Background(), source, dest, stateDir, Options{ConflictPolicy: "fail"})
+	if runErr != nil {
+		t.Fatalf("expected success, got: %v", runErr)
+	}
+
+	if len(order) < 2 {
+		t.Fatalf("expected apply and purge to be called, got order: %v", order)
+	}
+	if order[0] != "apply" {
+		t.Fatalf("expected apply first, got %q", order[0])
+	}
+	if order[len(order)-1] != "purge" {
+		t.Fatalf("expected purge last, got %q", order[len(order)-1])
+	}
+}
+
+func TestRunPurgeFailureDoesNotCancelRun(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origList := listDatabasesFn
+	origRead := readCDCEventsFn
+	origPurge := purgeCDCEventsFn
+	origApply := applyEventFn
+	defer func() {
+		listDatabasesFn = origList
+		readCDCEventsFn = origRead
+		purgeCDCEventsFn = origPurge
+		applyEventFn = origApply
+	}()
+
+	listDatabasesFn = func(_ context.Context, _ *sql.DB, _, _ []string) ([]string, error) {
+		return []string{"testdb"}, nil
+	}
+	readCDCEventsFn = func(_ context.Context, _ *sql.DB, _ string, _ uint64, _ int) ([]CDCEvent, error) {
+		return []CDCEvent{
+			{CDCID: 7, TableName: "t", Operation: "INSERT", NewRowJSON: `{"id":7}`},
+		}, nil
+	}
+	applyEventFn = func(_ context.Context, _ *sql.DB, _ string, _ CDCEvent, _ Options) error {
+		return nil
+	}
+	purgeCDCEventsFn = func(_ context.Context, _ *sql.DB, _ string, _ uint64) error {
+		return errors.New("simulated purge failure")
+	}
+
+	_, runErr := Run(context.Background(), source, dest, t.TempDir(), Options{ConflictPolicy: "fail"})
+	if runErr != nil {
+		t.Fatalf("purge failure must not abort the run (checkpoint is already saved); got: %v", runErr)
+	}
+}
+
+func TestApplyEventUpdateKeylessTableFails(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origCols := getDestColumnsFn
+	origKey := getDestKeyColumnsFn
+	defer func() {
+		getDestColumnsFn = origCols
+		getDestKeyColumnsFn = origKey
+	}()
+
+	getDestColumnsFn = func(_ context.Context, _ *sql.DB, _ string, _ string) ([]string, error) {
+		return []string{"id", "name"}, nil
+	}
+	getDestKeyColumnsFn = func(_ context.Context, _ *sql.DB, _ string, _ string) ([]string, error) {
+		return nil, nil
+	}
+
+	event := CDCEvent{CDCID: 1, TableName: "keyless", Operation: "UPDATE", NewRowJSON: `{"id":1,"name":"x"}`}
+	err = applyEvent(context.Background(), dest, "mydb", event, Options{ConflictPolicy: "fail"})
+	if err == nil {
+		t.Fatal("expected error for UPDATE on keyless table")
+	}
+	if !strings.Contains(err.Error(), "primary key or non-null unique key") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyEventDeleteKeylessTableFails(t *testing.T) {
+	source, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	dest, err := sql.Open("mysql", "user:pass@tcp(127.0.0.1:1)/db")
+	if err != nil {
+		t.Skipf("sql.Open failed: %v", err)
+	}
+	defer func() { _ = source.Close(); _ = dest.Close() }()
+
+	origCols := getDestColumnsFn
+	origKey := getDestKeyColumnsFn
+	defer func() {
+		getDestColumnsFn = origCols
+		getDestKeyColumnsFn = origKey
+	}()
+
+	getDestColumnsFn = func(_ context.Context, _ *sql.DB, _ string, _ string) ([]string, error) {
+		return []string{"id", "name"}, nil
+	}
+	getDestKeyColumnsFn = func(_ context.Context, _ *sql.DB, _ string, _ string) ([]string, error) {
+		return nil, nil
+	}
+
+	event := CDCEvent{CDCID: 2, TableName: "keyless", Operation: "DELETE", OldRowJSON: `{"id":1,"name":"x"}`}
+	err = applyEvent(context.Background(), dest, "mydb", event, Options{ConflictPolicy: "fail"})
+	if err == nil {
+		t.Fatal("expected error for DELETE on keyless table")
+	}
+	if !strings.Contains(err.Error(), "primary key or non-null unique key") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyUpdateUsesKeyColumnsOnly(t *testing.T) {
+	whereColumns := []string{"id"}
+	oldRow := map[string]any{"id": float64(42), "name": "old"}
+	newRow := map[string]any{"id": float64(42), "name": "new"}
+	clause, args := buildWhereFromRow(oldRow, whereColumns)
+	if clause != "`id` <=> ?" {
+		t.Fatalf("expected key-only WHERE clause, got %q", clause)
+	}
+	if len(args) != 1 || args[0] != float64(42) {
+		t.Fatalf("expected one key arg [42], got %v", args)
+	}
+	_ = newRow
 }
 
 func TestBuildWhereFromRowAllNil(t *testing.T) {

@@ -212,14 +212,14 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 			totalApplied++
 		}
 
-		if err := purgeCDCEventsFn(ctx, source, schema, checkpoint.Databases[schema]); err != nil {
-			if opts.Log != nil {
-				opts.Log.Debug("CDC purge warning", "schema", schema, "error", err.Error())
-			}
-		}
-
 		if err := saveCDCCheckpoint(checkpointFile, checkpoint); err != nil {
 			return Summary{}, err
+		}
+
+		if err := purgeCDCEventsFn(ctx, source, schema, checkpoint.Databases[schema]); err != nil {
+			if opts.Log != nil {
+				opts.Log.Warn("CDC purge failed (checkpoint already saved; purge will retry on next run)", "schema", schema, "error", err.Error())
+			}
 		}
 	}
 
@@ -241,18 +241,37 @@ func applyEvent(ctx context.Context, dest *sql.DB, schema string, event CDCEvent
 	case "INSERT":
 		return applyInsert(ctx, dest, schema, event, cols, opts.ConflictPolicy)
 	case "UPDATE":
-		return applyUpdate(ctx, dest, schema, event, cols)
+		keyCols, err := getDestKeyColumnsFn(ctx, dest, schema, event.TableName)
+		if err != nil {
+			return fmt.Errorf("resolve key columns for %s.%s: %w", schema, event.TableName, err)
+		}
+		if len(keyCols) == 0 {
+			return fmt.Errorf("CDC UPDATE on %s.%s requires a primary key or non-null unique key; table has none", schema, event.TableName)
+		}
+		return applyUpdate(ctx, dest, schema, event, cols, keyCols)
 	case "DELETE":
-		return applyDelete(ctx, dest, schema, event, cols)
+		keyCols, err := getDestKeyColumnsFn(ctx, dest, schema, event.TableName)
+		if err != nil {
+			return fmt.Errorf("resolve key columns for %s.%s: %w", schema, event.TableName, err)
+		}
+		if len(keyCols) == 0 {
+			return fmt.Errorf("CDC DELETE on %s.%s requires a primary key or non-null unique key; table has none", schema, event.TableName)
+		}
+		return applyDelete(ctx, dest, schema, event, keyCols)
 	default:
 		return fmt.Errorf("unknown CDC operation %q", event.Operation)
 	}
 }
 
 var getDestColumnsFn = getDestColumns
+var getDestKeyColumnsFn = getDestKeyColumns
 
 func getDestColumns(ctx context.Context, dest *sql.DB, schema string, table string) ([]string, error) {
 	return listTableColumnsFn(ctx, dest, schema, table)
+}
+
+func getDestKeyColumns(ctx context.Context, dest *sql.DB, schema string, table string) ([]string, error) {
+	return listStableKeyColumnsFn(ctx, dest, schema, table)
 }
 
 func applyInsert(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, columns []string, conflictPolicy string) error {
@@ -293,7 +312,7 @@ func applyInsert(ctx context.Context, dest *sql.DB, schema string, event CDCEven
 	return err
 }
 
-func applyUpdate(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, columns []string) error {
+func applyUpdate(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, columns []string, keyCols []string) error {
 	newRow, err := ParseJSONRow(event.NewRowJSON)
 	if err != nil {
 		return err
@@ -301,9 +320,12 @@ func applyUpdate(ctx context.Context, dest *sql.DB, schema string, event CDCEven
 	if newRow == nil {
 		return fmt.Errorf("CDC UPDATE event %d has no new_row_json", event.CDCID)
 	}
-	oldRow, err := ParseJSONRow(event.OldRowJSON)
+	keyRow, err := ParseJSONRow(event.OldRowJSON)
 	if err != nil {
 		return err
+	}
+	if keyRow == nil {
+		keyRow = newRow
 	}
 
 	newVals := RowToValues(newRow, columns)
@@ -313,13 +335,7 @@ func applyUpdate(ctx context.Context, dest *sql.DB, schema string, event CDCEven
 	}
 
 	target := quoteIdentifier(schema) + "." + quoteIdentifier(event.TableName)
-	var whereClause string
-	var whereArgs []any
-	if oldRow != nil {
-		whereClause, whereArgs = buildWhereFromRow(oldRow, columns)
-	} else {
-		whereClause, whereArgs = buildWhereFromRow(newRow, columns)
-	}
+	whereClause, whereArgs := buildWhereFromRow(keyRow, keyCols)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		target, strings.Join(setParts, ","), whereClause)
@@ -328,7 +344,7 @@ func applyUpdate(ctx context.Context, dest *sql.DB, schema string, event CDCEven
 	return err
 }
 
-func applyDelete(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, columns []string) error {
+func applyDelete(ctx context.Context, dest *sql.DB, schema string, event CDCEvent, keyCols []string) error {
 	row, err := ParseJSONRow(event.OldRowJSON)
 	if err != nil {
 		return err
@@ -338,7 +354,7 @@ func applyDelete(ctx context.Context, dest *sql.DB, schema string, event CDCEven
 	}
 
 	target := quoteIdentifier(schema) + "." + quoteIdentifier(event.TableName)
-	whereClause, whereArgs := buildWhereFromRow(row, columns)
+	whereClause, whereArgs := buildWhereFromRow(row, keyCols)
 	query := fmt.Sprintf("DELETE FROM %s WHERE %s", target, whereClause)
 	_, err = dest.ExecContext(ctx, query, whereArgs...)
 	return err
