@@ -36,6 +36,10 @@ type Options struct {
 	SourceKeyFile  string
 	RateLimit      int
 	Log            *dblog.Logger
+	// ExcludeTables is an optional set of "schema.table" keys (lower-cased) to
+	// skip during row-event apply. Used by hybrid mode to prevent the binlog
+	// phase from replaying events that are owned by the CDC phase.
+	ExcludeTables map[string]struct{}
 }
 
 // Summary reports checkpoint update results.

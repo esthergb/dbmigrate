@@ -27,6 +27,13 @@ type Options struct {
 	BatchSize        int
 	RateLimit        int
 	Log              *dblog.Logger
+	// IncludeTables is an optional set of "schema.table" keys (lower-cased).
+	// When non-empty, only events for tables in this set are applied.
+	// Used by hybrid mode to restrict CDC to its owned tables.
+	IncludeTables map[string]struct{}
+	// ExcludeTables is an optional set of "schema.table" keys (lower-cased).
+	// Events for tables in this set are skipped.
+	ExcludeTables map[string]struct{}
 }
 
 // Summary reports CDC apply results.
@@ -197,6 +204,17 @@ func Run(ctx context.Context, source *sql.DB, dest *sql.DB, stateDir string, opt
 		}
 
 		for _, event := range events {
+			eventKey := strings.ToLower(schema) + "." + strings.ToLower(event.TableName)
+			if len(opts.IncludeTables) > 0 {
+				if _, ok := opts.IncludeTables[eventKey]; !ok {
+					continue
+				}
+			}
+			if len(opts.ExcludeTables) > 0 {
+				if _, ok := opts.ExcludeTables[eventKey]; ok {
+					continue
+				}
+			}
 			if limiter != nil {
 				limiter.Wait(1)
 			}

@@ -420,6 +420,12 @@ func buildApplyBatches(ctx context.Context, source *sql.DB, events []streamEvent
 			pendingFile = ""
 			pendingPos = 0
 		case streamEventWriteRows, streamEventUpdateRows, streamEventDeleteRows:
+			if len(opts.ExcludeTables) > 0 {
+				excludeKey := strings.ToLower(event.Schema) + "." + strings.ToLower(event.Table)
+				if _, excluded := opts.ExcludeTables[excludeKey]; excluded {
+					continue
+				}
+			}
 			if firstRowEvent == nil {
 				rowCopy := event
 				firstRowEvent = &rowCopy
