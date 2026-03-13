@@ -353,6 +353,20 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	default:
 		return replicateOptions{}, fmt.Errorf("invalid --replication-mode value %q (expected binlog, capture-triggers, or hybrid)", opts.ReplicationMode)
 	}
+	if opts.ReplicationMode == "capture-triggers" {
+		return replicateOptions{}, errors.New(
+			"--replication-mode=capture-triggers is not yet production-ready: " +
+				"CDC durability ordering and key-based row matching must be fixed before use; " +
+				"see docs/v2-remediation-plan.md phases 1 and 3",
+		)
+	}
+	if opts.ReplicationMode == "hybrid" {
+		return replicateOptions{}, errors.New(
+			"--replication-mode=hybrid is not yet production-ready: " +
+				"table routing enforcement is not implemented end-to-end; " +
+				"see docs/v2-remediation-plan.md phase 2",
+		)
+	}
 	switch opts.StartFrom {
 	case "auto", "binlog-file:pos", "gtid":
 		// valid
