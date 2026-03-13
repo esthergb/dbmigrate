@@ -15,6 +15,7 @@ import (
 	"github.com/esthergb/dbmigrate/internal/db"
 	"github.com/esthergb/dbmigrate/internal/replicate/binlog"
 	"github.com/esthergb/dbmigrate/internal/replicate/cdc"
+	"github.com/esthergb/dbmigrate/internal/replicate/hybrid"
 )
 
 type replicateOptions struct {
@@ -33,6 +34,9 @@ type replicateOptions struct {
 	Resume           bool
 	StartFile        string
 	StartPos         uint
+	TableRouting     string
+	CDCDatabases     string
+	BinlogDatabases  string
 }
 
 func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, out io.Writer) error {
@@ -87,6 +91,9 @@ func runReplicate(ctx context.Context, cfg config.RuntimeConfig, args []string, 
 
 		if opts.ReplicationMode == "capture-triggers" {
 			return runCaptureTriggers(ctx, sourceDB, destDB, cfg, opts, out)
+		}
+		if opts.ReplicationMode == "hybrid" {
+			return runHybrid(ctx, sourceDB, destDB, cfg, opts, out)
 		}
 
 		summary, err := binlog.Run(ctx, sourceDB, destDB, cfg.StateDir, binlog.Options{
@@ -197,6 +204,67 @@ func runCaptureTriggers(ctx context.Context, sourceDB, destDB *sql.DB, cfg confi
 			summary.AppliedEvents, summary.LastCDCID, summary.ConflictPolicy, summary.CheckpointFile))
 }
 
+func runHybrid(ctx context.Context, sourceDB, destDB *sql.DB, cfg config.RuntimeConfig, opts replicateOptions, out io.Writer) error {
+	routing, err := hybrid.ParseTableRouting(opts.TableRouting)
+	if err != nil {
+		return fmt.Errorf("parse --table-routing: %w", err)
+	}
+
+	cdcDBs := splitCSV(opts.CDCDatabases)
+	binlogDBs := splitCSV(opts.BinlogDatabases)
+
+	summary, err := hybrid.Run(ctx, sourceDB, destDB, cfg.StateDir, hybrid.Options{
+		ApplyDDL:        opts.ApplyDDL,
+		ConflictPolicy:  opts.ConflictPolicy,
+		ConflictValues:  opts.ConflictValues,
+		MaxEvents:       opts.MaxEvents,
+		MaxLagSeconds:   opts.MaxLagSeconds,
+		SourceServerID:  uint32(opts.SourceServerID),
+		Idempotent:      opts.Idempotent,
+		Resume:          opts.Resume,
+		StartFile:       opts.StartFile,
+		StartPos:        uint32(opts.StartPos),
+		GTIDSet:         opts.GTIDSet,
+		Routing:         routing,
+		CDCDatabases:    cdcDBs,
+		BinlogDatabases: binlogDBs,
+		SourceDSN:       cfg.Source,
+		SourceTLSMode:   cfg.TLSMode,
+		SourceCAFile:    cfg.CAFile,
+		SourceCertFile:  cfg.CertFile,
+		SourceKeyFile:   cfg.KeyFile,
+		RateLimit:       cfg.RateLimit,
+		Log:             cfg.Log,
+	})
+	if err != nil {
+		return fmt.Errorf("hybrid replicate failed: %w", err)
+	}
+	return writeResult(out, cfg, "replicate", "ok",
+		fmt.Sprintf(
+			"hybrid replication complete: binlog(applied=%d checkpoint=%s) cdc(applied=%d last_cdc_id=%d checkpoint=%s)",
+			summary.BinlogSummary.AppliedEvents,
+			summary.BinlogSummary.CheckpointFile,
+			summary.CDCSummary.AppliedEvents,
+			summary.CDCSummary.LastCDCID,
+			summary.CDCSummary.CheckpointFile,
+		))
+}
+
+func splitCSV(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func cdcSchemasFromDB(ctx context.Context, source *sql.DB, cfg config.RuntimeConfig) ([]string, error) {
 	rows, err := source.QueryContext(ctx,
 		`SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA
@@ -272,6 +340,9 @@ func parseReplicateOptions(args []string) (replicateOptions, error) {
 	fs.StringVar(&opts.StartFile, "start-file", "", "start binlog file when no checkpoint exists")
 	fs.UintVar(&opts.StartPos, "start-pos", 4, "start binlog position when no checkpoint exists")
 	fs.StringVar(&opts.GTIDSet, "gtid-set", "", "GTID set to start from when --start-from=gtid (MySQL: uuid:interval, MariaDB: domain-server-seq)")
+	fs.StringVar(&opts.TableRouting, "table-routing", "", "comma-separated schema.table=mode entries for hybrid mode (e.g. app.orders=capture-triggers,app.events=binlog)")
+	fs.StringVar(&opts.CDCDatabases, "cdc-databases", "", "comma-separated databases to replicate via capture-triggers in hybrid mode")
+	fs.StringVar(&opts.BinlogDatabases, "binlog-databases", "", "comma-separated databases to replicate via binlog in hybrid mode")
 
 	if err := fs.Parse(args); err != nil {
 		return replicateOptions{}, err
