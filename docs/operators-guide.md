@@ -276,6 +276,60 @@ Replication checkpoint behavior:
 - Conflict report samples are redacted by default; plain-text samples require explicit `--conflict-values=plain`.
 - `--start-file` must be a bare binlog filename; path-like values and invalid characters fail before replication starts.
 
+## GTID-based replication start
+
+- Start replication from a specific GTID set (MySQL):
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --start-from=gtid --gtid-set "3E11FA47-71CA-11E1-9E33-C80AA9429562:1-23"`
+- Start replication from a specific GTID set (MariaDB):
+  - `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --start-from=gtid --gtid-set "0-1-100"`
+
+GTID behavior:
+- `--start-from=gtid` requires `--gtid-set`; omitting `--gtid-set` is a parse error.
+- `--gtid-set` requires `--start-from=gtid`; passing `--gtid-set` without `--start-from=gtid` is a parse error.
+- GTID mode is mutually exclusive with `--start-file` / `--start-pos`.
+- `checkGTIDEnabled` preflight verifies `gtid_mode=ON` (MySQL) or `gtid_strict_mode=ON` (MariaDB) before opening the syncer.
+- GTID set is stored in `replication-checkpoint.json` alongside the binlog file:pos for resume evidence.
+- Cross-engine GTID (MySQL GTID set resumed on MariaDB source, or vice versa) is explicitly unsupported and fails fast.
+
+## Trigger-based CDC replication (capture-triggers mode)
+
+Setup triggers and log table on source before running incremental sync:
+- `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --replication-mode=capture-triggers --enable-trigger-cdc`
+
+Apply pending CDC events from source to destination:
+- `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --replication-mode=capture-triggers --resume --conflict-policy fail`
+
+Remove CDC triggers and log table when done:
+- `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --replication-mode=capture-triggers --teardown-cdc`
+
+CDC behavior:
+- `--enable-trigger-cdc` creates `__dbmigrate_cdc_log` table and `AFTER INSERT`, `AFTER UPDATE`, `AFTER DELETE` triggers for every non-system table in each database.
+- `--teardown-cdc` drops all `__dbmigrate_` prefixed triggers and the `__dbmigrate_cdc_log` table.
+- CDC events are read from the log table using a `cdc_id` cursor (per-database watermark).
+- Processed events are purged from the log table up to the checkpoint watermark after each batch.
+- Checkpoint file: `--state-dir/cdc-checkpoint.json`.
+- Conflict policies (`fail`, `source-wins`, `dest-wins`) apply the same semantics as binlog mode.
+- `--max-events` limits total events applied per run (across all databases).
+- `--resume` loads the per-database `cdc_id` watermark from checkpoint; omit to restart from the current log tail.
+- Trigger names are deterministic, prefixed `__dbmigrate_`, and fit within the 64-character MySQL identifier limit. Long table names get an FNV-32 hash suffix to avoid collisions.
+- CDC does not capture DDL changes; use `--apply-ddl` in binlog mode or run `migrate --schema-only` to apply schema changes separately.
+
+## Hybrid replication mode
+
+Route some databases through trigger-based CDC and others through binlog:
+- `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --replication-mode=hybrid --cdc-databases app,legacy --binlog-databases logs,audit`
+
+Use per-table routing for fine-grained control:
+- `dbmigrate replicate --source "<dsn>" --dest "<dsn>" --replication-mode=hybrid --table-routing "app.orders=capture-triggers,app.events=binlog"`
+
+Hybrid behavior:
+- `--cdc-databases`: comma-separated list of databases to replicate via capture-triggers.
+- `--binlog-databases`: comma-separated list of databases to replicate via binlog.
+- `--table-routing`: per-table override as `schema.table=mode` CSV; takes priority over `--cdc-databases` / `--binlog-databases` for routing decisions.
+- CDC and binlog phases run sequentially in each invocation; checkpoints are tracked independently under `--state-dir/hybrid-cdc/` and `--state-dir/hybrid-binlog/`.
+- When neither `--cdc-databases` nor `--binlog-databases` are specified, all databases default to binlog mode.
+- Conflict policies, `--max-events`, `--apply-ddl`, and `--resume` apply uniformly to both phases.
+
 ## Report generation
 
 - Generate machine-readable report from state artifacts:
